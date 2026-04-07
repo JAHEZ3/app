@@ -7,6 +7,10 @@ import { AuthServiceService } from './auth-service.service';
 import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { OtpCode } from './entities/otp-code.entity';
+import { CustomerAuthModule } from './customer/customer-auth.module';
+import { RestaurantAuthModule } from './restaurant/restaurant-auth.module';
+import { DeliveryAuthModule } from './delivery/delivery-auth.module';
+import { TokenModule } from '../token/token.module';
 
 @Module({
   imports: [
@@ -33,6 +37,10 @@ import { OtpCode } from './entities/otp-code.entity';
         }),
       }),
     }),
+    CustomerAuthModule,
+    RestaurantAuthModule,
+    DeliveryAuthModule,
+    TokenModule,
   ],
   controllers: [AuthServiceController],
   providers: [AuthServiceService],
