@@ -1,0 +1,51 @@
+{
+  "name": "jahez-microservices",
+  "version": "0.0.1",
+  "description": "Jahez food delivery microservices",
+  "scripts": {
+    "start:api-gateway": "nest start api-gateway",
+    "start:order": "nest start order-service",
+    "start:delivery": "nest start delivery-service",
+    "start:restaurant": "nest start restaurant-service",
+    "start:order:dev": "nest start order-service --watch",
+    "start:delivery:dev": "nest start delivery-service --watch",
+    "start:restaurant:dev": "nest start restaurant-service --watch",
+    "start:auth:dev": "nest start auth-service --watch",
+    "start:customer:dev": "nest start customer-service --watch",
+    "start:manager:dev": "nest start manager-service --watch",
+    "start:notification:dev": "nest start notification-service --watch",
+    "start:payment:dev": "nest start payment-service --watch",
+    "start:gateway:dev": "nest start api-gateway --watch",
+    "start:main:dev": "nest start main --watch",
+    "build": "nest build",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- migration:generate -d data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run -d data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d data-source.ts",
+    "migration:show": "npm run typeorm -- migration:show -d data-source.ts"
+  },
+  "dependencies": {
+    "@nestjs/cache-manager": "^3.0.0",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/microservices": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/typeorm": "^11.0.0",
+    "cache-manager": "^6.0.0",
+    "cache-manager-redis-yet": "^5.1.5",
+    "dotenv": "^17.4.1",
+    "nats": "^2.29.3",
+    "pg": "^8.13.3",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.1",
+    "typeorm": "^0.3.20"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}
