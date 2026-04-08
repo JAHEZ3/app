@@ -1,24 +1,31 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  Index,
+} from "typeorm";
 
 export enum UserRole {
-  CUSTOMER = 'customer',
-  RESTAURANT_OWNER = 'restaurant_owner',
-  DELIVERY = 'delivery',
-  MANAGER = 'manager',
+  CUSTOMER = "customer",
+  RESTAURANT_OWNER = "restaurant_owner",
+  DELIVERY = "delivery",
+  DELIVERY_COMPANY = "delivery_company",
+  MANAGER = "manager",
 }
 
 export enum UserStatus {
-  PENDING = 'pending',
-  ACTIVE = 'active',
-  SUSPENDED = 'suspended',
-  BANNED = 'banned',
+  PENDING = "pending",
+  ACTIVE = "active",
+  SUSPENDED = "suspended",
+  BANNED = "banned",
 }
 
-@Entity('users')
-@Index(['role', 'status'])
-@Index(['createdAt'])
+@Entity("users")
+@Index(["role", "status"])
+@Index(["createdAt"])
 export class User {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Index()
@@ -29,30 +36,35 @@ export class User {
   @Column({ unique: true, length: 20, nullable: true })
   phone: string;
 
-  @Column({ name: 'full_name', length: 255, nullable: true })
+  @Column({ name: "full_name", length: 255, nullable: true })
   fullName: string;
 
-  @Column({ name: 'password_hash', type: 'text' })
+  @Column({ name: "password_hash", type: "text" })
   passwordHash: string;
 
-  @Column({ type: 'enum', enum: UserRole, enumName: 'user_role' })
+  @Column({ type: "enum", enum: UserRole, enumName: "user_role" })
   role: UserRole;
 
-  @Column({ type: 'enum', enum: UserStatus, enumName: 'user_status', default: UserStatus.PENDING })
+  @Column({
+    type: "enum",
+    enum: UserStatus,
+    enumName: "user_status",
+    default: UserStatus.PENDING,
+  })
   status: UserStatus;
 
-  @Column({ name: 'email_verified_at', type: 'timestamp', nullable: true })
+  @Column({ name: "email_verified_at", type: "timestamp", nullable: true })
   emailVerifiedAt: Date;
 
-  @Column({ name: 'phone_verified_at', type: 'timestamp', nullable: true })
+  @Column({ name: "phone_verified_at", type: "timestamp", nullable: true })
   phoneVerifiedAt: Date;
 
-  @Column({ name: 'last_login_at', type: 'timestamp', nullable: true })
+  @Column({ name: "last_login_at", type: "timestamp", nullable: true })
   lastLoginAt: Date;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 
-  @Column({ name: 'device_info', type: 'jsonb', nullable: true })
+  @Column({ name: "device_info", type: "jsonb", nullable: true })
   deviceInfo: Record<string, any>;
 }
