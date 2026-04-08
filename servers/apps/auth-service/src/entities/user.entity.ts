@@ -22,12 +22,15 @@ export class User {
   id: string;
 
   @Index()
-  @Column({ unique: true, length: 255 })
+  @Column({ unique: true, length: 255, nullable: true })
   email: string;
 
   @Index()
   @Column({ unique: true, length: 20, nullable: true })
   phone: string;
+
+  @Column({ name: 'full_name', length: 255, nullable: true })
+  fullName: string;
 
   @Column({ name: 'password_hash', type: 'text' })
   passwordHash: string;
