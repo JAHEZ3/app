@@ -1,4 +1,5 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { RestaurantAuthService } from './restaurant-auth.service';
 import { RegisterRestaurantDto } from './dto/register-restaurant.dto';
 import { LoginRestaurantDto } from './dto/login-restaurant.dto';
@@ -7,16 +8,14 @@ import { LoginRestaurantDto } from './dto/login-restaurant.dto';
 export class RestaurantAuthController {
   constructor(private readonly restaurantAuthService: RestaurantAuthService) {}
 
-  /** Register – Checking() → saveRestaurant() → sendPassword() */
   @Post('register')
   register(@Body() dto: RegisterRestaurantDto) {
     return this.restaurantAuthService.register(dto);
   }
 
-  /** Login(phoneNo, password) → Dashboard */
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginRestaurantDto) {
-    return this.restaurantAuthService.login(dto);
+  login(@Body() dto: LoginRestaurantDto, @Req() req: Request) {
+    return this.restaurantAuthService.login(dto, { ipAddress: req.ip });
   }
 }

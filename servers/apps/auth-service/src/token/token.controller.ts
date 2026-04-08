@@ -19,6 +19,7 @@ class IssueDto {
   role: string;
 }
 
+
 @Controller('token')
 export class TokenController {
   constructor(private readonly tokenService: TokenService) {}

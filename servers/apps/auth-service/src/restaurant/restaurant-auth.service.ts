@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { User, UserRole, UserStatus } from '../entities/user.entity';
+import { TokenService } from '../token/token.service';
 import { RegisterRestaurantDto } from './dto/register-restaurant.dto';
 import { LoginRestaurantDto } from './dto/login-restaurant.dto';
 
@@ -16,26 +17,18 @@ export class RestaurantAuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly tokenService: TokenService,
   ) {}
 
-  /**
-   * Checking() → saveRestaurant() → sendPassword().
-   * Diagram: Restaurant sends data → Server checks → saves → sends generated password.
-   */
+  /** Checking() → saveRestaurant() → sendPassword(). */
   async register(dto: RegisterRestaurantDto): Promise<{ message: string; generatedPassword: string }> {
     const existingEmail = await this.userRepo.findOne({ where: { email: dto.email } });
-    if (existingEmail) {
-      throw new ConflictException('Email already registered.');
-    }
+    if (existingEmail) throw new ConflictException('Email already registered.');
 
-    // Use first telephone as the login phone
     const phone = dto.telephones[0];
     const existingPhone = await this.userRepo.findOne({ where: { phone } });
-    if (existingPhone) {
-      throw new ConflictException('Phone number already registered.');
-    }
+    if (existingPhone) throw new ConflictException('Phone number already registered.');
 
-    // Generate a secure random password (simulate sendPassword())
     const generatedPassword = randomBytes(6).toString('base64url');
     const passwordHash = await bcrypt.hash(generatedPassword, 12);
 
@@ -55,17 +48,17 @@ export class RestaurantAuthService {
     });
     await this.userRepo.save(user);
 
-    // In production: send generatedPassword via email/SMS
     return {
       message: 'Restaurant registered successfully. Password has been sent to your email.',
-      generatedPassword, // Exposed here only for development/testing
+      generatedPassword,
     };
   }
 
-  /**
-   * Login(phoneNo, password) → Dashboard.
-   */
-  async login(dto: LoginRestaurantDto): Promise<{ userId: string; role: string }> {
+  /** Login(phoneNo, password) → access + refresh tokens. */
+  async login(
+    dto: LoginRestaurantDto,
+    meta?: { ipAddress?: string },
+  ): Promise<{ accessToken: string; refreshToken: string; userId: string; role: string }> {
     const user = await this.userRepo.findOne({
       where: { phone: dto.phoneNo, role: UserRole.RESTAURANT_OWNER },
     });
@@ -80,6 +73,12 @@ export class RestaurantAuthService {
     user.lastLoginAt = new Date();
     await this.userRepo.save(user);
 
-    return { userId: user.id, role: user.role };
+    const { accessToken, refreshToken } = await this.tokenService.issueTokens(
+      user.id,
+      user.role,
+      { ipAddress: meta?.ipAddress },
+    );
+
+    return { accessToken, refreshToken, userId: user.id, role: user.role };
   }
 }
