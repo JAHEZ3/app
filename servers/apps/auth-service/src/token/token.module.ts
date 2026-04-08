@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RefreshToken } from '../src/entities/refresh-token.entity';
+import { RefreshToken } from '../entities/refresh-token.entity';
 import { TokenService } from './token.service';
 import { TokenController } from './token.controller';
 

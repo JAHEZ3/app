@@ -10,7 +10,7 @@ import { OtpCode } from './entities/otp-code.entity';
 import { CustomerAuthModule } from './customer/customer-auth.module';
 import { RestaurantAuthModule } from './restaurant/restaurant-auth.module';
 import { DeliveryAuthModule } from './delivery/delivery-auth.module';
-import { TokenModule } from '../token/token.module';
+import { TokenModule } from './token/token.module';
 
 @Module({
   imports: [

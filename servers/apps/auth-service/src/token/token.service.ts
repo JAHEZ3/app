@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { RefreshToken } from '../src/entities/refresh-token.entity';
+import { RefreshToken } from '../entities/refresh-token.entity';
 
 export interface JwtPayload {
   sub: string;
