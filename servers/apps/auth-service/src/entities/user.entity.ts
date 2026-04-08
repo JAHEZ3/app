@@ -36,14 +36,10 @@ export class User {
   @Column({ unique: true, length: 20, nullable: true })
   phone: string;
 
-<<<<<<< HEAD
-  @Column({ name: "password_hash", type: "text", nullable: true })
-=======
-  @Column({ name: 'full_name', length: 255, nullable: true })
+  @Column({ name: "full_name", length: 255, nullable: true })
   fullName: string;
 
-  @Column({ name: 'password_hash', type: 'text' })
->>>>>>> 9a25fd6a14dd7d6993717c6a143c8ccc44d2c806
+  @Column({ name: "password_hash", type: "text" })
   passwordHash: string;
 
   @Column({ type: "enum", enum: UserRole, enumName: "user_role" })
