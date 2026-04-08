@@ -15,9 +15,6 @@ export class Manager {
   @Column({ type: 'text', array: true, default: '{}' })
   permissions: string[];
 
-  @Column({ name: 'is_super_admin', default: false })
-  isSuperAdmin: boolean;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

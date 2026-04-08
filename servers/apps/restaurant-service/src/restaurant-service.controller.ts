@@ -1,12 +1,19 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { EventPattern, Payload } from '@nestjs/microservices';
 import { RestaurantServiceService } from './restaurant-service.service';
 
 @Controller()
 export class RestaurantServiceController {
-  constructor(private readonly restaurantServiceService: RestaurantServiceService) {}
+  constructor(private readonly service: RestaurantServiceService) {}
 
-  @Get()
-  getHello(): string {
-    return this.restaurantServiceService.getHello();
+  @EventPattern('user.restaurant.created')
+  handleRestaurantCreated(@Payload() data: {
+    userId: string;
+    name: string;
+    ownerName: string;
+    phone: string;
+    street: string | null;
+  }) {
+    return this.service.createRestaurant(data);
   }
 }

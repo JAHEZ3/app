@@ -1,23 +1,33 @@
-import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthServiceModule } from './auth-service.module';
+import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { ResponseInterceptor } from './interceptors/response.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AuthServiceModule);
+  const config = app.get(ConfigService);
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.NATS,
     options: {
-      servers: [process.env.NATS_URL || 'nats://localhost:4222'],
+      servers: [config.get<string>('NATS_URL', 'nats://localhost:4222')],
     },
   });
 
   app.setGlobalPrefix('api/auth');
 
-  await app.startAllMicroservices();
-  await app.listen(3004);
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
+  );
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
-  console.log('Auth Service is running on http://localhost:3004/api/auth');
+  await app.startAllMicroservices();
+  await app.listen(config.get<number>('AUTH_PORT', 3004));
+
+  console.log(`Auth Service running on port ${config.get('AUTH_PORT', 3004)}`);
 }
 bootstrap();

@@ -3,7 +3,6 @@ import { DataSource } from 'typeorm';
 
 // Auth
 import { User } from './apps/auth-service/src/entities/user.entity';
-import { RefreshToken } from './apps/auth-service/src/entities/refresh-token.entity';
 import { OtpCode } from './apps/auth-service/src/entities/otp-code.entity';
 
 // Customer
@@ -56,7 +55,7 @@ export const AppDataSource = new DataSource({
   synchronize: false,
   logging: true,
   entities: [
-    User, RefreshToken, OtpCode,
+    User, OtpCode,
     Customer, CustomerAddress,
     Restaurant, RestaurantHour, RestaurantCategory, RestaurantCategoryMap,
     Menu, MenuSection, Meal, MealOptionGroup, MealOption,

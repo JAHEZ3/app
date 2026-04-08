@@ -1,12 +1,16 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { EventPattern, Payload } from '@nestjs/microservices';
 import { ManagerServiceService } from './manager-service.service';
 
 @Controller()
 export class ManagerServiceController {
-  constructor(private readonly managerServiceService: ManagerServiceService) {}
+  constructor(private readonly service: ManagerServiceService) {}
 
-  @Get()
-  getHello(): string {
-    return this.managerServiceService.getHello();
+  @EventPattern('user.manager.created')
+  handleManagerCreated(@Payload() data: {
+    userId: string;
+    fullName: string;
+  }) {
+    return this.service.createManager(data);
   }
 }

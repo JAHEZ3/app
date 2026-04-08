@@ -1,12 +1,13 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { EventPattern, Payload } from '@nestjs/microservices';
 import { CustomerServiceService } from './customer-service.service';
 
 @Controller()
 export class CustomerServiceController {
-  constructor(private readonly customerServiceService: CustomerServiceService) {}
+  constructor(private readonly service: CustomerServiceService) {}
 
-  @Get()
-  getHello(): string {
-    return this.customerServiceService.getHello();
+  @EventPattern('user.customer.created')
+  handleCustomerCreated(@Payload() data: { userId: string; fullName: string }) {
+    return this.service.createProfile(data);
   }
 }
