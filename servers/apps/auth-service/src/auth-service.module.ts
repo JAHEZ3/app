@@ -5,10 +5,19 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { redisStore } from 'cache-manager-redis-yet';
 import { User } from './entities/user.entity';
+<<<<<<< HEAD
 import { AppJwtModule } from './jwt/jwt.module';
 import { OtpService } from './otp/otp.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+=======
+import { RefreshToken } from './entities/refresh-token.entity';
+import { OtpCode } from './entities/otp-code.entity';
+import { CustomerAuthModule } from './customer/customer-auth.module';
+import { RestaurantAuthModule } from './restaurant/restaurant-auth.module';
+import { DeliveryAuthModule } from './delivery/delivery-auth.module';
+import { TokenModule } from './token/token.module';
+>>>>>>> 9a25fd6a14dd7d6993717c6a143c8ccc44d2c806
 
 @Module({
   imports: [
@@ -43,6 +52,7 @@ import { AuthService } from './auth.service';
       }),
       inject: [ConfigService],
     }),
+<<<<<<< HEAD
 
     ClientsModule.registerAsync([
       {
@@ -58,6 +68,12 @@ import { AuthService } from './auth.service';
     ]),
 
     AppJwtModule,
+=======
+    CustomerAuthModule,
+    RestaurantAuthModule,
+    DeliveryAuthModule,
+    TokenModule,
+>>>>>>> 9a25fd6a14dd7d6993717c6a143c8ccc44d2c806
   ],
   controllers: [AuthController],
   providers: [AuthService, OtpService],

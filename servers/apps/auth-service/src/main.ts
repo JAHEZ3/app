@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +10,14 @@ import { ResponseInterceptor } from './interceptors/response.interceptor';
 async function bootstrap() {
   const app = await NestFactory.create(AuthServiceModule);
   const config = app.get(ConfigService);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.NATS,

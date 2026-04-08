@@ -33,6 +33,10 @@
     "@nestjs/microservices": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/typeorm": "^11.0.0",
+<<<<<<< HEAD
+=======
+    "@types/bcrypt": "^6.0.0",
+>>>>>>> 9a25fd6a14dd7d6993717c6a143c8ccc44d2c806
     "bcrypt": "^6.0.0",
     "cache-manager": "^6.0.0",
     "cache-manager-redis-yet": "^5.1.5",
