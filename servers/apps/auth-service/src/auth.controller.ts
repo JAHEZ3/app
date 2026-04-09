@@ -2,11 +2,11 @@ import { Body, Controller, Delete, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
   RegisterCustomerDto,
+  RegisterDeliveryCompanyDto,
   RegisterDeliveryDto,
   RegisterManagerDto,
-  RegisterRestaurantDto,
 } from './dto/register.dto';
-import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResendOtpDto, VerifyOtpDto } from './dto/verify-otp.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -24,14 +24,14 @@ export class AuthController {
     return this.authService.registerCustomer(dto);
   }
 
-  @Post('restaurant/register')
-  registerRestaurant(@Body() dto: RegisterRestaurantDto) {
-    return this.authService.registerRestaurant(dto);
-  }
-
   @Post('delivery/register')
   registerDelivery(@Body() dto: RegisterDeliveryDto) {
     return this.authService.registerDelivery(dto);
+  }
+
+  @Post('delivery-company/register')
+  registerDeliveryCompany(@Body() dto: RegisterDeliveryCompanyDto) {
+    return this.authService.registerDeliveryCompany(dto);
   }
 
   @Post('manager/register')
@@ -44,6 +44,11 @@ export class AuthController {
   @Post('verify-otp')
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto);
+  }
+
+  @Post('resend-otp')
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.authService.resendOtp(dto);
   }
 
   @Post('login')

@@ -18,7 +18,7 @@ interface RefreshTokenRecord {
   deviceInfo?: Record<string, any>;
 }
 
-const RT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
+const RT_TTL_MS = 20 * 24 * 60 * 60 * 1000; // 20 days
 
 @Injectable()
 export class AppJwtService {
@@ -49,7 +49,7 @@ export class AppJwtService {
   signAccessToken(payload: Omit<JwtPayload, 'jti'>): string {
     return this.jwtService.sign(payload, {
       secret: this.accessSecret,
-      expiresIn: '15m',
+      expiresIn: '30m',
     });
   }
 
@@ -68,7 +68,7 @@ export class AppJwtService {
 
     const token = this.jwtService.sign(
       { ...payload, jti },
-      { secret: this.refreshSecret, expiresIn: '7d' },
+      { secret: this.refreshSecret, expiresIn: '20d' },
     );
 
     // Store only token + optional device info — payload is recoverable from the JWT itself

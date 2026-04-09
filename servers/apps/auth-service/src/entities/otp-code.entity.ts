@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
 
 export enum OtpPurpose {
-  EMAIL_VERIFY = 'email_verify',
-  PHONE_VERIFY = 'phone_verify',
+  PHONE_VERIFY = 'phone_verify', // registration — verify phone before account activation
+  LOGIN = 'login',               // login step 2 — OTP for active customers
   PASSWORD_RESET = 'password_reset',
 }
 

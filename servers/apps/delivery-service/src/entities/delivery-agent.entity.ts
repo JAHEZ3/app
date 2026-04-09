@@ -13,6 +13,11 @@ export enum VehicleType {
   ON_FOOT = 'on_foot',
 }
 
+export interface ApplicationAnswer {
+  question: string;
+  answer: string;
+}
+
 @Entity('delivery_agents')
 export class DeliveryAgent {
   @PrimaryGeneratedColumn('uuid')
@@ -32,11 +37,38 @@ export class DeliveryAgent {
   @Column({ name: 'full_name', length: 150 })
   fullName: string;
 
+  @Column({ name: 'first_name', length: 80 })
+  firstName: string;
+
+  @Column({ name: 'last_name', length: 80 })
+  lastName: string;
+
+  @Column({ name: 'date_of_birth', type: 'date', nullable: true })
+  dateOfBirth: string;
+
   @Column({ length: 20, nullable: true })
   phone: string;
 
   @Column({ name: 'id_number', length: 50, nullable: true })
   idNumber: string;
+
+  // ─── Profile completion (step 2 of registration) ──────────────────────────────
+
+  @Column({ name: 'profile_picture_url', type: 'text', nullable: true })
+  profilePictureUrl: string;
+
+  @Column({ name: 'id_picture_url', type: 'text', nullable: true })
+  idPictureUrl: string;
+
+  // Answers to the 2 random application questions
+  @Column({ name: 'application_answers', type: 'jsonb', nullable: true })
+  applicationAnswers: ApplicationAnswer[];
+
+  // Set when the agent submits their complete profile for manager review
+  @Column({ name: 'application_submitted_at', type: 'timestamp', nullable: true })
+  applicationSubmittedAt: Date;
+
+  // ─── Operational fields ────────────────────────────────────────────────────────
 
   @Column({ name: 'vehicle_type', type: 'enum', enum: VehicleType, enumName: 'vehicle_type', nullable: true })
   vehicleType: VehicleType;

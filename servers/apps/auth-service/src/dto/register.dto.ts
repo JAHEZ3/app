@@ -4,6 +4,7 @@ import {
   IsMobilePhone,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   MinLength,
@@ -25,15 +26,17 @@ export class RegisterCustomerDto {
   @IsDateString()
   dateOfBirth: string;
 
-  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  locationLat?: number;
+  locationLat: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  locationLng: number;
 
   @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  locationLng?: number;
+  @IsObject()
+  deviceInfo?: Record<string, any>;
 }
 
 // Restaurant self-registers with phone only — no password.
@@ -66,6 +69,9 @@ export class RegisterDeliveryDto {
   @IsString()
   @IsNotEmpty()
   lastName: string;
+
+  @IsDateString()
+  dateOfBirth: string;
 
   @IsOptional()
   @IsString()

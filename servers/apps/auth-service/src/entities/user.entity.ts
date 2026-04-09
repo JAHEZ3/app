@@ -59,9 +59,9 @@ export class User {
   @Column({ name: "last_login_at", type: "timestamp", nullable: true })
   lastLoginAt: Date;
 
-  @CreateDateColumn({ name: "created_at" })
-  createdAt: Date;
-
   @Column({ name: "device_info", type: "jsonb", nullable: true })
   deviceInfo: Record<string, any>;
+
+  @CreateDateColumn({ name: "created_at" })
+  createdAt: Date;
 }
