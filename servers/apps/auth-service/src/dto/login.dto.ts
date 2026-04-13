@@ -1,19 +1,35 @@
-import { IsEmail, IsEnum, IsMobilePhone, IsOptional, IsString } from 'class-validator';
-import { UserRole } from '../entities/user.entity';
+import { IsEmail, IsMobilePhone, IsString, MinLength } from 'class-validator';
 
-export class LoginDto {
-  @IsEnum(UserRole)
-  role: UserRole;
-
-  @IsOptional()
+// Customer: phone → OTP → verify-otp for tokens
+export class LoginCustomerDto {
   @IsMobilePhone()
-  phone?: string;
+  phone: string;
+}
 
-  @IsOptional()
-  @IsEmail()
-  email?: string;
+// Delivery agent: phone + password
+export class LoginDeliveryDto {
+  @IsMobilePhone()
+  phone: string;
 
-  @IsOptional()
   @IsString()
-  password?: string;
+  password: string;
+}
+
+// Restaurant owner: phone + password
+export class LoginRestaurantDto {
+  @IsMobilePhone()
+  phone: string;
+
+  @IsString()
+  password: string;
+}
+
+// Manager: email + password
+export class LoginManagerDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(1)
+  password: string;
 }

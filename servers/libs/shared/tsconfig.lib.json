@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    "declaration": false,
-    "outDir": "../../dist/apps/customer-service"
+    "declaration": true,
+    "outDir": "../../dist/libs/shared"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]

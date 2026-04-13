@@ -1,5 +1,11 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
-import { AgentStatus } from './delivery-company.entity';
+
+export enum AgentStatus {
+  PENDING_APPROVAL = 'pending_approval',
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended',
+  OFFLINE = 'offline',
+}
 
 export enum AgentType {
   FREELANCER = 'freelancer',
@@ -27,10 +33,6 @@ export class DeliveryAgent {
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  @Index()
-  @Column({ name: 'company_id', type: 'uuid', nullable: true })
-  companyId: string;
-
   @Column({ name: 'agent_type', type: 'enum', enum: AgentType, enumName: 'agent_type' })
   agentType: AgentType;
 
@@ -52,23 +54,11 @@ export class DeliveryAgent {
   @Column({ name: 'id_number', length: 50, nullable: true })
   idNumber: string;
 
-  // ─── Profile completion (step 2 of registration) ──────────────────────────────
-
-  @Column({ name: 'profile_picture_url', type: 'text', nullable: true })
-  profilePictureUrl: string;
-
-  @Column({ name: 'id_picture_url', type: 'text', nullable: true })
-  idPictureUrl: string;
-
-  // Answers to the 2 random application questions
-  @Column({ name: 'application_answers', type: 'jsonb', nullable: true })
-  applicationAnswers: ApplicationAnswer[];
-
-  // Set when the agent submits their complete profile for manager review
-  @Column({ name: 'application_submitted_at', type: 'timestamp', nullable: true })
-  applicationSubmittedAt: Date;
-
   // ─── Operational fields ────────────────────────────────────────────────────────
+
+  // True once a delivery_request has been approved — quick flag for dispatcher queries
+  @Column({ name: 'is_delivery', default: false })
+  isDelivery: boolean;
 
   @Column({ name: 'vehicle_type', type: 'enum', enum: VehicleType, enumName: 'vehicle_type', nullable: true })
   vehicleType: VehicleType;

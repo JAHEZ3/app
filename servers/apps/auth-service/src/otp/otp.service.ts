@@ -14,7 +14,7 @@ interface RateRecord {
   windowStart: number; // ms — window expires at windowStart + 24h
 }
 
-const OTP_TTL_MS = 10 * 60 * 1000;           // 10 minutes — code validity
+const OTP_TTL_MS = 2 * 60 * 1000;            // 2 minutes — code validity
 const OTP_RATE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours  — rate window
 const MAX_VERIFY_ATTEMPTS = 3;                // wrong-code attempts before code is locked
 const MAX_OTP_SENDS = 3;                      // sends allowed per 24h window
@@ -57,7 +57,7 @@ export class OtpService {
     );
 
     // Mock SMS — swap for real SMS provider (e.g. Twilio)
-    console.log(`[OTP] Phone: ${phone} | Code: ${code} | Purpose: ${purpose} | Expires: 10 min`);
+    console.log(`[OTP] Phone: ${phone} | Code: ${code} | Purpose: ${purpose} | Expires: 2 min`);
   }
 
   // ─── Verify OTP ────────────────────────────────────────────────────────────────

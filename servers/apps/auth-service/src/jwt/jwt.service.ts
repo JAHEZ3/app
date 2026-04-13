@@ -11,6 +11,8 @@ export interface JwtPayload {
   role: string;
   phone?: string;
   email?: string;
+  /** Present only on CUSTOMER tokens. false = profile incomplete, true = profile complete. */
+  isCustomer?: boolean;
 }
 
 interface RefreshTokenRecord {
@@ -18,7 +20,7 @@ interface RefreshTokenRecord {
   deviceInfo?: Record<string, any>;
 }
 
-const RT_TTL_MS = 20 * 24 * 60 * 60 * 1000; // 20 days
+const RT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 @Injectable()
 export class AppJwtService {
@@ -68,7 +70,7 @@ export class AppJwtService {
 
     const token = this.jwtService.sign(
       { ...payload, jti },
-      { secret: this.refreshSecret, expiresIn: '20d' },
+      { secret: this.refreshSecret, expiresIn: '30d' },
     );
 
     // Store only token + optional device info — payload is recoverable from the JWT itself
