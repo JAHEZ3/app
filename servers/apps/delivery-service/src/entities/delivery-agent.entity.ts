@@ -1,5 +1,11 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
-import { AgentStatus } from './delivery-company.entity';
+
+export enum AgentStatus {
+  PENDING_APPROVAL = 'pending_approval',
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended',
+  OFFLINE = 'offline',
+}
 
 export enum AgentType {
   FREELANCER = 'freelancer',
@@ -13,6 +19,11 @@ export enum VehicleType {
   ON_FOOT = 'on_foot',
 }
 
+export interface ApplicationAnswer {
+  question: string;
+  answer: string;
+}
+
 @Entity('delivery_agents')
 export class DeliveryAgent {
   @PrimaryGeneratedColumn('uuid')
@@ -22,21 +33,32 @@ export class DeliveryAgent {
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  @Index()
-  @Column({ name: 'company_id', type: 'uuid', nullable: true })
-  companyId: string;
-
   @Column({ name: 'agent_type', type: 'enum', enum: AgentType, enumName: 'agent_type' })
   agentType: AgentType;
 
   @Column({ name: 'full_name', length: 150 })
   fullName: string;
 
+  @Column({ name: 'first_name', length: 80 })
+  firstName: string;
+
+  @Column({ name: 'last_name', length: 80 })
+  lastName: string;
+
+  @Column({ name: 'date_of_birth', type: 'date', nullable: true })
+  dateOfBirth: string;
+
   @Column({ length: 20, nullable: true })
   phone: string;
 
   @Column({ name: 'id_number', length: 50, nullable: true })
   idNumber: string;
+
+  // ─── Operational fields ────────────────────────────────────────────────────────
+
+  // True once a delivery_request has been approved — quick flag for dispatcher queries
+  @Column({ name: 'is_delivery', default: false })
+  isDelivery: boolean;
 
   @Column({ name: 'vehicle_type', type: 'enum', enum: VehicleType, enumName: 'vehicle_type', nullable: true })
   vehicleType: VehicleType;

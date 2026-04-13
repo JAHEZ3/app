@@ -1,41 +1,43 @@
 import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { redisStore } from 'cache-manager-redis-yet';
 import { DeliveryServiceController } from './delivery-service.controller';
 import { DeliveryServiceService } from './delivery-service.service';
-import { DeliveryCompany } from './entities/delivery-company.entity';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { DeliveryAgent } from './entities/delivery-agent.entity';
+import { DeliveryRequest } from './entities/delivery-request.entity';
 import { Delivery } from './entities/delivery.entity';
 import { DeliveryLocationLog } from './entities/delivery-location-log.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: +(process.env.DB_PORT || 5432),
-      username: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'jahez_db',
-      entities: [],
-      synchronize: true,
-      autoLoadEntities: true,
-    }),
-    TypeOrmModule.forFeature([DeliveryCompany, DeliveryAgent, Delivery, DeliveryLocationLog]),
-    CacheModule.registerAsync({
-      isGlobal: true,
-      useFactory: async () => ({
-        store: await redisStore({
-          socket: {
-            host: process.env.REDIS_HOST || 'localhost',
-            port: +(process.env.REDIS_PORT || 6379),
-          },
-        }),
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get<string>('DB_HOST', 'localhost'),
+        port: config.get<number>('DB_PORT', 5432),
+        username: config.get<string>('DB_USER', 'postgres'),
+        password: config.get<string>('DB_PASSWORD', 'postgres'),
+        database: config.get<string>('DB_NAME', 'jahez_delivery_db'),
+        autoLoadEntities: true,
+        synchronize: config.get<string>('NODE_ENV') !== 'production',
+        logging: config.get<string>('NODE_ENV') === 'development',
+        extra: {
+          max: 10,
+          idleTimeoutMillis: 30_000,
+          connectionTimeoutMillis: 5_000,
+        },
       }),
+      inject: [ConfigService],
     }),
+    TypeOrmModule.forFeature([DeliveryAgent, DeliveryRequest, Delivery, DeliveryLocationLog]),
+    // JwtModule with no default config — secret is read per-call in the guard
+    JwtModule.register({}),
   ],
   controllers: [DeliveryServiceController],
-  providers: [DeliveryServiceService],
+  providers: [DeliveryServiceService, JwtAuthGuard, RolesGuard],
 })
 export class DeliveryServiceModule {}
