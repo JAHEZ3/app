@@ -14,7 +14,6 @@ import Animated, {
   withTiming,
   withDelay,
   withRepeat,
-  withSequence,
   Easing,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,15 +22,16 @@ import OTPInput from "../components/OTPInput";
 import AppButton from "../../../components/ui/AppButton";
 
 const RESEND_SECONDS = 120;
-const ease = Easing.out(Easing.cubic);
+const ease = Easing.bezier(0.22, 1, 0.36, 1);
+const gentleLoop = Easing.inOut(Easing.sin);
 
 /* ─── Simple fade row ─── */
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
   const opacity = useSharedValue(0);
-  const y = useSharedValue(8);
+  const y = useSharedValue(14);
   useEffect(() => {
-    opacity.value = withDelay(delay, withTiming(1, { duration: 300, easing: ease }));
-    y.value = withDelay(delay, withTiming(0, { duration: 300, easing: ease }));
+    opacity.value = withDelay(delay, withTiming(1, { duration: 520, easing: ease }));
+    y.value = withDelay(delay, withTiming(0, { duration: 520, easing: ease }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const style = useAnimatedStyle(() => ({
@@ -43,22 +43,25 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 
 /* ─── Icon with gentle glow ─── */
 function OTPIcon() {
-  const glowOpacity = useSharedValue(0.3);
+  const glowOpacity = useSharedValue(0.18);
+  const glowScale = useSharedValue(0.92);
   const iconOpacity = useSharedValue(0);
-  const iconScale = useSharedValue(0.85);
+  const iconScale = useSharedValue(0.92);
 
   useEffect(() => {
-    iconOpacity.value = withTiming(1, { duration: 350, easing: ease });
-    iconScale.value = withTiming(1, { duration: 350, easing: ease });
+    iconOpacity.value = withTiming(1, { duration: 520, easing: ease });
+    iconScale.value = withTiming(1, { duration: 620, easing: ease });
 
     glowOpacity.value = withDelay(
-      400,
+      250,
+      withRepeat(withTiming(0.3, { duration: 2400, easing: gentleLoop }), -1, true)
+    );
+    glowScale.value = withDelay(
+      250,
       withRepeat(
-        withSequence(
-          withTiming(0.55, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
-          withTiming(0.25, { duration: 2200, easing: Easing.inOut(Easing.sin) })
-        ),
-        -1
+        withTiming(1.04, { duration: 2400, easing: gentleLoop }),
+        -1,
+        true
       )
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,6 +69,7 @@ function OTPIcon() {
 
   const glowStyle = useAnimatedStyle(() => ({
     opacity: glowOpacity.value,
+    transform: [{ scale: glowScale.value }],
   }));
   const iconStyle = useAnimatedStyle(() => ({
     opacity: iconOpacity.value,
@@ -147,11 +151,16 @@ export default function OTPScreen() {
   const [resendKey, setResendKey] = useState(0);
 
   const headerOpacity = useSharedValue(0);
+  const headerY = useSharedValue(-8);
   useEffect(() => {
-    headerOpacity.value = withTiming(1, { duration: 300, easing: ease });
+    headerOpacity.value = withTiming(1, { duration: 420, easing: ease });
+    headerY.value = withTiming(0, { duration: 420, easing: ease });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const headerStyle = useAnimatedStyle(() => ({ opacity: headerOpacity.value }));
+  const headerStyle = useAnimatedStyle(() => ({
+    opacity: headerOpacity.value,
+    transform: [{ translateY: headerY.value }],
+  }));
 
   const handleVerify = useCallback(() => {
     router.push("/complete-profile");
