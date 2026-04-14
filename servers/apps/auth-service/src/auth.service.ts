@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -16,7 +18,6 @@ import { OtpService } from "./otp/otp.service";
 import {
   RegisterCustomerDto,
   RegisterDeliveryDto,
-  RegisterManagerDto,
   RegisterRestaurantDto,
 } from "./dto/register.dto";
 import {
@@ -26,9 +27,14 @@ import {
   LoginRestaurantDto,
 } from "./dto/login.dto";
 import { ResendOtpDto, VerifyOtpDto } from "./dto/verify-otp.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -38,14 +44,57 @@ export class AuthService {
     private readonly natsClient: ClientProxy,
   ) {}
 
-  // ─── Customer ────────────────────────────────────────────────────────────────
+  // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  private async issuePair(user: User) {
+    const payload = {
+      sub: user.id,
+      role: user.role,
+      ...(user.phone && { phone: user.phone }),
+      ...(user.email && { email: user.email }),
+      profileCompleted: user.profileCompleted,
+    };
+    return {
+      accessToken: this.jwtService.signAccessToken(payload),
+      refreshToken: await this.jwtService.signRefreshToken(payload),
+    };
+  }
+
+  // ─── Registration ─────────────────────────────────────────────────────────────
+  //
+  // Shared pattern for all phone-based roles:
+  //   1. Enter phone → if new: create PENDING user + send OTP
+  //                  → if PENDING already: resend OTP
+  //                  → if already verified: redirect to login
+  //   2. Verify OTP  → SUSPENDED + tokens
+  //   3. Complete profile in their own service
+  //
 
   async registerCustomer(dto: RegisterCustomerDto) {
     const existing = await this.userRepo.findOne({
       where: { phone: dto.phone },
     });
+
     if (existing) {
-      throw new BadRequestException("This phone number is already registered.");
+      if (existing.role !== UserRole.CUSTOMER) {
+        throw new ConflictException(
+          "Phone is already registered under a different account type.",
+        );
+      }
+      if (existing.status === UserStatus.PENDING) {
+        await this.otpService.saveOtp(
+          existing.id,
+          OtpPurpose.PHONE_VERIFY,
+          existing.phone,
+        );
+        return {
+          data: { userId: existing.id },
+          message: "Account pending verification. New OTP sent.",
+        };
+      }
+      throw new ConflictException(
+        "Phone already registered. Please use the login endpoint.",
+      );
     }
 
     const user = await this.userRepo.save(
@@ -57,358 +106,494 @@ export class AuthService {
       }),
     );
 
-    // Emit immediately — customer-service creates the profile record
+    // customer-service creates the profile stub
     this.natsClient.emit("user.customer.created", {
       userId: user.id,
       phone: user.phone,
     });
-
-    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, dto.phone);
+    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
 
     return {
-      data: {
-        id: user.id,
-        phone: user.phone,
-        role: user.role,
-        status: user.status,
-        phoneVerifiedAt: user.phoneVerifiedAt,
-        createdAt: user.createdAt,
-      },
+      data: { userId: user.id },
       message: "Account created. OTP sent to verify your phone.",
     };
   }
-
-  // ─── Delivery Agent ───────────────────────────────────────────────────────────
-  // Step 1: phone → OTP
-  // Step 2: verify OTP → system-generated temp password + tokens returned immediately
-  // Step 3: complete profile (name, docs, vehicle) via delivery-service HTTP endpoint
 
   async registerDelivery(dto: RegisterDeliveryDto) {
     const existing = await this.userRepo.findOne({
       where: { phone: dto.phone },
     });
+
     if (existing) {
-      throw new BadRequestException("This phone number is already registered.");
+      if (existing.role !== UserRole.DELIVERY) {
+        throw new ConflictException(
+          "Phone is already registered under a different role.",
+        );
+      }
+      if (existing.status === UserStatus.PENDING) {
+        await this.otpService.saveOtp(
+          existing.id,
+          OtpPurpose.PHONE_VERIFY,
+          existing.phone,
+        );
+        return {
+          data: { userId: existing.id },
+          message: "Account pending verification. New OTP sent.",
+        };
+      }
+      throw new ConflictException(
+        "Phone already registered. Please use the login endpoint.",
+      );
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
     const user = await this.userRepo.save(
       this.userRepo.create({
         phone: dto.phone,
         role: UserRole.DELIVERY,
         status: UserStatus.PENDING,
-        passwordHash,
       }),
     );
-    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, dto.phone);
+
+    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
     return {
       data: { userId: user.id },
-      message: "OTP sent. Check server log for the code.",
+      message: "Account created. OTP sent to verify your phone.",
     };
   }
 
-  // ─── Forgot password (delivery agent) ─────────────────────────────────────────
-  // TODO: Implement OTP-based password reset in a future sprint.
-  // Flow: verify phone via OTP → allow setting a new password.
+  async registerRestaurant(dto: RegisterRestaurantDto) {
+    const existing = await this.userRepo.findOne({
+      where: { phone: dto.phone },
+    });
 
-  async forgotPasswordDelivery(_phone: string) {
-    return {
-      data: null,
-      message: "Password reset feature coming soon. Contact support.",
-    };
-  }
-
-  // ─── OTP Verification (registration — customer, delivery, restaurant) ──────────
-
-  async verifyOtp(dto: VerifyOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found");
-
-    const otpVerifyRoles = [
-      UserRole.CUSTOMER,
-      UserRole.DELIVERY,
-      UserRole.RESTAURANT_OWNER,
-    ];
-    if (!otpVerifyRoles.includes(user.role)) {
-      throw new BadRequestException(
-        "OTP verification not applicable for this role",
+    if (existing) {
+      if (existing.role !== UserRole.RESTAURANT_OWNER) {
+        throw new ConflictException(
+          "Phone is already registered under a different role.",
+        );
+      }
+      if (existing.status === UserStatus.PENDING) {
+        await this.otpService.saveOtp(
+          existing.id,
+          OtpPurpose.PHONE_VERIFY,
+          existing.phone,
+        );
+        return {
+          data: { userId: existing.id },
+          message: "Account pending verification. New OTP sent.",
+        };
+      }
+      throw new ConflictException(
+        "Phone already registered. Please use the login endpoint.",
       );
     }
-    if (user.phoneVerifiedAt) {
-      throw new BadRequestException("Phone already verified");
+
+    const user = await this.userRepo.save(
+      this.userRepo.create({
+        phone: dto.phone,
+        role: UserRole.RESTAURANT_OWNER,
+        status: UserStatus.PENDING,
+      }),
+    );
+
+    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
+    return {
+      data: { userId: user.id },
+      message: "Account created. OTP sent to verify your phone.",
+    };
+  }
+
+  // ─── OTP Verification (registration) ─────────────────────────────────────────
+  // PENDING → SUSPENDED for all roles. Tokens are issued immediately so the
+  // client can call the downstream service profile-completion endpoint.
+
+  async verifyRegistrationOtp(dto: VerifyOtpDto) {
+    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException("User not found.");
+    if (user.role === UserRole.MANAGER) {
+      throw new BadRequestException(
+        "OTP verification does not apply to manager accounts.",
+      );
+    }
+    if (user.status !== UserStatus.PENDING) {
+      throw new BadRequestException(
+        "Phone already verified. Please proceed to login.",
+      );
     }
 
     await this.otpService.verifyOtp(user.id, OtpPurpose.PHONE_VERIFY, dto.otp);
 
-    if (user.role === UserRole.CUSTOMER) {
-      await this.userRepo.update(user.id, {
-        phoneVerifiedAt: new Date(),
-        status: UserStatus.ACTIVE,
-      });
-      const payload = { sub: user.id, role: user.role, phone: user.phone };
-      return {
-        data: {
-          accessToken: this.jwtService.signAccessToken(payload),
-          refreshToken: await this.jwtService.signRefreshToken(payload),
-        },
-        message: "Phone verified.",
-      };
-    }
+    await this.userRepo.update(user.id, {
+      phoneVerifiedAt: new Date(),
+      status: UserStatus.SUSPENDED,
+    });
+    user.phoneVerifiedAt = new Date();
+    user.status = UserStatus.SUSPENDED;
+    user.profileCompleted = false;
 
-    if (
-      user.role === UserRole.DELIVERY ||
-      user.role === UserRole.RESTAURANT_OWNER
-    ) {
-      // Phone verified — account moves to SUSPENDED (pending manager approval).
-      // User can log in with their password to complete their profile.
-      await this.userRepo.update(user.id, {
-        phoneVerifiedAt: new Date(),
-        status: UserStatus.SUSPENDED,
-      });
-      const payload = { sub: user.id, role: user.role, phone: user.phone };
-      return {
-        data: {
-          accessToken: this.jwtService.signAccessToken(payload),
-          refreshToken: await this.jwtService.signRefreshToken(payload),
-        },
-        message:
-          "Phone verified. Your account is pending manager approval. Complete your profile to proceed.",
-      };
-    }
+    const tokens = await this.issuePair(user);
+
+    const message =
+      user.role === UserRole.CUSTOMER
+        ? "Phone verified. Please complete your profile at /api/customer/profile."
+        : "Phone verified. Please complete your profile and submit your application for admin review.";
+
+    return { data: tokens, message };
   }
 
-  // ─── Customer login: phone → OTP → customer/login/verify-otp for tokens ────────
+  // ─── Resend OTP (registration phase only) ────────────────────────────────────
+
+  async resendOtp(dto: ResendOtpDto) {
+    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException("User not found.");
+    if (user.role === UserRole.MANAGER)
+      throw new BadRequestException("OTP does not apply to managers.");
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned.");
+    if (user.status !== UserStatus.PENDING) {
+      throw new BadRequestException(
+        "Phone already verified. Use the login endpoint.",
+      );
+    }
+    if (
+      !(await this.otpService.canRequestNewCode(
+        user.id,
+        OtpPurpose.PHONE_VERIFY,
+      ))
+    ) {
+      throw new BadRequestException(
+        "Daily OTP limit reached. Try again after 24 hours.",
+      );
+    }
+    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
+    return { data: { userId: user.id }, message: "OTP resent." };
+  }
+
+  // ─── Customer Login (OTP-based, two-step) ────────────────────────────────────
 
   async loginCustomer(dto: LoginCustomerDto) {
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.CUSTOMER },
     });
     if (!user)
-      throw new NotFoundException("No customer account found for this phone");
+      throw new NotFoundException(
+        "No customer account found for this phone number.",
+      );
 
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned. Contact support.");
     if (user.status === UserStatus.PENDING) {
-      throw new UnauthorizedException(
-        "Account is need phone verification. Please verify your phone number first.",
+      throw new BadRequestException(
+        "Phone not verified. Please verify your OTP first.",
+      );
+    }
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new BadRequestException(
+        user.profileCompleted
+          ? "Account suspended. Contact support."
+          : "Please complete your profile at /api/customer/profile to activate your account.",
       );
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedException("Account not active");
-    }
-
-    await this.otpService.saveOtp(user.id, OtpPurpose.LOGIN, dto.phone);
+    await this.otpService.saveOtp(user.id, OtpPurpose.LOGIN, user.phone);
     return {
       data: { userId: user.id },
-      message: "OTP sent. Check server log.",
+      message: "Login OTP sent to your phone.",
     };
   }
 
-  // ─── Delivery login: phone + password → tokens directly ──────────────────────
+  async verifyLoginOtp(dto: VerifyOtpDto) {
+    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException("User not found.");
+    if (user.role !== UserRole.CUSTOMER)
+      throw new BadRequestException("OTP login is for customers only.");
+    if (user.status !== UserStatus.ACTIVE)
+      throw new UnauthorizedException("Account is not active.");
+
+    await this.otpService.verifyOtp(user.id, OtpPurpose.LOGIN, dto.otp);
+    await this.userRepo.update(user.id, { lastLoginAt: new Date() });
+    user.lastLoginAt = new Date();
+    const tokens = await this.issuePair(user);
+    return { data: tokens, message: "Login successful." };
+  }
+
+  // ─── Delivery Login (phone + password) ───────────────────────────────────────
 
   async loginDelivery(dto: LoginDeliveryDto) {
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.DELIVERY },
     });
     if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException("Invalid credentials.");
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials");
-    if (user.status === UserStatus.PENDING) {
-      throw new UnauthorizedException("Please verify your phone number first.");
+    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned. Contact support.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("Please verify your phone first.");
+
+    if (user.status === UserStatus.SUSPENDED) {
+      if (!user.profileCompleted) {
+        throw new BadRequestException(
+          "Please complete your profile at /api/delivery/profile/complete and submit your application.",
+        );
+      }
+      // Profile submitted — pending admin approval. Allow login with a notice.
+      await this.userRepo.update(user.id, { lastLoginAt: new Date() });
+      user.lastLoginAt = new Date();
+      const tokens = await this.issuePair(user);
+      return {
+        data: tokens,
+        message: "Login successful. Your account is pending admin approval.",
+      };
     }
-    if (user.status === UserStatus.BANNED) {
-      throw new UnauthorizedException("Account is banned.");
-    }
-    // SUSPENDED = phone verified, pending manager approval — allow login to complete profile
-    // ACTIVE    = fully approved — normal login
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
-    const payload = { sub: user.id, role: user.role, phone: user.phone };
-    return {
-      data: {
-        accessToken: this.jwtService.signAccessToken(payload),
-        refreshToken: await this.jwtService.signRefreshToken(payload),
-      },
-      message: "Login successful",
-    };
+    user.lastLoginAt = new Date();
+    const tokens = await this.issuePair(user);
+    return { data: tokens, message: "Login successful." };
   }
 
-  // ─── Restaurant Owner ─────────────────────────────────────────────────────────
-
-  async registerRestaurant(dto: RegisterRestaurantDto) {
-    const existing = await this.userRepo.findOne({
-      where: { phone: dto.phone },
-    });
-    if (existing) {
-      throw new BadRequestException("This phone number is already registered.");
-    }
-
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    const user = await this.userRepo.save(
-      this.userRepo.create({
-        phone: dto.phone,
-        role: UserRole.RESTAURANT_OWNER,
-        status: UserStatus.PENDING,
-        passwordHash,
-      }),
-    );
-    await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, dto.phone);
-    return {
-      data: { userId: user.id },
-      message: "OTP sent. Check server log for the code.",
-    };
-  }
+  // ─── Restaurant Login (phone + password) ─────────────────────────────────────
 
   async loginRestaurant(dto: LoginRestaurantDto) {
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.RESTAURANT_OWNER },
     });
     if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException("Invalid credentials.");
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials");
-    if (user.status === UserStatus.PENDING) {
-      throw new UnauthorizedException("Please verify your phone number first.");
+    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned. Contact support.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("Please verify your phone first.");
+
+    if (user.status === UserStatus.SUSPENDED) {
+      if (!user.profileCompleted) {
+        throw new BadRequestException(
+          "Please complete your restaurant profile at /api/restaurant/profile.",
+        );
+      }
+      await this.userRepo.update(user.id, { lastLoginAt: new Date() });
+      user.lastLoginAt = new Date();
+      const tokens = await this.issuePair(user);
+      return {
+        data: tokens,
+        message: "Login successful. Your account is pending admin approval.",
+      };
     }
-    if (user.status === UserStatus.BANNED) {
-      throw new UnauthorizedException("Account is banned.");
-    }
-    // SUSPENDED = phone verified, pending manager approval — allow login to complete profile
-    // ACTIVE    = fully approved — normal login
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
-    const payload = { sub: user.id, role: user.role, phone: user.phone };
-    return {
-      data: {
-        accessToken: this.jwtService.signAccessToken(payload),
-        refreshToken: await this.jwtService.signRefreshToken(payload),
-      },
-      message: "Login successful",
-    };
+    user.lastLoginAt = new Date();
+    const tokens = await this.issuePair(user);
+    return { data: tokens, message: "Login successful." };
   }
 
-  // ─── Manager login: email + password → tokens directly ───────────────────────
+  // ─── Manager Login (email + password) ────────────────────────────────────────
 
   async loginManager(dto: LoginManagerDto) {
     const user = await this.userRepo.findOne({
       where: { email: dto.email, role: UserRole.MANAGER },
     });
-    if (!user) throw new UnauthorizedException("Invalid credentials");
+    if (!user || !user.passwordHash)
+      throw new UnauthorizedException("Invalid credentials.");
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials");
+    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+
     if (user.status !== UserStatus.ACTIVE)
-      throw new UnauthorizedException("Account not active");
+      throw new UnauthorizedException("Manager account is not active.");
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
-    const payload = { sub: user.id, role: user.role, email: user.email };
+    user.lastLoginAt = new Date();
+    const tokens = await this.issuePair(user);
+    return { data: tokens, message: "Login successful." };
+  }
+
+  // ─── Password Management ──────────────────────────────────────────────────────
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    if (!dto.phone && !dto.email)
+      throw new BadRequestException("Provide phone or email.");
+
+    const user = dto.phone
+      ? await this.userRepo.findOne({ where: { phone: dto.phone } })
+      : await this.userRepo.findOne({ where: { email: dto.email } });
+
+    if (!user)
+      throw new NotFoundException("No account found with that contact.");
+    if (user.role === UserRole.CUSTOMER)
+      throw new BadRequestException(
+        "Customers use OTP-based login and have no password.",
+      );
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("Verify your phone first.");
+
+    const identifier = user.phone ?? user.email;
+    await this.otpService.saveOtp(
+      user.id,
+      OtpPurpose.PASSWORD_RESET,
+      identifier,
+    );
+    return { data: { userId: user.id }, message: "Password reset OTP sent." };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException("User not found.");
+    if (user.role === UserRole.CUSTOMER)
+      throw new BadRequestException("Customers have no password.");
+
+    await this.otpService.verifyOtp(
+      user.id,
+      OtpPurpose.PASSWORD_RESET,
+      dto.otp,
+    );
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.userRepo.update(user.id, { passwordHash });
+    await this.jwtService.revokeAllUserTokens(user.id);
+
     return {
-      data: {
-        accessToken: this.jwtService.signAccessToken(payload),
-        refreshToken: await this.jwtService.signRefreshToken(payload),
-      },
-      message: "Login successful",
+      data: null,
+      message: "Password reset successfully. Please log in again.",
     };
   }
 
-  // ─── Resend OTP ───────────────────────────────────────────────────────────────
-  // Works for both registration (PENDING) and login (ACTIVE) flows.
-  // Purpose is inferred from user status — no extra param needed from the client.
-  // Rate-limited by OtpService: max 3 sends per 24-hour window.
-
-  async resendOtp(dto: ResendOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found");
-
-    const otpRoles = [
-      UserRole.CUSTOMER,
-      UserRole.DELIVERY,
-      UserRole.RESTAURANT_OWNER,
-    ];
-    if (!otpRoles.includes(user.role)) {
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException("User not found.");
+    if (user.role === UserRole.CUSTOMER)
+      throw new BadRequestException("Customers have no password.");
+    if (!user.passwordHash)
       throw new BadRequestException(
-        "OTP resend is not applicable for this role",
+        "No password set. Use forgot-password flow.",
       );
-    }
-    if (user.status === UserStatus.BANNED) {
-      throw new UnauthorizedException("Account is banned");
-    }
-    // Delivery / restaurant use phone+password — OTP resend only valid while PENDING
-    const passwordRoles = [UserRole.DELIVERY, UserRole.RESTAURANT_OWNER];
-    if (
-      passwordRoles.includes(user.role) &&
-      user.status !== UserStatus.PENDING
-    ) {
-      throw new BadRequestException(
-        "Phone already verified. Use the login endpoint.",
-      );
-    }
 
-    // CUSTOMER unverified phone → PHONE_VERIFY (registration step)
-    // CUSTOMER verified phone  → LOGIN        (login step 2)
-    // DELIVERY PENDING         → PHONE_VERIFY (registration)
-    const purpose =
-      user.role === UserRole.CUSTOMER && user.phoneVerifiedAt !== null
-        ? OtpPurpose.LOGIN
-        : OtpPurpose.PHONE_VERIFY;
+    const ok = await bcrypt.compare(dto.oldPassword, user.passwordHash);
+    if (!ok) throw new BadRequestException("Current password is incorrect.");
+    if (dto.oldPassword === dto.newPassword)
+      throw new BadRequestException("New password must differ from current.");
 
-    // Hard-block: if rate limit already maxed, tell them before they even try
-    if (!(await this.otpService.canRequestNewCode(user.id, purpose))) {
-      throw new BadRequestException(
-        "Daily OTP limit reached. You cannot request a new code until the 24-hour window resets.",
-      );
-    }
-
-    // saveOtp checks for a still-active OTP (would throw "already sent")
-    // and enforces the rate limit as a second guard
-    await this.otpService.saveOtp(user.id, purpose, user.phone);
-
-    return {
-      data: { userId: user.id },
-      message: "New OTP sent. Check server log.",
-    };
-  }
-
-  // OTP second step for customer login
-  async verifyLoginOtp(dto: VerifyOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found");
-    if (user.role !== UserRole.CUSTOMER) {
-      throw new BadRequestException("OTP login only available for customers");
-    }
-    await this.otpService.verifyOtp(user.id, OtpPurpose.LOGIN, dto.otp);
-    await this.userRepo.update(user.id, { lastLoginAt: new Date() });
-    const payload = { sub: user.id, role: user.role, phone: user.phone };
-    return {
-      data: {
-        accessToken: this.jwtService.signAccessToken(payload),
-        refreshToken: await this.jwtService.signRefreshToken(payload),
-      },
-      message: "Login successful",
-    };
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.userRepo.update(userId, { passwordHash });
+    return { data: null, message: "Password changed successfully." };
   }
 
   // ─── Token Management ──────────────────────────────────────────────────────────
 
   async refresh(token: string) {
     const payload = await this.jwtService.verifyRefreshToken(token);
+
+    const user = await this.userRepo.findOne({ where: { id: payload.sub } });
+    if (!user) throw new UnauthorizedException("User not found.");
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned.");
+
+    const newPayload = {
+      sub: user.id,
+      role: user.role,
+      ...(user.phone && { phone: user.phone }),
+      ...(user.email && { email: user.email }),
+      profileCompleted: user.profileCompleted,
+    };
     return {
-      data: {
-        accessToken: this.jwtService.signAccessToken({
-          sub: payload.sub,
-          role: payload.role,
-          phone: payload.phone,
-          email: payload.email,
-        }),
-      },
-      message: "Token refreshed",
+      data: { accessToken: this.jwtService.signAccessToken(newPayload) },
+      message: "Token refreshed.",
     };
   }
 
   async logout(userId: string, token: string) {
     await this.jwtService.revokeRefreshToken(token);
-    return { data: null, message: "Logged out" };
+    return { data: null, message: "Logged out successfully." };
+  }
+
+  // ─── NATS Event Handlers — user status transitions ────────────────────────────
+  // Called from auth.controller.ts @EventPattern handlers.
+  // Each service emits an event when something meaningful happens; auth-service
+  // updates the users table accordingly (single source of truth for auth state).
+
+  /** customer-service emits this after customer saves their profile. */
+  async onCustomerProfileCompleted(data: { userId: string }) {
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.CUSTOMER },
+      { profileCompleted: true, status: UserStatus.ACTIVE },
+    );
+    this.logger.log(`Customer ${data.userId} profile completed → ACTIVE`);
+  }
+
+  /** delivery-service emits this after agent submits their application. */
+  async onDeliveryProfileCompleted(data: { userId: string }) {
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.DELIVERY },
+      { profileCompleted: true },
+    );
+    this.logger.log(`Delivery agent ${data.userId} profile submitted`);
+  }
+
+  /** delivery-service emits this after manager approves an application. */
+  async onDeliveryAgentApproved(data: { userId: string }) {
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.DELIVERY },
+      { status: UserStatus.ACTIVE },
+    );
+    this.logger.log(`Delivery agent ${data.userId} approved → ACTIVE`);
+  }
+
+  /** delivery-service emits this after manager rejects an application. */
+  async onDeliveryAgentRejected(data: { userId: string }) {
+    // Reset profileCompleted so the agent can resubmit a corrected application.
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.DELIVERY },
+      { profileCompleted: false },
+    );
+    this.logger.log(
+      `Delivery agent ${data.userId} rejected → profileCompleted reset`,
+    );
+  }
+
+  /** restaurant-service emits this after owner saves their restaurant profile. */
+  async onRestaurantProfileCompleted(data: { userId: string }) {
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.RESTAURANT_OWNER },
+      { profileCompleted: true },
+    );
+    this.logger.log(`Restaurant owner ${data.userId} profile submitted`);
+  }
+
+  /** restaurant-service emits this after manager approves the restaurant. */
+  async onRestaurantOwnerApproved(data: { userId: string }) {
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.RESTAURANT_OWNER },
+      { status: UserStatus.ACTIVE },
+    );
+    this.logger.log(`Restaurant owner ${data.userId} approved → ACTIVE`);
+  }
+
+  /** restaurant-service emits this after manager rejects the restaurant. */
+  async onRestaurantOwnerRejected(data: { userId: string }) {
+    await this.userRepo.update(
+      { id: data.userId, role: UserRole.RESTAURANT_OWNER },
+      { profileCompleted: false },
+    );
+    this.logger.log(
+      `Restaurant owner ${data.userId} rejected → profileCompleted reset`,
+    );
+  }
+
+  /** delivery-service or restaurant-service set a password on behalf of user. */
+  async onPasswordSet(data: { userId: string; passwordHash: string }) {
+    await this.userRepo.update(
+      { id: data.userId },
+      { passwordHash: data.passwordHash },
+    );
+    this.logger.log(`Password set for user ${data.userId}`);
   }
 }

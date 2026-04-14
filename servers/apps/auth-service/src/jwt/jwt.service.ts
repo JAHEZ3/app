@@ -11,8 +11,8 @@ export interface JwtPayload {
   role: string;
   phone?: string;
   email?: string;
-  /** Present only on CUSTOMER tokens. false = profile incomplete, true = profile complete. */
-  isCustomer?: boolean;
+  /** true once the user has completed their profile (customer activated / delivery-restaurant submitted request). */
+  profileCompleted?: boolean;
 }
 
 interface RefreshTokenRecord {

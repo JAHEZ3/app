@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { ClientProxy } from "@nestjs/microservices";
 import {
   AgentStatus,
   AgentType,
@@ -41,6 +43,8 @@ export class DeliveryServiceService {
     private readonly agentRepo: Repository<DeliveryAgent>,
     @InjectRepository(DeliveryRequest)
     private readonly requestRepo: Repository<DeliveryRequest>,
+    @Inject("NATS_SERVICE")
+    private readonly natsClient: ClientProxy,
   ) {}
 
   // ─── Profile step 1: get random questions ────────────────────────────────────
@@ -50,8 +54,11 @@ export class DeliveryServiceService {
     return shuffled.slice(0, 2).map((q) => ({ question: q }));
   }
 
-  // ─── Profile step 2: submit application for review ───────────────────────────
-  // Creates the DeliveryAgent on first call, then creates a DeliveryRequest.
+  // ─── Profile step 2: submit complete profile + application for review ─────────
+  //
+  // Also sets the agent's password via auth-service (NATS event) so they can
+  // log in with phone + password after OTP verification.
+  //
 
   async completeProfile(
     userId: string,
@@ -87,7 +94,19 @@ export class DeliveryServiceService {
           status: AgentStatus.PENDING_APPROVAL,
         }),
       );
-      this.logger.log(`Delivery agent created for userId: ${userId}`);
+      this.logger.log(`Delivery agent record created for userId: ${userId}`);
+    } else {
+      // Update existing agent record on resubmission (after rejection)
+      await this.agentRepo.update(agent.id, {
+        firstName: profileData.firstName,
+        lastName: profileData.lastName,
+        fullName: `${profileData.firstName} ${profileData.lastName}`,
+        ...(profileData.dateOfBirth && { dateOfBirth: profileData.dateOfBirth }),
+        agentType: profileData.agentType as AgentType,
+        ...(profileData.vehicleType && { vehicleType: profileData.vehicleType as VehicleType }),
+        ...(profileData.vehiclePlate && { vehiclePlate: profileData.vehiclePlate }),
+        status: AgentStatus.PENDING_APPROVAL,
+      });
     }
 
     // Prevent duplicate pending submissions
@@ -95,9 +114,7 @@ export class DeliveryServiceService {
       where: { agentId: agent.id, status: DeliveryRequestStatus.PENDING },
     });
     if (pending) {
-      throw new BadRequestException(
-        "Application already submitted and is pending review",
-      );
+      throw new BadRequestException("Application already submitted and is pending review");
     }
 
     const applicationAnswers: ApplicationAnswer[] = answers.map((a) => ({
@@ -108,13 +125,23 @@ export class DeliveryServiceService {
     await this.requestRepo.save(
       this.requestRepo.create({
         agentId: agent.id,
-        // TODO: S3/R2 upload — replace .path with the cloud storage URL
+        // TODO: Replace local path with S3/R2 URL after integrating object storage
         profilePictureUrl: files.profilePicture[0].path,
         idPictureUrl: files.idPicture[0].path,
         answers: applicationAnswers,
         submittedAt: new Date(),
       }),
     );
+
+    // Set password on the auth-service user so agent can log in with phone+password
+    if (profileData.password) {
+      const bcrypt = await import("bcrypt");
+      const passwordHash = await bcrypt.hash(profileData.password, 10);
+      this.natsClient.emit("user.password.set", { userId, passwordHash });
+    }
+
+    // Notify auth-service: profileCompleted = true
+    this.natsClient.emit("delivery.profile.completed", { userId });
 
     this.logger.log(`Agent ${userId} submitted application for review`);
     return {
@@ -132,9 +159,7 @@ export class DeliveryServiceService {
     });
 
     const agentIds = [...new Set(requests.map((r) => r.agentId))];
-    const agents = agentIds.length
-      ? await this.agentRepo.findByIds(agentIds)
-      : [];
+    const agents = agentIds.length ? await this.agentRepo.findByIds(agentIds) : [];
     const agentMap = new Map(agents.map((a) => [a.id, a]));
 
     return {
@@ -173,13 +198,12 @@ export class DeliveryServiceService {
 
     const agent = await this.agentRepo.findOne({ where: { id: req.agentId } });
     if (agent) {
-      await this.agentRepo.update(agent.id, {
-        status: AgentStatus.ACTIVE,
-        isDelivery: true,
-      });
-      this.logger.log(
-        `Application ${requestId} approved — agent ${agent.userId} activated`,
-      );
+      await this.agentRepo.update(agent.id, { status: AgentStatus.ACTIVE, isDelivery: true });
+
+      // Notify auth-service: user status → ACTIVE
+      this.natsClient.emit("delivery.agent.approved", { userId: agent.userId, requestId });
+
+      this.logger.log(`Application ${requestId} approved — agent ${agent.userId} activated`);
     }
 
     return { data: { requestId }, message: "Agent approved and activated." };
@@ -187,11 +211,7 @@ export class DeliveryServiceService {
 
   // ─── Manager: reject application ─────────────────────────────────────────────
 
-  async rejectApplication(
-    requestId: string,
-    managerId: string,
-    reason: string,
-  ) {
+  async rejectApplication(requestId: string, managerId: string, reason: string) {
     const req = await this.requestRepo.findOne({ where: { id: requestId } });
     if (!req) throw new NotFoundException("Application not found");
     if (req.status !== DeliveryRequestStatus.PENDING)
@@ -204,7 +224,20 @@ export class DeliveryServiceService {
       rejectionReason: reason,
     });
 
-    this.logger.log(`Application ${requestId} rejected — reason: ${reason}`);
+    const agent = await this.agentRepo.findOne({ where: { id: req.agentId } });
+    if (agent) {
+      await this.agentRepo.update(agent.id, { status: AgentStatus.PENDING_APPROVAL });
+
+      // Notify auth-service: profileCompleted reset so agent can resubmit
+      this.natsClient.emit("delivery.agent.rejected", {
+        userId: agent.userId,
+        requestId,
+        reason,
+      });
+
+      this.logger.log(`Application ${requestId} rejected — agent ${agent.userId} can resubmit`);
+    }
+
     return { data: { requestId }, message: "Application rejected." };
   }
 }

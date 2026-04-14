@@ -1,4 +1,5 @@
 import {
+  IsEmail,
   IsMobilePhone,
   IsNotEmpty,
   IsObject,
@@ -7,6 +8,10 @@ import {
   MinLength,
 } from 'class-validator';
 
+/**
+ * Step 1 of customer registration — phone only.
+ * OTP is sent; password is never needed (OTP-based login).
+ */
 export class RegisterCustomerDto {
   @IsMobilePhone()
   phone: string;
@@ -16,30 +21,30 @@ export class RegisterCustomerDto {
   deviceInfo?: Record<string, any>;
 }
 
-// Restaurant owner sets their own password at registration.
-export class RegisterRestaurantDto {
-  @IsMobilePhone()
-  phone: string;
-
-  @IsString()
-  @MinLength(8)
-  password: string;
-}
-
-// Delivery agent sets their own password at registration.
+/**
+ * Step 1 of delivery registration — phone only.
+ * Password is set later via submit-request after OTP verification.
+ */
 export class RegisterDeliveryDto {
   @IsMobilePhone()
   phone: string;
-
-  @IsString()
-  @MinLength(8)
-  password: string;
 }
 
-// Manager created by another manager — sets own password at creation.
+/**
+ * Step 1 of restaurant owner registration — phone only.
+ * Password is set later via submit-request after OTP verification.
+ */
+export class RegisterRestaurantDto {
+  @IsMobilePhone()
+  phone: string;
+}
+
+/**
+ * Manager accounts are created by existing managers — never self-registered.
+ * Password is set at creation time; no OTP flow.
+ */
 export class RegisterManagerDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsEmail()
   email: string;
 
   @IsString()

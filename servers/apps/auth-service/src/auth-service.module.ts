@@ -16,15 +16,15 @@ import { AuthService } from "./auth.service";
 
     TypeOrmModule.forRootAsync({
       useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST', 'localhost'),
-        port: config.get<number>('DB_PORT', 5432),
-        username: config.get<string>('DB_USER', 'postgres'),
-        password: config.get<string>('DB_PASSWORD', 'postgres'),
-        database: config.get<string>('DB_NAME', 'jahez_auth_db'),
+        type: "postgres",
+        host: config.get<string>("DB_HOST", "localhost"),
+        port: config.get<number>("DB_PORT", 5432),
+        username: config.get<string>("DB_USER", "postgres"),
+        password: config.get<string>("DB_PASSWORD", "postgres"),
+        database: config.get<string>("DB_NAME", "jahez_db"),
         autoLoadEntities: true,
-        synchronize: config.get<string>('NODE_ENV') !== 'production',
-        logging: config.get<string>('NODE_ENV') === 'development',
+        synchronize: config.get<string>("NODE_ENV") !== "production",
+        logging: config.get<string>("NODE_ENV") === "development",
         extra: {
           max: 10,
           idleTimeoutMillis: 30_000,

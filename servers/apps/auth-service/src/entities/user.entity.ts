@@ -38,7 +38,7 @@ export class User {
   @Column({ name: "full_name", length: 255, nullable: true })
   fullName: string;
 
-  @Column({ name: "password_hash", type: "text" })
+  @Column({ name: "password_hash", type: "text", nullable: true })
   passwordHash: string;
 
   @Column({ type: "enum", enum: UserRole, enumName: "user_role" })
@@ -63,6 +63,9 @@ export class User {
 
   @Column({ name: "device_info", type: "jsonb", nullable: true })
   deviceInfo: Record<string, any>;
+
+  @Column({ name: "profile_completed", default: false })
+  profileCompleted: boolean;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt: Date;

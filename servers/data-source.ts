@@ -11,6 +11,7 @@ import { CustomerAddress } from './apps/customer-service/src/entities/customer-a
 
 // Restaurant
 import { Restaurant } from './apps/restaurant-service/src/entities/restaurant.entity';
+import { RestaurantRequest } from './apps/restaurant-service/src/entities/restaurant-request.entity';
 import { RestaurantHour } from './apps/restaurant-service/src/entities/restaurant-hour.entity';
 import { RestaurantCategory } from './apps/restaurant-service/src/entities/restaurant-category.entity';
 import { RestaurantCategoryMap } from './apps/restaurant-service/src/entities/restaurant-category-map.entity';
@@ -31,6 +32,7 @@ import { OrderRating } from './apps/order-service/src/entities/order-rating.enti
 // Delivery
 import { DeliveryCompany } from './apps/delivery-service/src/entities/delivery-company.entity';
 import { DeliveryAgent } from './apps/delivery-service/src/entities/delivery-agent.entity';
+import { DeliveryRequest } from './apps/delivery-service/src/entities/delivery-request.entity';
 import { Delivery } from './apps/delivery-service/src/entities/delivery.entity';
 import { DeliveryLocationLog } from './apps/delivery-service/src/entities/delivery-location-log.entity';
 
@@ -57,10 +59,10 @@ export const AppDataSource = new DataSource({
   entities: [
     User, OtpCode,
     Customer, CustomerAddress,
-    Restaurant, RestaurantHour, RestaurantCategory, RestaurantCategoryMap,
+    Restaurant, RestaurantRequest, RestaurantHour, RestaurantCategory, RestaurantCategoryMap,
     Menu, MenuSection, Meal, MealOptionGroup, MealOption,
     PromoCode, Order, OrderItem, OrderItemOption, OrderStatusHistory, OrderRating,
-    DeliveryCompany, DeliveryAgent, Delivery, DeliveryLocationLog,
+    DeliveryCompany, DeliveryAgent, DeliveryRequest, Delivery, DeliveryLocationLog,
     Manager, AuditLog, PlatformSetting,
     Notification,
     OrderTransaction,

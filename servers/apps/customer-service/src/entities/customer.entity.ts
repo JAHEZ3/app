@@ -18,25 +18,28 @@ export class Customer {
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
 
-  @Column({ name: 'first_name', length: 80 })
+  // Profile fields — nullable so a stub can be created from the NATS event;
+  // populated when the customer completes their profile via PATCH /api/customer/profile.
+  @Column({ name: 'first_name', length: 80, nullable: true })
   firstName: string;
 
-  @Column({ name: 'last_name', length: 80 })
+  @Column({ name: 'last_name', length: 80, nullable: true })
   lastName: string;
 
-  // Derived for convenience — kept in sync with first + last name
-  @Column({ name: 'full_name', length: 160 })
+  @Column({ name: 'full_name', length: 160, nullable: true })
   fullName: string;
 
   @Column({ name: 'date_of_birth', type: 'date', nullable: true })
   dateOfBirth: string;
 
-  // Location provided at registration — required, updated by app on each session
-  @Column({ name: 'location_lat', type: 'numeric', precision: 9, scale: 6 })
+  @Column({ name: 'location_lat', type: 'numeric', precision: 9, scale: 6, nullable: true })
   locationLat: number;
 
-  @Column({ name: 'location_lng', type: 'numeric', precision: 9, scale: 6 })
+  @Column({ name: 'location_lng', type: 'numeric', precision: 9, scale: 6, nullable: true })
   locationLng: number;
+
+  @Column({ name: 'profile_completed', default: false })
+  profileCompleted: boolean;
 
   @Column({ name: 'avatar_url', type: 'text', nullable: true })
   avatarUrl: string;

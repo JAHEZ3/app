@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -21,6 +22,11 @@ export class ApplicationAnswerDto {
 }
 
 export class CompleteDeliveryProfileDto {
+  /** Set here for the first time — stored in auth-service via NATS 'user.password.set'. */
+  @IsString()
+  @MinLength(8)
+  password: string;
+
   @IsString()
   @IsNotEmpty()
   firstName: string;

@@ -32,6 +32,12 @@ export class Restaurant {
   @Column({ length: 20, nullable: true })
   phone: string;
 
+  @Column({ name: 'owner_name', length: 200, nullable: true })
+  ownerName: string;
+
+  @Column({ name: 'cuisine_type', length: 100, nullable: true })
+  cuisineType: string;
+
   @Column({ type: 'text', nullable: true })
   street: string;
 
