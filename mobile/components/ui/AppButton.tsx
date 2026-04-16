@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   TouchableOpacity,
   Text,
@@ -10,6 +10,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -38,12 +39,20 @@ export default function AppButton({
   ...rest
 }: AppButtonProps) {
   const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  // Reactively update opacity when disabled/loading changes
+  useEffect(() => {
+    opacity.value = withTiming(disabled || loading ? 0.4 : 1, { duration: 200 });
+  }, [disabled, loading, opacity]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    opacity: opacity.value,
   }));
 
   const handlePressIn = () => {
+    if (disabled || loading) return;
     scale.value = withSpring(0.96, { damping: 15 });
   };
   const handlePressOut = () => {
@@ -58,7 +67,6 @@ export default function AppButton({
       : variant === "outline"
         ? "border-2 border-primary bg-transparent"
         : "bg-transparent",
-    disabled || loading ? "opacity-60" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -72,7 +80,7 @@ export default function AppButton({
     <AnimatedTouchable
       style={[animatedStyle, style]}
       className={containerClass}
-      onPress={onPress}
+      onPress={disabled || loading ? undefined : onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled || loading}

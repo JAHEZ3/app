@@ -20,6 +20,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import OTPInput from "../components/OTPInput";
 import AppButton from "../../../components/ui/AppButton";
+import { useVerify } from "../hooks/useVerify";
+import { usePhoneNumber } from "@/store/usePhoneNumber";
+import { mapAuthError } from "../utils/mapAuthError";
 
 const RESEND_SECONDS = 120;
 const ease = Easing.bezier(0.22, 1, 0.36, 1);
@@ -149,6 +152,11 @@ export default function OTPScreen() {
   const [otpCode, setOtpCode] = useState("");
   const [canResend, setCanResend] = useState(false);
   const [resendKey, setResendKey] = useState(0);
+  const { mutateAsync: verify, isPending, isError, error } = useVerify();
+  const { phoneNumber } = usePhoneNumber();
+
+
+
 
   const headerOpacity = useSharedValue(0);
   const headerY = useSharedValue(-8);
@@ -162,15 +170,22 @@ export default function OTPScreen() {
     transform: [{ translateY: headerY.value }],
   }));
 
-  const handleVerify = useCallback(() => {
-    router.push("/complete-profile");
-  }, []);
+  const handleVerify = useCallback(async () => {
+    try {
+      await verify({ otp: otpCode, phone: phoneNumber });
+      router.push("/complete-profile");
+    } catch (error) {
+      console.log("Verify failed:", error);
+    }
+  }, [otpCode, phoneNumber, verify]);
 
   const handleResend = () => {
     setOtpCode("");
     setCanResend(false);
     setResendKey((k) => k + 1);
   };
+
+  
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }} edges={["top", "bottom"]}>
@@ -256,7 +271,7 @@ export default function OTPScreen() {
                 <Text
                   style={{ fontFamily: "Cairo_700Bold", fontSize: 15, color: "#1E1E1E" }}
                 >
-                  +970 5XX XXX XXX
+                  {phoneNumber}
                 </Text>
                 <Ionicons name="phone-portrait" size={14} color="#F55905" />
               </View>
@@ -270,6 +285,28 @@ export default function OTPScreen() {
               onComplete={handleVerify}
               onChangeValue={setOtpCode}
             />
+            {isError && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 5,
+                  marginTop: 10,
+                }}
+              >
+                <Ionicons name="alert-circle" size={14} color="#E53935" />
+                <Text
+                  style={{
+                    fontFamily: "Tajawal_400Regular",
+                    fontSize: 13,
+                    color: "#E53935",
+                  }}
+                >
+                  {mapAuthError(error)}
+                </Text>
+              </View>
+            )}
           </Row>
 
           {/* Timer / Resend */}
