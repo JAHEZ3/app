@@ -1,5 +1,7 @@
 import React from "react";
-import { View, Text, Dimensions, Image } from "react-native";
+import { View, Text, Dimensions } from "react-native";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useAnimatedStyle,
   interpolate,
@@ -8,233 +10,171 @@ import Animated, {
 import type { SharedValue } from "react-native-reanimated";
 import { OnboardingSlideData } from "../types";
 
-const { width, height } = Dimensions.get("window");
-
-const SEC_SIZE = width * 0.42;
-const PRI_SIZE = width * 0.52;
+const { width } = Dimensions.get("window");
 
 interface OnboardingSlideProps {
   item: OnboardingSlideData;
   animationValue: SharedValue<number>;
+  slideHeight: number;
 }
 
-/* ─── Image with detached shadow ─── */
-function CircularImage({
-  uri,
-  size,
-  shadowOpacity = 0.2,
-}: {
-  uri: string;
-  size: number;
-  shadowOpacity?: number;
-}) {
-  return (
-    /* Shadow lives here — no overflow:hidden */
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 14 },
-        shadowOpacity,
-        shadowRadius: 20,
-        elevation: 14,
-        backgroundColor: "#fff", // required for Android elevation
-      }}
-    >
-      {/* Clip lives here — separate from shadow */}
-      <View
-        style={{
-          width: "100%",
-          height: "100%",
-          borderRadius: size / 2,
-          overflow: "hidden",
-        }}
-      >
-        <Image
-          source={{ uri }}
-          style={{ width: "100%", height: "100%" }}
-          resizeMode="cover"
-        />
-      </View>
-    </View>
-  );
-}
+export default function OnboardingSlide({
+  item,
+  animationValue,
+  slideHeight,
+}: OnboardingSlideProps) {
 
-export default function OnboardingSlide({ item, animationValue }: OnboardingSlideProps) {
-  const containerStyle = useAnimatedStyle(() => {
-    const scale = interpolate(
+  /* ── parallax: image drifts opposite to scroll direction ── */
+  const imageStyle = useAnimatedStyle(() => {
+    const translateX = interpolate(
       animationValue.value,
       [-1, 0, 1],
-      [0.93, 1, 0.93],
+      [width * 0.14, 0, -width * 0.14],
       Extrapolation.CLAMP
     );
+    return { transform: [{ translateX }] };
+  });
+
+  /* ── content fades + rises when the slide is active ── */
+  const contentStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       animationValue.value,
-      [-0.7, 0, 0.7],
-      [0.65, 1, 0.65],
+      [-0.55, 0, 0.55],
+      [0, 1, 0],
       Extrapolation.CLAMP
     );
-    return { transform: [{ scale }], opacity };
-  });
-
-  const primaryStyle = useAnimatedStyle(() => {
-    const translateX = interpolate(
-      animationValue.value,
-      [-1, 0, 1],
-      [50, 0, -50],
-      Extrapolation.CLAMP
-    );
-    return { transform: [{ translateX }] };
-  });
-
-  const secondaryStyle = useAnimatedStyle(() => {
-    const translateX = interpolate(
-      animationValue.value,
-      [-1, 0, 1],
-      [-50, 0, 50],
-      Extrapolation.CLAMP
-    );
-    return { transform: [{ translateX }] };
-  });
-
-  const textStyle = useAnimatedStyle(() => {
     const translateY = interpolate(
       animationValue.value,
       [-1, 0, 1],
-      [20, 0, 20],
+      [28, 0, 28],
       Extrapolation.CLAMP
     );
+    return { opacity, transform: [{ translateY }] };
+  });
+
+  /* ── badge moves in from below ── */
+  const badgeStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       animationValue.value,
       [-0.4, 0, 0.4],
       [0, 1, 0],
       Extrapolation.CLAMP
     );
-    return { transform: [{ translateY }], opacity };
+    const translateY = interpolate(
+      animationValue.value,
+      [-1, 0, 1],
+      [16, 0, 16],
+      Extrapolation.CLAMP
+    );
+    return { opacity, transform: [{ translateY }] };
   });
 
   return (
-    <Animated.View style={[containerStyle, { width, flex: 1 }]}>
+    <View style={{ width, height: slideHeight, overflow: "hidden" }}>
 
-      {/* ── Images area ── */}
-      <View style={{ height: height * 0.44, position: "relative" }}>
+      {/* ── Full-bleed parallax image ── */}
+      <Animated.View
+        style={[
+          imageStyle,
+          { position: "absolute", width: width * 1.28, height: "100%", left: -width * 0.14 },
+        ]}
+      >
+        <Image
+          source={{ uri: item.images.primary }}
+          style={{ width: "100%", height: "100%" }}
+          contentFit="cover"
+          transition={400}
+        />
+      </Animated.View>
 
-        {/* Secondary (back-left) */}
-        <Animated.View
-          style={[
-            secondaryStyle,
-            {
-              position: "absolute",
-              left: width * 0.04,
-              bottom: 24,
-              zIndex: 1,
-            },
-          ]}
-        >
-          <CircularImage uri={item.images.secondary} size={SEC_SIZE} shadowOpacity={0.16} />
-        </Animated.View>
+      {/* ── Top vignette (header stays readable) ── */}
+      <LinearGradient
+        colors={["rgba(0,0,0,0.55)", "transparent"]}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: 160 }}
+      />
 
-        {/* Primary (front-right) */}
-        <Animated.View
-          style={[
-            primaryStyle,
-            {
-              position: "absolute",
-              right: width * 0.04,
-              top: 16,
-              zIndex: 2,
-            },
-          ]}
-        >
-          <CircularImage uri={item.images.primary} size={PRI_SIZE} shadowOpacity={0.22} />
-        </Animated.View>
+      {/* ── Bottom gradient (content zone) ── */}
+      <LinearGradient
+        colors={[
+          "transparent",
+          "rgba(4,4,4,0.18)",
+          "rgba(4,4,4,0.56)",
+          "rgba(4,4,4,0.82)",
+          "rgba(4,4,4,0.97)",
+        ]}
+        locations={[0, 0.38, 0.6, 0.78, 1]}
+        style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: slideHeight * 0.58 }}
+      />
 
-        {/* Badge */}
-        <Animated.View
-          style={[
-            primaryStyle,
-            {
-              position: "absolute",
-              bottom: 10,
-              right: width * 0.06,
-              zIndex: 3,
-            },
-          ]}
-        >
+      {/* ── Content ── */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          paddingHorizontal: 28,
+          paddingBottom: 170,
+        }}
+      >
+        {/* Badge pill */}
+        <Animated.View style={[badgeStyle, { marginBottom: 18 }]}>
           <View
             style={{
+              alignSelf: "flex-end",
               flexDirection: "row",
               alignItems: "center",
-              backgroundColor: "#fff",
+              backgroundColor: "rgba(245,89,5,0.18)",
+              borderWidth: 1,
+              borderColor: "rgba(245,89,5,0.45)",
               borderRadius: 999,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              gap: 8,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 10,
-              elevation: 6,
+              paddingHorizontal: 14,
+              paddingVertical: 7,
+              gap: 7,
             }}
           >
-            {/* Avatar dots */}
-            <View style={{ flexDirection: "row" }}>
-              {["#FF9F43", "#54A0FF", "#5F27CD"].map((color, idx) => (
-                <View
-                  key={idx}
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 11,
-                    backgroundColor: color,
-                    borderWidth: 1.5,
-                    borderColor: "#fff",
-                    marginLeft: idx > 0 ? -6 : 0,
-                  }}
-                />
-              ))}
-            </View>
+            <View
+              style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#F55905" }}
+            />
             <Text
               style={{
                 fontFamily: "Cairo_700Bold",
-                fontSize: 11,
-                color: "#1E1E1E",
+                fontSize: 12,
+                color: "rgba(255,255,255,0.9)",
               }}
             >
               {item.badge}
             </Text>
           </View>
         </Animated.View>
-      </View>
 
-      {/* ── Text ── */}
-      <Animated.View style={[textStyle, { paddingHorizontal: 28, paddingTop: 20 }]}>
-        <Text
-          style={{
-            fontFamily: "Cairo_700Bold",
-            fontSize: 30,
-            color: "#1E1E1E",
-            textAlign: "right",
-            lineHeight: 46,
-          }}
-        >
-          {item.title}
-        </Text>
-        <Text
-          style={{
-            fontFamily: "Tajawal_400Regular",
-            fontSize: 15,
-            color: "#767777",
-            textAlign: "right",
-            lineHeight: 24,
-            marginTop: 12,
-          }}
-        >
-          {item.description}
-        </Text>
-      </Animated.View>
-    </Animated.View>
+        {/* Title + description */}
+        <Animated.View style={contentStyle}>
+          <Text
+            style={{
+              fontFamily: "Cairo_700Bold",
+              fontSize: 34,
+              color: "#ffffff",
+              textAlign: "right",
+              lineHeight: 52,
+            }}
+          >
+            {item.title}
+          </Text>
+          <Text
+            style={{
+              fontFamily: "Tajawal_400Regular",
+              fontSize: 15,
+              color: "rgba(255,255,255,0.62)",
+              textAlign: "right",
+              lineHeight: 26,
+              marginTop: 10,
+            }}
+          >
+            {item.description}
+          </Text>
+        </Animated.View>
+      </View>
+    </View>
   );
 }
