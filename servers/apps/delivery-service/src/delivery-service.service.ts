@@ -10,7 +10,6 @@ import { Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
 import {
   AgentStatus,
-  AgentType,
   ApplicationAnswer,
   DeliveryAgent,
   VehicleType,
@@ -70,14 +69,18 @@ export class DeliveryServiceService {
       idPicture?: Express.Multer.File[];
     },
   ) {
-    if (!files.profilePicture?.[0])
+    if (!files?.profilePicture?.[0])
       throw new BadRequestException("Profile picture is required");
-    if (!files.idPicture?.[0])
+    if (!files?.idPicture?.[0])
       throw new BadRequestException("ID picture is required");
     if (!answers?.length || answers.length !== 2)
       throw new BadRequestException("Exactly 2 question answers are required");
 
     // Create agent record on first submission; re-applications reuse existing record
+    if (!profileData.termsAccepted) {
+      throw new BadRequestException("You must accept the terms and policy to proceed");
+    }
+
     let agent = await this.agentRepo.findOne({ where: { userId } });
     if (!agent) {
       agent = await this.agentRepo.save(
@@ -88,9 +91,14 @@ export class DeliveryServiceService {
           lastName: profileData.lastName,
           fullName: `${profileData.firstName} ${profileData.lastName}`,
           dateOfBirth: profileData.dateOfBirth ?? null,
-          agentType: profileData.agentType as AgentType,
-          vehicleType: (profileData.vehicleType as VehicleType) ?? null,
-          vehiclePlate: profileData.vehiclePlate ?? null,
+          idNumber: profileData.nationalIdNumber,
+          city: profileData.city,
+                    vehicleType: profileData.vehicleType as VehicleType,
+          vehicleLicenseNumber: profileData.vehicleLicenseNumber,
+          emergencyContactName: profileData.emergencyContactName,
+          emergencyContactPhone: profileData.emergencyContactPhone,
+          iban: profileData.iban,
+          termsAccepted: true,
           status: AgentStatus.PENDING_APPROVAL,
         }),
       );
@@ -102,9 +110,14 @@ export class DeliveryServiceService {
         lastName: profileData.lastName,
         fullName: `${profileData.firstName} ${profileData.lastName}`,
         ...(profileData.dateOfBirth && { dateOfBirth: profileData.dateOfBirth }),
-        agentType: profileData.agentType as AgentType,
-        ...(profileData.vehicleType && { vehicleType: profileData.vehicleType as VehicleType }),
-        ...(profileData.vehiclePlate && { vehiclePlate: profileData.vehiclePlate }),
+        idNumber: profileData.nationalIdNumber,
+        city: profileData.city,
+                vehicleType: profileData.vehicleType as VehicleType,
+        vehicleLicenseNumber: profileData.vehicleLicenseNumber,
+        emergencyContactName: profileData.emergencyContactName,
+        emergencyContactPhone: profileData.emergencyContactPhone,
+        iban: profileData.iban,
+        termsAccepted: true,
         status: AgentStatus.PENDING_APPROVAL,
       });
     }
@@ -114,7 +127,9 @@ export class DeliveryServiceService {
       where: { agentId: agent.id, status: DeliveryRequestStatus.PENDING },
     });
     if (pending) {
-      throw new BadRequestException("Application already submitted and is pending review");
+      throw new BadRequestException(
+        "Application already submitted and is pending review",
+      );
     }
 
     const applicationAnswers: ApplicationAnswer[] = answers.map((a) => ({
@@ -159,7 +174,9 @@ export class DeliveryServiceService {
     });
 
     const agentIds = [...new Set(requests.map((r) => r.agentId))];
-    const agents = agentIds.length ? await this.agentRepo.findByIds(agentIds) : [];
+    const agents = agentIds.length
+      ? await this.agentRepo.findByIds(agentIds)
+      : [];
     const agentMap = new Map(agents.map((a) => [a.id, a]));
 
     return {
@@ -170,7 +187,6 @@ export class DeliveryServiceService {
           agentId: r.agentId,
           fullName: agent?.fullName ?? null,
           phone: agent?.phone ?? null,
-          agentType: agent?.agentType ?? null,
           dateOfBirth: agent?.dateOfBirth ?? null,
           profilePictureUrl: r.profilePictureUrl,
           idPictureUrl: r.idPictureUrl,
@@ -198,12 +214,20 @@ export class DeliveryServiceService {
 
     const agent = await this.agentRepo.findOne({ where: { id: req.agentId } });
     if (agent) {
-      await this.agentRepo.update(agent.id, { status: AgentStatus.ACTIVE, isDelivery: true });
+      await this.agentRepo.update(agent.id, {
+        status: AgentStatus.ACTIVE,
+        isDelivery: true,
+      });
 
       // Notify auth-service: user status → ACTIVE
-      this.natsClient.emit("delivery.agent.approved", { userId: agent.userId, requestId });
+      this.natsClient.emit("delivery.agent.approved", {
+        userId: agent.userId,
+        requestId,
+      });
 
-      this.logger.log(`Application ${requestId} approved — agent ${agent.userId} activated`);
+      this.logger.log(
+        `Application ${requestId} approved — agent ${agent.userId} activated`,
+      );
     }
 
     return { data: { requestId }, message: "Agent approved and activated." };
@@ -211,7 +235,11 @@ export class DeliveryServiceService {
 
   // ─── Manager: reject application ─────────────────────────────────────────────
 
-  async rejectApplication(requestId: string, managerId: string, reason: string) {
+  async rejectApplication(
+    requestId: string,
+    managerId: string,
+    reason: string,
+  ) {
     const req = await this.requestRepo.findOne({ where: { id: requestId } });
     if (!req) throw new NotFoundException("Application not found");
     if (req.status !== DeliveryRequestStatus.PENDING)
@@ -226,7 +254,9 @@ export class DeliveryServiceService {
 
     const agent = await this.agentRepo.findOne({ where: { id: req.agentId } });
     if (agent) {
-      await this.agentRepo.update(agent.id, { status: AgentStatus.PENDING_APPROVAL });
+      await this.agentRepo.update(agent.id, {
+        status: AgentStatus.PENDING_APPROVAL,
+      });
 
       // Notify auth-service: profileCompleted reset so agent can resubmit
       this.natsClient.emit("delivery.agent.rejected", {
@@ -235,7 +265,9 @@ export class DeliveryServiceService {
         reason,
       });
 
-      this.logger.log(`Application ${requestId} rejected — agent ${agent.userId} can resubmit`);
+      this.logger.log(
+        `Application ${requestId} rejected — agent ${agent.userId} can resubmit`,
+      );
     }
 
     return { data: { requestId }, message: "Application rejected." };

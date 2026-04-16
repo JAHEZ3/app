@@ -7,11 +7,6 @@ export enum AgentStatus {
   OFFLINE = 'offline',
 }
 
-export enum AgentType {
-  FREELANCER = 'freelancer',
-  COMPANY_EMPLOYEE = 'company_employee',
-}
-
 export enum VehicleType {
   MOTORCYCLE = 'motorcycle',
   BICYCLE = 'bicycle',
@@ -32,9 +27,6 @@ export class DeliveryAgent {
   @Index()
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
-
-  @Column({ name: 'agent_type', type: 'enum', enum: AgentType, enumName: 'agent_type' })
-  agentType: AgentType;
 
   @Column({ name: 'full_name', length: 150 })
   fullName: string;
@@ -65,6 +57,24 @@ export class DeliveryAgent {
 
   @Column({ name: 'vehicle_plate', length: 20, nullable: true })
   vehiclePlate: string;
+
+  @Column({ name: 'vehicle_license_number', length: 50, nullable: true })
+  vehicleLicenseNumber: string;
+
+  @Column({ length: 100, nullable: true })
+  city: string;
+
+  @Column({ name: 'emergency_contact_name', length: 150, nullable: true })
+  emergencyContactName: string;
+
+  @Column({ name: 'emergency_contact_phone', length: 20, nullable: true })
+  emergencyContactPhone: string;
+
+  @Column({ length: 34, nullable: true })
+  iban: string;
+
+  @Column({ name: 'terms_accepted', default: false })
+  termsAccepted: boolean;
 
   @Index()
   @Column({ type: 'enum', enum: AgentStatus, enumName: 'agent_status', default: AgentStatus.PENDING_APPROVAL })

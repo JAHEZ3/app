@@ -86,10 +86,27 @@ export class RestaurantServiceService {
 
   // ─── HTTP: first-time profile completion ──────────────────────────────────────
 
-  async completeProfile(userId: string, dto: CompleteRestaurantProfileDto) {
+  async completeProfile(
+    userId: string,
+    dto: CompleteRestaurantProfileDto,
+    files: {
+      logo?: Express.Multer.File[];
+      ownerIdPicture?: Express.Multer.File[];
+    },
+  ) {
+    if (!dto.termsAccepted) {
+      throw new BadRequestException("You must accept the terms and policy to proceed");
+    }
+    if (!files?.logo?.[0]) {
+      throw new BadRequestException("Restaurant logo is required");
+    }
+    if (!files?.ownerIdPicture?.[0]) {
+      throw new BadRequestException("Owner ID picture is required");
+    }
+
     const restaurant = await this.getOwnedRestaurant(userId);
 
-    // Prevent re-submission if already approved or a pending request exists
+    // Prevent re-submission if a pending request already exists
     const existingRequest = await this.requestRepo.findOne({
       where: {
         restaurantId: restaurant.id,
@@ -100,20 +117,31 @@ export class RestaurantServiceService {
       throw new BadRequestException("Your application is already under review");
     }
 
-    // Update restaurant record with profile data
+    // Update restaurant record with all profile data
     await this.restaurantRepo.update(restaurant.id, {
       name: dto.restaurantName,
       ownerName: dto.ownerName,
+      ownerNationalIdNumber: dto.ownerNationalIdNumber,
+      commercialRegNumber: dto.commercialRegNumber,
+      phone: dto.restaurantPhone,
       description: dto.description,
-      logoUrl: dto.logoUrl,
+      logoUrl: files.logo[0].path,
       street: dto.street,
       city: dto.city,
       cuisineType: dto.cuisineType,
+      lat: dto.lat,
+      lng: dto.lng,
+      iban: dto.iban,
+      termsAccepted: true,
     });
 
-    // Create the approval request
+    // Create the approval request with uploaded document paths
     const request = await this.requestRepo.save(
-      this.requestRepo.create({ restaurantId: restaurant.id }),
+      this.requestRepo.create({
+        restaurantId: restaurant.id,
+        logoUrl: files.logo[0].path,
+        ownerIdPictureUrl: files.ownerIdPicture[0].path,
+      }),
     );
 
     // Forward hashed password to auth-service
