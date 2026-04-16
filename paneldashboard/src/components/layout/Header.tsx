@@ -1,0 +1,48 @@
+"use client";
+
+import { Bell, Search } from "lucide-react";
+import { useMe } from "@/hooks/useAuth";
+
+interface HeaderProps {
+  title: string;
+  subtitle?: string;
+}
+
+export function Header({ title, subtitle }: HeaderProps) {
+  const { data: me } = useMe();
+
+  return (
+    <header className="h-16 bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-30">
+      {/* Page title */}
+      <div>
+        <h1 className="text-lg font-black text-foreground leading-none">{title}</h1>
+        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-3">
+        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+          <Search className="w-4 h-4" />
+        </button>
+        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors relative">
+          <Bell className="w-4 h-4" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
+        </button>
+
+        {/* Avatar */}
+        <div className="flex items-center gap-2">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm"
+            style={{ background: "linear-gradient(135deg,#F55905,#FF8C38)" }}
+          >
+            {me?.name?.[0] ?? "A"}
+          </div>
+          <div className="hidden sm:block">
+            <p className="text-sm font-semibold text-foreground leading-none">{me?.name ?? "المدير"}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{me?.role === "super_admin" ? "مدير عام" : "مدير"}</p>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
