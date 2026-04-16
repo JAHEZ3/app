@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,8 +8,13 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import { diskStorage } from "multer";
+import { extname } from "path";
 import { EventPattern, Payload } from "@nestjs/microservices";
 import { RestaurantServiceService } from "./restaurant-service.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
@@ -30,6 +36,31 @@ import { CreateOptionGroupDto } from "./dto/create-option-group.dto";
 import { UpdateOptionGroupDto } from "./dto/update-option-group.dto";
 import { CreateOptionDto } from "./dto/create-option.dto";
 import { UpdateOptionDto } from "./dto/update-option.dto";
+
+const multerOptions = {
+  storage: diskStorage({
+    destination: "./uploads/restaurant",
+    filename: (
+      _req: any,
+      file: Express.Multer.File,
+      cb: (err: any, name: string) => void,
+    ) => {
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `${file.fieldname}-${unique}${extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (
+    _req: any,
+    file: Express.Multer.File,
+    cb: (err: any, accept: boolean) => void,
+  ) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new BadRequestException("Only image files are allowed"), false);
+    }
+    cb(null, true);
+  },
+};
 
 @Controller()
 export class RestaurantServiceController {
@@ -65,16 +96,35 @@ export class RestaurantServiceController {
   /**
    * POST /api/restaurant/profile
    * First-time profile completion (SUSPENDED → pending admin approval).
-   * Body: restaurantName, ownerName, password, [description, logoUrl, street, city, cuisineType]
+   * Multipart/form-data fields:
+   *   restaurantName, ownerName, ownerNationalIdNumber, commercialRegNumber,
+   *   restaurantPhone, password, lat, lng, deliveryRadiusKm, iban, termsAccepted  — text
+   *   description, street, city, cuisineType                                       — text (optional)
+   *   logo                                                                          — image file
+   *   ownerIdPicture                                                                — image file
    */
   @Post("profile")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "logo", maxCount: 1 },
+        { name: "ownerIdPicture", maxCount: 1 },
+      ],
+      multerOptions,
+    ),
+  )
   completeProfile(
     @CurrentUser("sub") userId: string,
     @Body() dto: CompleteRestaurantProfileDto,
+    @UploadedFiles()
+    files: {
+      logo?: Express.Multer.File[];
+      ownerIdPicture?: Express.Multer.File[];
+    },
   ) {
-    return this.service.completeProfile(userId, dto);
+    return this.service.completeProfile(userId, dto, files);
   }
 
   /** GET /api/restaurant/profile */

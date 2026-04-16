@@ -1,8 +1,9 @@
-import { IsNotEmpty, IsString, IsUUID, Length } from 'class-validator';
+import { IsNotEmpty, IsString, Length } from 'class-validator';
+import { IsMobilePhone } from 'class-validator';
 
 export class VerifyOtpDto {
-  @IsUUID()
-  userId: string;
+  @IsMobilePhone()
+  phone: string;
 
   @IsString()
   @IsNotEmpty()
@@ -11,6 +12,6 @@ export class VerifyOtpDto {
 }
 
 export class ResendOtpDto {
-  @IsUUID()
-  userId: string;
+  @IsMobilePhone()
+  phone: string;
 }

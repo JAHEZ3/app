@@ -35,8 +35,20 @@ export class Restaurant {
   @Column({ name: 'owner_name', length: 200, nullable: true })
   ownerName: string;
 
+  @Column({ name: 'owner_national_id_number', length: 50, nullable: true })
+  ownerNationalIdNumber: string;
+
+  @Column({ name: 'commercial_reg_number', length: 50, nullable: true })
+  commercialRegNumber: string;
+
   @Column({ name: 'cuisine_type', length: 100, nullable: true })
   cuisineType: string;
+
+  @Column({ length: 34, nullable: true })
+  iban: string;
+
+  @Column({ name: 'terms_accepted', default: false })
+  termsAccepted: boolean;
 
   @Column({ type: 'text', nullable: true })
   street: string;
@@ -51,14 +63,8 @@ export class Restaurant {
   @Column({ type: 'numeric', precision: 9, scale: 6, nullable: true })
   lng: number;
 
-  @Column({ name: 'delivery_radius_km', type: 'numeric', precision: 5, scale: 2, nullable: true })
-  deliveryRadiusKm: number;
-
   @Column({ name: 'min_order_amount', type: 'numeric', precision: 8, scale: 2, default: 0.00 })
   minOrderAmount: number;
-
-  @Column({ name: 'avg_delivery_minutes', nullable: true })
-  avgDeliveryMinutes: number;
 
   @Index()
   @Column({ type: 'numeric', precision: 3, scale: 2, default: 0.00 })

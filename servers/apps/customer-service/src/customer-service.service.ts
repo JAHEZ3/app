@@ -10,7 +10,6 @@ import { Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
 import { Customer } from "./entities/customer.entity";
 import { CompleteCustomerProfileDto } from "./dto/complete-profile.dto";
-import { console } from "inspector";
 
 export interface CustomerCreatedPayload {
   userId: string;
@@ -55,8 +54,6 @@ export class CustomerServiceService {
   // On success: emits 'customer.profile.completed' → auth-service sets ACTIVE.
 
   async completeProfile(userId: string, dto: CompleteCustomerProfileDto) {
-    console.log("Completing profile for userId:", userId, "with data:", dto);
-
     let customer = await this.customerRepo.findOne({ where: { userId } });
     if (!customer) {
       // Stub may not exist if NATS event was missed — create it now
@@ -66,14 +63,13 @@ export class CustomerServiceService {
     }
 
     if (customer.profileCompleted) {
-      throw new BadRequestException(
-        "Profile already completed. Use PATCH /profile to update it.",
-      );
+      throw new BadRequestException("Profile already completed.");
     }
 
     await this.customerRepo.update(customer.id, {
       firstName: dto.firstName,
       lastName: dto.lastName,
+      dateOfBirth: dto.dateOfBirth,
       fullName: `${dto.firstName} ${dto.lastName}`,
       ...(dto.dateOfBirth && { dateOfBirth: dto.dateOfBirth }),
       locationLat: dto.locationLat,

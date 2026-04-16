@@ -67,7 +67,7 @@ export class DeliveryServiceController {
    * POST /api/delivery/profile/complete
    * Auth: Bearer token (delivery role)
    * Multipart/form-data fields:
-   *   firstName, lastName, dateOfBirth, agentType  — text
+   *   firstName, lastName, dateOfBirth  — text
    *   vehicleType, vehiclePlate                    — text (optional)
    *   answers                                      — JSON string: [{ question, answer }, ...]
    *   profilePicture                               — image file

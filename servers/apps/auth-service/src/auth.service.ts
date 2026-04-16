@@ -81,6 +81,9 @@ export class AuthService {
           "Phone is already registered under a different account type.",
         );
       }
+      if (existing.status === UserStatus.BANNED) {
+        throw new UnauthorizedException("Account is banned. Contact support.");
+      }
       if (existing.status === UserStatus.PENDING) {
         await this.otpService.saveOtp(
           existing.id,
@@ -88,12 +91,12 @@ export class AuthService {
           existing.phone,
         );
         return {
-          data: { userId: existing.id },
+          data: { phone: existing.phone },
           message: "Account pending verification. New OTP sent.",
         };
       }
       throw new ConflictException(
-        "Phone already registered. Please use the login endpoint.",
+        "Phone number already registered. Please use the login endpoint.",
       );
     }
 
@@ -130,6 +133,9 @@ export class AuthService {
           "Phone is already registered under a different role.",
         );
       }
+      if (existing.status === UserStatus.BANNED) {
+        throw new UnauthorizedException("Account is banned. Contact support.");
+      }
       if (existing.status === UserStatus.PENDING) {
         await this.otpService.saveOtp(
           existing.id,
@@ -137,12 +143,12 @@ export class AuthService {
           existing.phone,
         );
         return {
-          data: { userId: existing.id },
+          data: { phone: existing.phone },
           message: "Account pending verification. New OTP sent.",
         };
       }
       throw new ConflictException(
-        "Phone already registered. Please use the login endpoint.",
+        "Phone number already registered. Please use the login endpoint.",
       );
     }
 
@@ -172,6 +178,9 @@ export class AuthService {
           "Phone is already registered under a different role.",
         );
       }
+      if (existing.status === UserStatus.BANNED) {
+        throw new UnauthorizedException("Account is banned. Contact support.");
+      }
       if (existing.status === UserStatus.PENDING) {
         await this.otpService.saveOtp(
           existing.id,
@@ -179,12 +188,12 @@ export class AuthService {
           existing.phone,
         );
         return {
-          data: { userId: existing.id },
+          data: { phone: existing.phone },
           message: "Account pending verification. New OTP sent.",
         };
       }
       throw new ConflictException(
-        "Phone already registered. Please use the login endpoint.",
+        "Phone number already registered. Please use the login endpoint.",
       );
     }
 
@@ -208,7 +217,7 @@ export class AuthService {
   // client can call the downstream service profile-completion endpoint.
 
   async verifyRegistrationOtp(dto: VerifyOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("User not found.");
     if (user.role === UserRole.MANAGER) {
       throw new BadRequestException(
@@ -244,7 +253,7 @@ export class AuthService {
   // ─── Resend OTP (registration phase only) ────────────────────────────────────
 
   async resendOtp(dto: ResendOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("User not found.");
     if (user.role === UserRole.MANAGER)
       throw new BadRequestException("OTP does not apply to managers.");
@@ -287,34 +296,48 @@ export class AuthService {
         "Phone not verified. Please verify your OTP first.",
       );
     }
-    if (user.status === UserStatus.SUSPENDED) {
-      throw new BadRequestException(
-        user.profileCompleted
-          ? "Account suspended. Contact support."
-          : "Please complete your profile at /api/customer/profile to activate your account.",
-      );
+    if (user.status === UserStatus.SUSPENDED && user.profileCompleted) {
+      throw new UnauthorizedException("Account suspended. Contact support.");
     }
 
+    // ACTIVE → normal login OTP
+    // SUSPENDED + !profileCompleted → also send OTP; verifyLoginOtp will issue tokens
+    //   so the customer can immediately call POST /api/customer/profile
     await this.otpService.saveOtp(user.id, OtpPurpose.LOGIN, user.phone);
     return {
-      data: { userId: user.id },
-      message: "Login OTP sent to your phone.",
+      data: { phone: user.phone },
+      message:
+        user.status === UserStatus.SUSPENDED
+          ? "OTP sent. Verify to receive your access token and complete your profile."
+          : "Login OTP sent to your phone.",
     };
   }
 
   async verifyLoginOtp(dto: VerifyOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+    const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("User not found.");
     if (user.role !== UserRole.CUSTOMER)
       throw new BadRequestException("OTP login is for customers only.");
-    if (user.status !== UserStatus.ACTIVE)
-      throw new UnauthorizedException("Account is not active.");
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("Account is banned. Contact support.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("Phone not verified.");
+    // Allow ACTIVE and SUSPENDED+!profileCompleted — both get tokens.
+    // SUSPENDED+profileCompleted means manually suspended by admin.
+    if (user.status === UserStatus.SUSPENDED && user.profileCompleted)
+      throw new UnauthorizedException("Account suspended. Contact support.");
 
     await this.otpService.verifyOtp(user.id, OtpPurpose.LOGIN, dto.otp);
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
     const tokens = await this.issuePair(user);
-    return { data: tokens, message: "Login successful." };
+
+    const message =
+      user.status === UserStatus.SUSPENDED
+        ? "OTP verified. Please complete your profile at /api/customer/profile."
+        : "Login successful.";
+
+    return { data: tokens, message };
   }
 
   // ─── Delivery Login (phone + password) ───────────────────────────────────────
@@ -323,27 +346,38 @@ export class AuthService {
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.DELIVERY },
     });
-    if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials.");
-
-    const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+    if (!user) throw new UnauthorizedException("Invalid credentials.");
 
     if (user.status === UserStatus.BANNED)
       throw new UnauthorizedException("Account is banned. Contact support.");
     if (user.status === UserStatus.PENDING)
       throw new BadRequestException("Please verify your phone first.");
 
+    // No password means profile was never completed (password is set during completeProfile).
+    // Guide them to re-register to get a fresh access token.
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        "No password set yet. Call POST /api/auth/register/delivery with your phone to receive an access token and complete your profile.",
+      );
+    }
+
+    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+
     if (user.status === UserStatus.SUSPENDED) {
-      if (!user.profileCompleted) {
-        throw new BadRequestException(
-          "Please complete your profile at /api/delivery/profile/complete and submit your application.",
-        );
-      }
-      // Profile submitted — pending admin approval. Allow login with a notice.
       await this.userRepo.update(user.id, { lastLoginAt: new Date() });
       user.lastLoginAt = new Date();
       const tokens = await this.issuePair(user);
+      if (!user.profileCompleted) {
+        // Password was set via forgot-password but profile not yet submitted.
+        // Return tokens so they can reach the profile-completion endpoint.
+        return {
+          data: tokens,
+          message:
+            "Login successful. Please complete your profile at /api/delivery/profile/complete.",
+        };
+      }
+      // Profile submitted — awaiting admin approval.
       return {
         data: tokens,
         message: "Login successful. Your account is pending admin approval.",
@@ -362,26 +396,34 @@ export class AuthService {
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.RESTAURANT_OWNER },
     });
-    if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials.");
-
-    const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+    if (!user) throw new UnauthorizedException("Invalid credentials.");
 
     if (user.status === UserStatus.BANNED)
       throw new UnauthorizedException("Account is banned. Contact support.");
     if (user.status === UserStatus.PENDING)
       throw new BadRequestException("Please verify your phone first.");
 
+    // No password means profile was never completed.
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        "No password set yet. Call POST /api/auth/register/restaurant with your phone to receive an access token and complete your profile.",
+      );
+    }
+
+    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+
     if (user.status === UserStatus.SUSPENDED) {
-      if (!user.profileCompleted) {
-        throw new BadRequestException(
-          "Please complete your restaurant profile at /api/restaurant/profile.",
-        );
-      }
       await this.userRepo.update(user.id, { lastLoginAt: new Date() });
       user.lastLoginAt = new Date();
       const tokens = await this.issuePair(user);
+      if (!user.profileCompleted) {
+        return {
+          data: tokens,
+          message:
+            "Login successful. Please complete your profile at /api/restaurant/profile.",
+        };
+      }
       return {
         data: tokens,
         message: "Login successful. Your account is pending admin approval.",
