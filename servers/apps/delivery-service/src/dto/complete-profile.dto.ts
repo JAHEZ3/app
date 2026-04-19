@@ -7,88 +7,76 @@ import {
   IsNotEmpty,
   IsString,
   MinLength,
-  ValidateNested,
+  ValidateIf,
 } from "class-validator";
-import { Transform, Type } from "class-transformer";
+import { Transform } from "class-transformer";
 import { VehicleType } from "../entities/delivery-agent.entity";
 
 export class ApplicationAnswerDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'السؤال يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'السؤال مطلوب.' })
   question: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'الإجابة يجب أن تكون نصاً.' })
+  @IsNotEmpty({ message: 'الإجابة مطلوبة.' })
   answer: string;
 }
 
 export class CompleteDeliveryProfileDto {
   /** Set here for the first time — stored in auth-service via NATS 'user.password.set'. */
-  @IsString()
-  @MinLength(8)
+  @IsString({ message: 'كلمة المرور يجب أن تكون نصاً.' })
+  @MinLength(8, { message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.' })
   password: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'الاسم الأول يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'الاسم الأول مطلوب.' })
   firstName: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'الاسم الأخير يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'الاسم الأخير مطلوب.' })
   lastName: string;
 
-  @IsDateString()
+  @IsDateString({}, { message: 'تاريخ الميلاد غير صالح. يجب إدخاله بتنسيق ISO 8601.' })
   dateOfBirth: string;
 
-  /** National ID number (text) — manager can search/log without manually reading the photo. */
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'رقم الهوية يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'رقم الهوية مطلوب.' })
   nationalIdNumber: string;
 
-  /** City / zone the agent will operate in. */
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'المدينة يجب أن تكون نصاً.' })
+  @IsNotEmpty({ message: 'المدينة مطلوبة.' })
   city: string;
 
-  @IsEnum(VehicleType)
+  @IsEnum(VehicleType, {
+    message: 'نوع المركبة غير مدعوم. الأنواع المتاحة: motorcycle، bicycle، car، on_foot.',
+  })
   vehicleType: VehicleType;
 
-  /** Vehicle registration / licence plate number. */
-  @IsString()
-  @IsNotEmpty()
-  vehicleLicenseNumber: string;
+  /** Required when vehicleType is 'car', optional otherwise. */
+  @ValidateIf((o) => o.vehicleType === VehicleType.CAR)
+  @IsString({ message: 'رقم رخصة القيادة يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'رقم رخصة القيادة مطلوب للمركبات.' })
+  vehicleLicenseNumber?: string;
 
-  /** Emergency contact full name. */
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'اسم جهة الطوارئ يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'اسم جهة الطوارئ مطلوب.' })
   emergencyContactName: string;
 
-  /** Emergency contact phone number. */
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم هاتف الطوارئ غير صالح.' })
   emergencyContactPhone: string;
 
-  /** IBAN for payment — up to 34 characters (SA format is 24). */
-  @IsString()
-  @IsNotEmpty()
-  iban: string;
+  @IsString({ message: 'معلومات الدفع مطلوبة.' })
+  @IsNotEmpty({ message: 'معلومات الدفع مطلوبة.' })
+  paymentInfo: string;
 
-  /**
-   * Must be sent as true — agent confirms they accept the terms and policy.
-   * In multipart/form-data this arrives as the string "true"; @Transform converts it.
-   */
   @Transform(({ value }) => value === true || value === "true")
-  @IsBoolean()
+  @IsBoolean({ message: 'يجب قبول الشروط والأحكام.' })
   termsAccepted: boolean;
 
-  /** JSON string — parsed and validated separately in the controller. */
-  @IsString()
-  @IsNotEmpty()
-  answers: string;
-}
-
-// Parsed from the raw JSON "answers" field in multipart body
-export class ParsedAnswersDto {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ApplicationAnswerDto)
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) return value;
+    try { return JSON.parse(value); } catch { return null; }
+  })
+  @IsArray({ message: 'يجب أن تكون الإجابات مصفوفة.' })
   answers: ApplicationAnswerDto[];
 }

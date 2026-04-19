@@ -2,6 +2,6 @@ import { IsOptional, IsString } from 'class-validator';
 
 export class RejectApplicationDto {
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'سبب الرفض يجب أن يكون نصاً.' })
   reason?: string;
 }

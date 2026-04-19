@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import { PaymentInfo } from '../common/payment-info';
 
 export enum AgentStatus {
   PENDING_APPROVAL = 'pending_approval',
@@ -70,8 +71,8 @@ export class DeliveryAgent {
   @Column({ name: 'emergency_contact_phone', length: 20, nullable: true })
   emergencyContactPhone: string;
 
-  @Column({ length: 34, nullable: true })
-  iban: string;
+  @Column({ name: 'payment_info', type: 'jsonb', nullable: true })
+  paymentInfo: PaymentInfo;
 
   @Column({ name: 'terms_accepted', default: false })
   termsAccepted: boolean;

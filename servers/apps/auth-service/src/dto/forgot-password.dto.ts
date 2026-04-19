@@ -1,15 +1,11 @@
-import { IsEmail, IsMobilePhone, IsOptional, ValidateIf } from 'class-validator';
+import { IsEmail, IsMobilePhone, ValidateIf } from 'class-validator';
 
-/**
- * Forgot password — supply either phone (delivery/restaurant)
- * or email (manager). At least one must be present.
- */
 export class ForgotPasswordDto {
   @ValidateIf((o) => !o.email)
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone?: string;
 
   @ValidateIf((o) => !o.phone)
-  @IsEmail()
+  @IsEmail({}, { message: 'البريد الإلكتروني غير صالح.' })
   email?: string;
 }

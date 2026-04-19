@@ -13,8 +13,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileFieldsInterceptor } from "@nestjs/platform-express";
-import { diskStorage } from "multer";
-import { extname } from "path";
+import { memoryStorage } from "multer";
 import { EventPattern, Payload } from "@nestjs/microservices";
 import { RestaurantServiceService } from "./restaurant-service.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
@@ -38,17 +37,7 @@ import { CreateOptionDto } from "./dto/create-option.dto";
 import { UpdateOptionDto } from "./dto/update-option.dto";
 
 const multerOptions = {
-  storage: diskStorage({
-    destination: "./uploads/restaurant",
-    filename: (
-      _req: any,
-      file: Express.Multer.File,
-      cb: (err: any, name: string) => void,
-    ) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `${file.fieldname}-${unique}${extname(file.originalname)}`);
-    },
-  }),
+  storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (
     _req: any,
@@ -83,12 +72,6 @@ export class RestaurantServiceController {
     return this.service.listPublicRestaurants(city);
   }
 
-  /** GET /api/restaurant/:id — full menu tree */
-  @Get(":id")
-  getRestaurant(@Param("id") id: string) {
-    return this.service.getPublicRestaurantWithMenu(id);
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
   // Restaurant owner — profile & settings
   // ═══════════════════════════════════════════════════════════════════════════
@@ -117,6 +100,7 @@ export class RestaurantServiceController {
   )
   completeProfile(
     @CurrentUser("sub") userId: string,
+    @CurrentUser("phone") phone: string,
     @Body() dto: CompleteRestaurantProfileDto,
     @UploadedFiles()
     files: {
@@ -124,7 +108,7 @@ export class RestaurantServiceController {
       ownerIdPicture?: Express.Multer.File[];
     },
   ) {
-    return this.service.completeProfile(userId, dto, files);
+    return this.service.completeProfile(userId, phone, dto, files);
   }
 
   /** GET /api/restaurant/profile */
@@ -146,8 +130,8 @@ export class RestaurantServiceController {
     return this.service.updateProfile(userId, dto);
   }
 
-  /** POST /api/restaurant/settings */
-  @Post("settings")
+  /** PATCH /api/restaurant/settings */
+  @Patch("settings")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
   updateSettings(
@@ -437,5 +421,13 @@ export class RestaurantServiceController {
     @Param("optionId") optionId: string,
   ) {
     return this.service.deleteOption(userId, optionId);
+  }
+
+  // ─── Must be last: wildcard catches any GET /:id not matched above ────────────
+
+  /** GET /api/restaurant/:id — public full menu tree */
+  @Get(":id")
+  getRestaurant(@Param("id") id: string) {
+    return this.service.getPublicRestaurantWithMenu(id);
   }
 }

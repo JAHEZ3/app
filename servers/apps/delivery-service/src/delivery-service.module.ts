@@ -5,6 +5,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { ClientsModule, Transport } from "@nestjs/microservices";
 import { DeliveryServiceController } from "./delivery-service.controller";
 import { DeliveryServiceService } from "./delivery-service.service";
+import { S3Service } from "./s3.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RolesGuard } from "./guards/roles.guard";
 import { DeliveryAgent } from "./entities/delivery-agent.entity";
@@ -56,6 +57,6 @@ import { DeliveryLocationLog } from "./entities/delivery-location-log.entity";
     ]),
   ],
   controllers: [DeliveryServiceController],
-  providers: [DeliveryServiceService, JwtAuthGuard, RolesGuard],
+  providers: [DeliveryServiceService, JwtAuthGuard, RolesGuard, S3Service],
 })
 export class DeliveryServiceModule {}
