@@ -21,6 +21,9 @@ import { router } from "expo-router";
 import PhoneInput from "../components/PhoneInput";
 import AppButton from "../../../components/ui/AppButton";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRegister } from "../hooks/useRegister";
+import { usePhoneNumber } from "@/store/usePhoneNumber";
+import { mapAuthError } from "../utils/mapAuthError";
 
 const { height } = Dimensions.get("window");
 
@@ -49,16 +52,29 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState("");
+  const { mutateAsync: register, isPending, isError, error } = useRegister();
+  const isPhoneValid = phone.replace(/^\+\d{3}/, "").length === 9;
+  const { setPhoneNumber, phoneNumber } = usePhoneNumber();
+
+  async function handleThePhoneRegister() {
+    try {
+      await register(phone);
+      setPhoneNumber(phone);
+      router.push("/auth/otp");
+    } catch {
+      // error displayed via isError state below
+    }
+  }
 
   const heroOpacity = useSharedValue(0);
   const cardY = useSharedValue(40);
   const cardOpacity = useSharedValue(0);
 
+
   useEffect(() => {
     heroOpacity.value = withTiming(1, { duration: 500, easing: ease });
     cardOpacity.value = withDelay(180, withTiming(1, { duration: 380, easing: ease }));
     cardY.value = withDelay(180, withTiming(0, { duration: 380, easing: ease }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const heroStyle = useAnimatedStyle(() => ({ opacity: heroOpacity.value }));
@@ -73,11 +89,11 @@ export default function LoginScreen() {
 
       {/* ── Hero ── */}
       <Animated.View style={[heroStyle, { height: height * 0.5, overflow: "hidden" }]}>
-          <Image
-        source={{ uri: HERO }}
-        style={{ width: "100%", height: "100%" }}
-        contentFit="cover"
-        transition={500}
+        <Image
+          source={{ uri: HERO }}
+          style={{ width: "100%", height: "100%" }}
+          contentFit="cover"
+          transition={500}
         />
         {/* Overlay */}
         <View
@@ -89,26 +105,26 @@ export default function LoginScreen() {
           }}
         />
         {/* Bottom fade */}
-{/* Smooth multi-stop bottom shadow */}
-<LinearGradient
-  colors={[
-    "transparent",
-    "rgba(0,0,0,0.04)",
-    "rgba(0,0,0,0.12)",
-    "rgba(0,0,0,0.26)",
-    "rgba(0,0,0,0.44)",
-    "rgba(0,0,0,0.62)",
-    "rgba(0,0,0,0.78)",
-  ]}
-  locations={[0, 0.15, 0.32, 0.50, 0.68, 0.84, 1]}
-  style={{
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 220,
-  }}
-/>
+        {/* Smooth multi-stop bottom shadow */}
+        <LinearGradient
+          colors={[
+            "transparent",
+            "rgba(0,0,0,0.04)",
+            "rgba(0,0,0,0.12)",
+            "rgba(0,0,0,0.26)",
+            "rgba(0,0,0,0.44)",
+            "rgba(0,0,0,0.62)",
+            "rgba(0,0,0,0.78)",
+          ]}
+          locations={[0, 0.15, 0.32, 0.50, 0.68, 0.84, 1]}
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 220,
+          }}
+        />
 
         {/* Logo */}
         <View
@@ -119,38 +135,63 @@ export default function LoginScreen() {
             justifyContent: "center",
           }}
         >
+          {/* Circle mark */}
           <View
             style={{
-              width: 62,
-              height: 62,
-              borderRadius: 18,
+              width: 72,
+              height: 72,
+              borderRadius: 36,
               backgroundColor: "#F55905",
               alignItems: "center",
               justifyContent: "center",
               shadowColor: "#F55905",
-              shadowOffset: { width: 0, height: 8 },
+              shadowOffset: { width: 0, height: 14 },
               shadowOpacity: 0.5,
-              shadowRadius: 16,
-              elevation: 12,
-              marginBottom: 10,
+              shadowRadius: 22,
+              elevation: 14,
+              marginBottom: 14,
             }}
           >
-            <Ionicons name="rocket" size={28} color="#fff" />
+            <Text
+              style={{
+                fontFamily: "Cairo_700Bold",
+                fontSize: 36,
+                color: "#fff",
+                lineHeight: 42,
+                marginTop: 4,
+              }}
+            >
+              ج
+            </Text>
           </View>
-          <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 42, color: "#fff" }}>
-            جهز
+
+          {/* App name */}
+          <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 48, color: "#fff", lineHeight: 54 }}>
+            جاهز
           </Text>
+
+          {/* Orange accent dot */}
+          <View
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 3.5,
+              backgroundColor: "#F55905",
+              marginTop: 2,
+              marginBottom: 10,
+            }}
+          />
+
           <Text
             style={{
               fontFamily: "Tajawal_400Regular",
-              fontSize: 11,
-              color: "rgba(255,255,255,0.7)",
-              letterSpacing: 3,
+              fontSize: 10,
+              color: "rgba(255,255,255,0.55)",
+              letterSpacing: 4,
               textTransform: "uppercase",
-              marginTop: 2,
             }}
           >
-            CULINARY DELIVERY
+            CULINARY · DELIVERY
           </Text>
         </View>
       </Animated.View>
@@ -257,6 +298,29 @@ export default function LoginScreen() {
             {/* Input */}
             <Row delay={420}>
               <PhoneInput value={phone} onChangeText={setPhone} />
+              {isError && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    gap: 4,
+                    marginTop: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: "Tajawal_400Regular",
+                      fontSize: 12,
+                      color: "#E53935",
+                      textAlign: "right",
+                    }}
+                  >
+                    {mapAuthError(error as Error)}
+                  </Text>
+                  <Ionicons name="alert-circle" size={14} color="#E53935" />
+                </View>
+              )}
             </Row>
 
             {/* CTA */}
@@ -264,11 +328,12 @@ export default function LoginScreen() {
               <View style={{ marginTop: 18 }}>
                 <AppButton
                   label="إرسال رمز التحقق"
-                  onPress={() => router.push("/otp")}
                   icon={
                     <Ionicons name="arrow-back-circle-outline" size={22} color="#fff" />
                   }
                   iconPosition="left"
+                  onPress={handleThePhoneRegister}
+                  disabled={isPending || !isPhoneValid}
                 />
               </View>
             </Row>

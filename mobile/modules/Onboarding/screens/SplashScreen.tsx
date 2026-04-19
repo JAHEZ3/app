@@ -1,173 +1,323 @@
 import React, { useEffect } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Dimensions, StatusBar } from "react-native";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSpring,
   withDelay,
-  Easing,
-  withSequence,
   withRepeat,
+  withSequence,
+  Easing,
 } from "react-native-reanimated";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import SplashLoadingDots from "../components/SplashLoadingDots";
 
+const { width, height } = Dimensions.get("window");
+
+const HERO =
+  "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=900&h=1600&fit=crop&crop=center";
+
+const ease = Easing.out(Easing.cubic);
+const gentleLoop = Easing.inOut(Easing.sin);
+
+/* ─── Animated progress bar ─── */
+function ProgressBar() {
+  const w = useSharedValue(0);
+  useEffect(() => {
+    w.value = withDelay(800, withTiming(1, { duration: 2000, easing: Easing.out(Easing.quad) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const style = useAnimatedStyle(() => ({ width: `${w.value * 100}%` as any }));
+  return (
+    <View
+      style={{
+        width: 120,
+        height: 2,
+        backgroundColor: "rgba(255,255,255,0.12)",
+        borderRadius: 1,
+        overflow: "hidden",
+      }}
+    >
+      <Animated.View
+        style={[style, { height: "100%", backgroundColor: "#F55905", borderRadius: 1 }]}
+      />
+    </View>
+  );
+}
+
+/* ─── Geometric logo mark (no icon libs) ─── */
+function LogoMark({ style }: { style?: any }) {
+  return (
+    <Animated.View style={style}>
+      {/* Outer glow ring */}
+      <View
+        style={{
+          position: "absolute",
+          width: 106,
+          height: 106,
+          borderRadius: 53,
+          borderWidth: 1,
+          borderColor: "rgba(245,89,5,0.35)",
+          top: -7,
+          left: -7,
+        }}
+      />
+      {/* Main circle */}
+      <View
+        style={{
+          width: 92,
+          height: 92,
+          borderRadius: 46,
+          backgroundColor: "#F55905",
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#F55905",
+          shadowOffset: { width: 0, height: 16 },
+          shadowOpacity: 0.55,
+          shadowRadius: 28,
+          elevation: 20,
+        }}
+      >
+        {/* Arabic letter ج styled as logo mark */}
+        <Text
+          style={{
+            fontFamily: "Cairo_700Bold",
+            fontSize: 46,
+            color: "#fff",
+            lineHeight: 52,
+            marginTop: 4,
+          }}
+        >
+          ج
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function SplashScreen() {
-  const iconScale = useSharedValue(0);
-  const iconRotate = useSharedValue(-20);
-  const titleOpacity = useSharedValue(0);
-  const titleTranslateY = useSharedValue(30);
-  const subtitleOpacity = useSharedValue(0);
+  /* ── shared values ── */
+  const imgOpacity    = useSharedValue(0);
+  const markScale     = useSharedValue(0.6);
+  const markOpacity   = useSharedValue(0);
+  const markFloat     = useSharedValue(0);
+  const lineW         = useSharedValue(0);
+  const titleOpacity  = useSharedValue(0);
+  const titleY        = useSharedValue(24);
+  const tagOpacity    = useSharedValue(0);
   const bottomOpacity = useSharedValue(0);
-  const iconFloat = useSharedValue(0);
+  const dotScale      = useSharedValue(1);
 
   useEffect(() => {
-    iconScale.value = withDelay(200, withSpring(1, { damping: 12, stiffness: 100 }));
-    iconRotate.value = withDelay(200, withSpring(0, { damping: 10, stiffness: 80 }));
+    // 1. Image fades in
+    imgOpacity.value = withTiming(1, { duration: 600, easing: ease });
 
-    titleOpacity.value = withDelay(600, withTiming(1, { duration: 600 }));
-    titleTranslateY.value = withDelay(600, withSpring(0, { damping: 15, stiffness: 120 }));
+    // 2. Logo mark pops in
+    markOpacity.value = withDelay(300, withTiming(1, { duration: 400, easing: ease }));
+    markScale.value   = withDelay(300, withSpring(1, { damping: 11, stiffness: 90 }));
 
-    subtitleOpacity.value = withDelay(900, withTiming(1, { duration: 500 }));
-    bottomOpacity.value = withDelay(1100, withTiming(1, { duration: 500 }));
+    // 3. Separator line draws
+    lineW.value = withDelay(600, withTiming(1, { duration: 420, easing: ease }));
 
-    iconFloat.value = withDelay(
-      800,
+    // 4. Title slides up
+    titleOpacity.value = withDelay(720, withTiming(1, { duration: 480, easing: ease }));
+    titleY.value       = withDelay(720, withSpring(0, { damping: 14, stiffness: 110 }));
+
+    // 5. Tagline fades
+    tagOpacity.value = withDelay(1000, withTiming(1, { duration: 400, easing: ease }));
+
+    // 6. Bottom fades
+    bottomOpacity.value = withDelay(1100, withTiming(1, { duration: 400, easing: ease }));
+
+    // 7. Logo floats
+    markFloat.value = withDelay(
+      900,
       withRepeat(
         withSequence(
-          withTiming(-10, { duration: 1600, easing: Easing.inOut(Easing.sin) }),
-          withTiming(0, { duration: 1600, easing: Easing.inOut(Easing.sin) })
+          withTiming(-8, { duration: 2000, easing: gentleLoop }),
+          withTiming(0,  { duration: 2000, easing: gentleLoop })
         ),
         -1
       )
     );
 
-    const timer = setTimeout(() => {
-      router.replace("/onboarding");
-    }, 3000);
+    // 8. Dot pulse
+    dotScale.value = withDelay(
+      1200,
+      withRepeat(
+        withSequence(
+          withTiming(1.15, { duration: 900, easing: gentleLoop }),
+          withTiming(1,    { duration: 900, easing: gentleLoop })
+        ),
+        -1
+      )
+    );
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => router.replace("/onboarding"), 3200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const iconStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: iconScale.value },
-      { rotate: `${iconRotate.value}deg` },
-      { translateY: iconFloat.value },
-    ],
+  /* ── animated styles ── */
+  const imgStyle     = useAnimatedStyle(() => ({ opacity: imgOpacity.value }));
+  const markStyle    = useAnimatedStyle(() => ({
+    opacity: markOpacity.value,
+    transform: [{ scale: markScale.value }, { translateY: markFloat.value }],
   }));
-
-  const titleStyle = useAnimatedStyle(() => ({
+  const lineStyle    = useAnimatedStyle(() => ({ width: `${lineW.value * 64}%` as any }));
+  const titleStyle   = useAnimatedStyle(() => ({
     opacity: titleOpacity.value,
-    transform: [{ translateY: titleTranslateY.value }],
+    transform: [{ translateY: titleY.value }],
   }));
-
-  const subtitleStyle = useAnimatedStyle(() => ({
-    opacity: subtitleOpacity.value,
-  }));
-
-  const bottomStyle = useAnimatedStyle(() => ({
-    opacity: bottomOpacity.value,
-  }));
+  const tagStyle     = useAnimatedStyle(() => ({ opacity: tagOpacity.value }));
+  const bottomStyle  = useAnimatedStyle(() => ({ opacity: bottomOpacity.value }));
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#FAF8F5", alignItems: "center", justifyContent: "center" }}>
+    <View style={{ flex: 1, backgroundColor: "#050505" }}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Icon */}
-      <Animated.View style={[iconStyle, { marginBottom: 32 }]}>
-        <View
-          style={{
-            width: 112,
-            height: 112,
-            borderRadius: 28,
-            backgroundColor: "#F55905",
-            alignItems: "center",
-            justifyContent: "center",
-            shadowColor: "#F55905",
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: 0.4,
-            shadowRadius: 22,
-            elevation: 16,
-          }}
-        >
-          <Ionicons name="rocket" size={54} color="#fff" />
-        </View>
-      </Animated.View>
-
-      {/* Logo text */}
-      <Animated.View style={[titleStyle, { alignItems: "center" }]}>
-        <Text
-          style={{
-            fontFamily: "Cairo_700Bold",
-            fontSize: 72,
-            color: "#F55905",
-            lineHeight: 80,
-          }}
-        >
-          جَهَز
-        </Text>
-        <View
-          style={{
-            width: 48,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: "#F55905",
-            marginTop: 4,
-            marginBottom: 16,
-          }}
+      {/* ── Full-screen hero image ── */}
+      <Animated.View style={[imgStyle, { ...StyleSheet.absoluteFillObject }]}>
+        <Image
+          source={{ uri: HERO }}
+          style={{ width, height }}
+          contentFit="cover"
         />
       </Animated.View>
 
-      {/* Tagline */}
-      <Animated.View style={subtitleStyle}>
-        <Text
-          style={{
-            fontFamily: "Tajawal_400Regular",
-            fontSize: 11,
-            color: "#767777",
-            letterSpacing: 4,
-            textTransform: "uppercase",
-          }}
-        >
-          CULINARY EDITORIAL DELIVERY
-        </Text>
-      </Animated.View>
-
-      {/* Bottom section */}
-      <Animated.View
-        style={[
-          bottomStyle,
-          { position: "absolute", bottom: 60, alignItems: "center", gap: 12 },
+      {/* ── Multi-stop dark overlay ── */}
+      <LinearGradient
+        colors={[
+          "rgba(5,5,5,0.72)",
+          "rgba(5,5,5,0.42)",
+          "rgba(5,5,5,0.52)",
+          "rgba(5,5,5,0.88)",
         ]}
-      >
-        <SplashLoadingDots />
+        locations={[0, 0.28, 0.62, 1]}
+        style={{ ...StyleSheet.absoluteFillObject }}
+      />
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <MaterialCommunityIcons name="silverware-fork-knife" size={18} color="#b0b0b0" />
+      {/* ── Center content ── */}
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingBottom: 40,
+        }}
+      >
+        {/* Logo mark */}
+        <LogoMark style={markStyle} />
+
+        {/* Separator line */}
+        <Animated.View
+          style={[
+            lineStyle,
+            {
+              height: 1,
+              backgroundColor: "rgba(255,255,255,0.2)",
+              marginTop: 32,
+              marginBottom: 20,
+              alignSelf: "center",
+            },
+          ]}
+        />
+
+        {/* App name */}
+        <Animated.View style={[titleStyle, { alignItems: "center" }]}>
+          <Text
+            style={{
+              fontFamily: "Cairo_700Bold",
+              fontSize: 88,
+              color: "#ffffff",
+              lineHeight: 96,
+              letterSpacing: -1,
+            }}
+          >
+            جاهز
+          </Text>
+          {/* Accent dot under name */}
+          <View
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: "#F55905",
+              marginTop: -8,
+            }}
+          />
+        </Animated.View>
+
+        {/* Tagline */}
+        <Animated.View style={[tagStyle, { marginTop: 18, alignItems: "center", gap: 6 }]}>
           <Text
             style={{
               fontFamily: "Tajawal_400Regular",
-              fontSize: 14,
-              color: "#767777",
+              fontSize: 10,
+              color: "rgba(255,255,255,0.45)",
+              letterSpacing: 5,
+              textTransform: "uppercase",
             }}
           >
-            جاري التحميل...
+            CULINARY · DELIVERY
           </Text>
-        </View>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 2,
+            }}
+          >
+            <View style={{ width: 20, height: 0.5, backgroundColor: "rgba(255,255,255,0.2)" }} />
+            <Text
+              style={{
+                fontFamily: "Tajawal_400Regular",
+                fontSize: 9,
+                color: "rgba(255,255,255,0.25)",
+                letterSpacing: 4,
+                textTransform: "uppercase",
+              }}
+            >
+              GAZA · PALESTINE
+            </Text>
+            <View style={{ width: 20, height: 0.5, backgroundColor: "rgba(255,255,255,0.2)" }} />
+          </View>
+        </Animated.View>
+      </View>
 
-        <Text
-          style={{
-            fontFamily: "Cairo_700Bold",
-            fontSize: 28,
-            color: "#E8E4E0",
-            letterSpacing: 8,
-          }}
-        >
-          GAZA
-        </Text>
+      {/* ── Bottom bar ── */}
+      <Animated.View
+        style={[
+          bottomStyle,
+          {
+            position: "absolute",
+            bottom: 52,
+            left: 0,
+            right: 0,
+            alignItems: "center",
+            gap: 14,
+          },
+        ]}
+      >
+        <SplashLoadingDots />
+        <ProgressBar />
       </Animated.View>
     </View>
   );
 }
+
+/* inline StyleSheet helper so no extra import needed */
+const StyleSheet = {
+  absoluteFillObject: {
+    position: "absolute" as const,
+    top: 0, left: 0, right: 0, bottom: 0,
+  },
+};

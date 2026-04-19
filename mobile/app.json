@@ -38,6 +38,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "نحتاج موقعك لتحديد أقرب خدمة إليك.",
+          "locationWhenInUsePermission": "نحتاج موقعك لتحديد أقرب خدمة إليك."
+        }
       ]
     ],
     "experiments": {

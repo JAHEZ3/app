@@ -21,9 +21,13 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import FormField from "../components/FormField";
 import PrivacyCard from "../components/PrivacyCard";
 import AppButton from "../../../components/ui/AppButton";
+import { useCompleteProfile } from "../hooks/useCompleteProfile";
+import { useLocation } from "../hooks/useLocation";
+import { mapAuthError } from "../../Auth/utils/mapAuthError";
 
 const ease = Easing.out(Easing.cubic);
 const monthNames = [
@@ -184,11 +188,32 @@ export default function CompleteProfileScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthday, setBirthday] = useState("");
+  
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [displayedMonth, setDisplayedMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
+  const { mutateAsync: completeProfile, isPending, isError, error } = useCompleteProfile();
+  const { coords } = useLocation();
+
+  async function handleSubmit() {
+    try {
+      const parsed = parseBirthday(birthday);
+      const isoDate = parsed!.toISOString().split("T")[0];
+      await completeProfile({
+        firstName,
+        lastName,
+        dateOfBirth: isoDate,
+        locationLat: coords?.lat ?? null,
+        locationLng: coords?.lng ?? null,
+      });
+      router.replace("/home/Home");
+      // @NOTE: ADD IN THIS ALERT FOR تم اكمال ملفك الشخصي بامكانك المتالعه
+    } catch {
+      // error displayed via isError state below
+    }
+  }
 
   const pageOpacity = useSharedValue(0);
   const photoScale = useSharedValue(0.9);
@@ -399,10 +424,35 @@ export default function CompleteProfileScreen() {
               <PrivacyCard />
             </Row>
 
+            {isError && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 4,
+                  marginTop: 4,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: "Tajawal_400Regular",
+                    fontSize: 12,
+                    color: "#E53935",
+                    textAlign: "right",
+                  }}
+                >
+                  {mapAuthError(error as Error)}
+                </Text>
+                <Ionicons name="alert-circle" size={14} color="#E53935" />
+              </View>
+            )}
+
             <Row delay={580}>
               <AppButton
                 label="حفظ ومتابعة"
-                onPress={() => {}}
+                onPress={handleSubmit}
+                disabled={isPending || !firstName || !lastName || !birthday}
                 icon={<Ionicons name="arrow-back-circle-outline" size={22} color="#fff" />}
                 iconPosition="left"
               />

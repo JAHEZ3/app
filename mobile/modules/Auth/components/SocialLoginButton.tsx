@@ -55,7 +55,6 @@ export default function SocialLoginButton({
 
   return (
     <AnimatedTouchable
-      style={[animStyle]}
       className="flex-1 items-center justify-center py-3.5 rounded-2xl flex-row gap-x-2"
       onPress={onPress}
       onPressIn={() => {
