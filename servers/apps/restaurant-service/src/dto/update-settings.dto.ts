@@ -3,32 +3,32 @@ import { Type } from 'class-transformer';
 
 export class UpdateSettingsDto {
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
+  @IsNumber({}, { message: 'خط العرض يجب أن يكون رقماً.' })
+  @IsPositive({ message: 'خط العرض يجب أن يكون موجباً.' })
   @Type(() => Number)
   lat?: number;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
+  @IsNumber({}, { message: 'خط الطول يجب أن يكون رقماً.' })
+  @IsPositive({ message: 'خط الطول يجب أن يكون موجباً.' })
   @Type(() => Number)
   lng?: number;
 
   @IsOptional()
-  @IsNumber()
-  @Min(0)
+  @IsNumber({}, { message: 'نطاق التوصيل يجب أن يكون رقماً.' })
+  @Min(0, { message: 'نطاق التوصيل لا يمكن أن يكون سالباً.' })
   @Type(() => Number)
   deliveryRadiusKm?: number;
 
   @IsOptional()
-  @IsNumber()
-  @Min(0)
+  @IsNumber({}, { message: 'الحد الأدنى للطلب يجب أن يكون رقماً.' })
+  @Min(0, { message: 'الحد الأدنى للطلب لا يمكن أن يكون سالباً.' })
   @Type(() => Number)
   minOrderAmount?: number;
 
   @IsOptional()
-  @IsNumber()
-  @Min(1)
+  @IsNumber({}, { message: 'وقت التوصيل يجب أن يكون رقماً.' })
+  @Min(1, { message: 'وقت التوصيل يجب أن يكون دقيقة واحدة على الأقل.' })
   @Type(() => Number)
   avgDeliveryMinutes?: number;
 }

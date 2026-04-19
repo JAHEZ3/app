@@ -1,14 +1,26 @@
+import "dotenv/config";
 import { NestFactory } from "@nestjs/core";
 import { MicroserviceOptions, Transport } from "@nestjs/microservices";
 import { ValidationPipe } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { AuthServiceModule } from "./auth-service.module";
+import { ApiGatewayModule } from "./api-gateway.module";
 import { HttpExceptionFilter } from "./filters/http-exception.filter";
-import { ResponseInterceptor } from "./interceptors/response.interceptor";
+
+process.on("uncaughtException", (err) => {
+  console.error("[خطأ فادح] استثناء غير متوقع:", err.message, "\n", err.stack);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[خطأ فادح] وعد مرفوض غير معالج:", reason);
+});
 
 async function bootstrap() {
-  const app = await NestFactory.create(AuthServiceModule);
-  const config = app.get(ConfigService);
+  const app = await NestFactory.create(ApiGatewayModule);
+
+  app.enableCors({
+    origin: (process.env.CORS_ORIGINS || "*").split(","),
+    credentials: true,
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+    allowedHeaders: "Content-Type,Authorization",
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -20,33 +32,14 @@ async function bootstrap() {
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.NATS,
-    options: {
-      servers: [config.get<string>("NATS_URL", "nats://localhost:4222")],
-    },
+    options: { servers: [process.env.NATS_URL || "nats://localhost:4222"] },
   });
 
-  app.setGlobalPrefix("api/auth");
-
-  app.enableCors({
-    origin: ["http://localhost:30006", "http://localhost:3002"],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  });
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  app.setGlobalPrefix("api/gateway");
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new ResponseInterceptor());
 
   await app.startAllMicroservices();
-  await app.listen(config.get<number>("AUTH_PORT", 3004));
-
-  console.log(`Auth Service running on port ${config.get("AUTH_PORT", 3004)}`);
+  await app.listen(3000);
+  console.log("API Gateway is running on http://localhost:3000/api/gateway");
 }
 bootstrap();

@@ -21,6 +21,13 @@ export class RestaurantRequest {
   @Column({ name: 'restaurant_id', type: 'uuid' })
   restaurantId: string; // FK → restaurants.id
 
+  // TODO: Replace local file paths with S3/Cloudflare R2 signed URLs.
+  @Column({ name: 'logo_url', type: 'text', nullable: true })
+  logoUrl: string;
+
+  @Column({ name: 'owner_id_picture_url', type: 'text', nullable: true })
+  ownerIdPictureUrl: string;
+
   @Column({
     type: 'enum',
     enum: RestaurantRequestStatus,

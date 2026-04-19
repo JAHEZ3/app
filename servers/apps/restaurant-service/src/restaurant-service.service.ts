@@ -9,7 +9,6 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
-import * as bcrypt from "bcrypt";
 import { Restaurant, RestaurantStatus } from "./entities/restaurant.entity";
 import { RestaurantHour } from "./entities/restaurant-hour.entity";
 import { Menu } from "./entities/menu.entity";
@@ -22,6 +21,8 @@ import {
   RestaurantRequestStatus,
 } from "./entities/restaurant-request.entity";
 import { CompleteRestaurantProfileDto } from "./dto/complete-profile.dto";
+import { parseAndValidatePaymentInfo } from "./common/payment-info";
+import { S3Service } from "./s3.service";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
 import { SetHoursDto } from "./dto/set-hours.dto";
@@ -59,6 +60,7 @@ export class RestaurantServiceService {
     private readonly optionRepo: Repository<MealOption>,
     @Inject("NATS_SERVICE")
     private readonly natsClient: ClientProxy,
+    private readonly s3: S3Service,
   ) {}
 
   // ─── NATS: create profile stub on registration ────────────────────────────────
@@ -86,10 +88,39 @@ export class RestaurantServiceService {
 
   // ─── HTTP: first-time profile completion ──────────────────────────────────────
 
-  async completeProfile(userId: string, dto: CompleteRestaurantProfileDto) {
+  async completeProfile(
+    userId: string,
+    phone: string,
+    dto: CompleteRestaurantProfileDto,
+    files: {
+      logo?: Express.Multer.File[];
+      ownerIdPicture?: Express.Multer.File[];
+    },
+  ) {
+    if (!dto.termsAccepted) {
+      throw new BadRequestException("يجب قبول الشروط والسياسة للمتابعة.");
+    }
+    if (!files?.logo?.[0]) {
+      throw new BadRequestException("شعار المطعم مطلوب.");
+    }
+    if (!files?.ownerIdPicture?.[0]) {
+      throw new BadRequestException("صورة هوية المالك مطلوبة.");
+    }
+
+    // Create the stub if it doesn't exist yet (handles cases where the NATS
+    // event was missed — e.g. service was down at registration time).
+    await this.createProfileStub({ userId, phone });
+
     const restaurant = await this.getOwnedRestaurant(userId);
 
-    // Prevent re-submission if already approved or a pending request exists
+    let paymentInfo: ReturnType<typeof parseAndValidatePaymentInfo>;
+    try {
+      paymentInfo = parseAndValidatePaymentInfo(dto.paymentInfo);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+
+    // Prevent re-submission if a pending request already exists
     const existingRequest = await this.requestRepo.findOne({
       where: {
         restaurantId: restaurant.id,
@@ -97,39 +128,67 @@ export class RestaurantServiceService {
       },
     });
     if (existingRequest) {
-      throw new BadRequestException("Your application is already under review");
+      throw new BadRequestException("طلبك قيد المراجعة بالفعل.");
     }
 
-    // Update restaurant record with profile data
+    // Upload files to private S3 bucket
+    let logoKey: string;
+    let ownerIdKey: string;
+    try {
+      [logoKey, ownerIdKey] = await Promise.all([
+        this.s3.upload(files.logo[0], "restaurant"),
+        this.s3.upload(files.ownerIdPicture[0], "restaurant"),
+      ]);
+    } catch (err) {
+      this.logger.error("S3 upload failed during completeProfile", err);
+      throw new BadRequestException("فشل رفع الملفات. يرجى المحاولة مجدداً.");
+    }
+
+    // Update restaurant record with all profile data
     await this.restaurantRepo.update(restaurant.id, {
       name: dto.restaurantName,
       ownerName: dto.ownerName,
+      ownerNationalIdNumber: dto.ownerNationalIdNumber,
+      commercialRegNumber: dto.commercialRegNumber,
+      phone: dto.restaurantPhone,
       description: dto.description,
-      logoUrl: dto.logoUrl,
+      logoUrl: logoKey,
       street: dto.street,
       city: dto.city,
       cuisineType: dto.cuisineType,
+      lat: dto.lat,
+      lng: dto.lng,
+      paymentInfo,
+      termsAccepted: true,
     });
 
-    // Create the approval request
+    // Create the approval request with S3 keys
     const request = await this.requestRepo.save(
-      this.requestRepo.create({ restaurantId: restaurant.id }),
+      this.requestRepo.create({
+        restaurantId: restaurant.id,
+        logoUrl: logoKey,
+        ownerIdPictureUrl: ownerIdKey,
+      }),
     );
 
-    // Forward hashed password to auth-service
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    this.natsClient.emit("user.password.set", { userId, passwordHash });
+    // Auth-service hashes the password — never send a hash over NATS
+    try {
+      this.natsClient.emit("user.password.set", { userId, password: dto.password });
+    } catch (err) {
+      this.logger.error("NATS emit user.password.set failed", err);
+    }
 
     // Notify auth-service that profile is complete → sets profileCompleted=true on User
-    this.natsClient.emit("restaurant.profile.completed", {
-      userId,
-      requestId: request.id,
-    });
+    try {
+      this.natsClient.emit("restaurant.profile.completed", { userId, requestId: request.id });
+    } catch (err) {
+      this.logger.error("NATS emit restaurant.profile.completed failed", err);
+    }
 
     this.logger.log(
       `Profile completed for restaurant ownerId: ${userId} — pending approval`,
     );
-    return { message: "Profile submitted for admin review" };
+    return { message: "تم تقديم الملف الشخصي للمراجعة." };
   }
 
   // ─── Manager: list pending applications ───────────────────────────────────────
@@ -149,7 +208,26 @@ export class RestaurantServiceService {
       .orderBy("req.submittedAt", "ASC")
       .getMany();
 
-    return { data: requests, message: "Pending applications retrieved" };
+    // Generate short-lived presigned URLs — failures are isolated per request
+    const data = await Promise.all(
+      requests.map(async (req: any) => {
+        const presign = async (key: string | null | undefined) => {
+          if (!key) return null;
+          try { return await this.s3.presignedUrl(key); }
+          catch (err) {
+            this.logger.error(`Failed to presign key ${key}`, err);
+            return null;
+          }
+        };
+        const [logoUrl, ownerIdPictureUrl] = await Promise.all([
+          presign(req.logoUrl),
+          presign(req.ownerIdPictureUrl),
+        ]);
+        return { ...req, logoUrl, ownerIdPictureUrl };
+      }),
+    );
+
+    return { data, message: "تم استرجاع الطلبات المعلقة." };
   }
 
   // ─── Manager: approve application ────────────────────────────────────────────
@@ -158,9 +236,9 @@ export class RestaurantServiceService {
     const request = await this.requestRepo.findOne({
       where: { id: requestId },
     });
-    if (!request) throw new NotFoundException("Application not found");
+    if (!request) throw new NotFoundException("الطلب غير موجود.");
     if (request.status !== RestaurantRequestStatus.PENDING) {
-      throw new BadRequestException("Application is no longer pending");
+      throw new BadRequestException("الطلب لم يعد معلقاً.");
     }
 
     // Mark request approved
@@ -179,15 +257,20 @@ export class RestaurantServiceService {
     const restaurant = await this.restaurantRepo.findOne({
       where: { id: request.restaurantId },
     });
-    this.natsClient.emit("restaurant.owner.approved", {
-      userId: restaurant!.ownerUserId,
-      requestId: request.id,
-    });
+    if (!restaurant) throw new NotFoundException("بيانات المطعم غير موجودة.");
+    try {
+      this.natsClient.emit("restaurant.owner.approved", {
+        userId: restaurant.ownerUserId,
+        requestId: request.id,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit restaurant.owner.approved failed", err);
+    }
 
     this.logger.log(
       `Restaurant request ${requestId} approved by manager ${managerId}`,
     );
-    return { message: "Application approved — restaurant is now active" };
+    return { message: "تمت الموافقة على الطلب. المطعم نشط الآن." };
   }
 
   // ─── Manager: reject application ─────────────────────────────────────────────
@@ -200,9 +283,9 @@ export class RestaurantServiceService {
     const request = await this.requestRepo.findOne({
       where: { id: requestId },
     });
-    if (!request) throw new NotFoundException("Application not found");
+    if (!request) throw new NotFoundException("الطلب غير موجود.");
     if (request.status !== RestaurantRequestStatus.PENDING) {
-      throw new BadRequestException("Application is no longer pending");
+      throw new BadRequestException("الطلب لم يعد معلقاً.");
     }
 
     await this.requestRepo.update(request.id, {
@@ -215,16 +298,21 @@ export class RestaurantServiceService {
     const restaurant = await this.restaurantRepo.findOne({
       where: { id: request.restaurantId },
     });
-    this.natsClient.emit("restaurant.owner.rejected", {
-      userId: restaurant!.ownerUserId,
-      requestId: request.id,
-      reason,
-    });
+    if (!restaurant) throw new NotFoundException("بيانات المطعم غير موجودة.");
+    try {
+      this.natsClient.emit("restaurant.owner.rejected", {
+        userId: restaurant.ownerUserId,
+        requestId: request.id,
+        reason,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit restaurant.owner.rejected failed", err);
+    }
 
     this.logger.log(
       `Restaurant request ${requestId} rejected by manager ${managerId}`,
     );
-    return { message: "Application rejected" };
+    return { message: "تم رفض الطلب." };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -234,7 +322,7 @@ export class RestaurantServiceService {
       where: { ownerUserId: ownerId },
     });
     if (!restaurant)
-      throw new NotFoundException("Restaurant not found for this account");
+      throw new NotFoundException("لم يُعثر على مطعم لهذا الحساب.");
     return restaurant;
   }
 
@@ -243,9 +331,9 @@ export class RestaurantServiceService {
     restaurantId: string,
   ): Promise<Menu> {
     const menu = await this.menuRepo.findOne({ where: { id: menuId } });
-    if (!menu) throw new NotFoundException("Menu not found");
+    if (!menu) throw new NotFoundException("القائمة غير موجودة.");
     if (menu.restaurantId !== restaurantId)
-      throw new ForbiddenException("Not your menu");
+      throw new ForbiddenException("هذه القائمة لا تخصك.");
     return menu;
   }
 
@@ -256,10 +344,10 @@ export class RestaurantServiceService {
     const section = await this.sectionRepo.findOne({
       where: { id: sectionId },
     });
-    if (!section) throw new NotFoundException("Section not found");
+    if (!section) throw new NotFoundException("القسم غير موجود.");
     const menu = await this.menuRepo.findOne({ where: { id: section.menuId } });
     if (!menu || menu.restaurantId !== restaurantId)
-      throw new ForbiddenException("Not your section");
+      throw new ForbiddenException("هذا القسم لا يخصك.");
     return section;
   }
 
@@ -268,9 +356,9 @@ export class RestaurantServiceService {
     restaurantId: string,
   ): Promise<Meal> {
     const meal = await this.mealRepo.findOne({ where: { id: mealId } });
-    if (!meal) throw new NotFoundException("Meal not found");
+    if (!meal) throw new NotFoundException("الوجبة غير موجودة.");
     if (meal.restaurantId !== restaurantId)
-      throw new ForbiddenException("Not your meal");
+      throw new ForbiddenException("هذه الوجبة لا تخصك.");
     return meal;
   }
 
@@ -281,24 +369,54 @@ export class RestaurantServiceService {
     const group = await this.optionGroupRepo.findOne({
       where: { id: groupId },
     });
-    if (!group) throw new NotFoundException("Option group not found");
+    if (!group) throw new NotFoundException("مجموعة الخيارات غير موجودة.");
     await this.assertMealOwner(group.mealId, restaurantId);
     return group;
+  }
+
+  // ─── Helpers — presigned URLs ─────────────────────────────────────────────────
+
+  private async withPresignedUrls(restaurant: Restaurant): Promise<Restaurant & { logoUrl?: string; coverUrl?: string }> {
+    const [logoUrl, coverUrl] = await Promise.all([
+      restaurant.logoUrl ? this.s3.presignedUrl(restaurant.logoUrl) : undefined,
+      restaurant.coverUrl ? this.s3.presignedUrl(restaurant.coverUrl) : undefined,
+    ]);
+    return { ...restaurant, ...(logoUrl && { logoUrl }), ...(coverUrl && { coverUrl }) };
   }
 
   // ─── Restaurant Profile & Settings ────────────────────────────────────────────
 
   async getProfile(ownerId: string) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
-    return { data: restaurant, message: "Profile retrieved" };
+
+    // Latest request holds ownerIdPicture
+    const request = await this.requestRepo.findOne({
+      where: { restaurantId: restaurant.id },
+      order: { submittedAt: 'DESC' },
+    });
+
+    const ownerIdPictureUrl = request?.ownerIdPictureUrl
+      ? await this.s3.presignedUrl(request.ownerIdPictureUrl)
+      : null;
+
+    const data = {
+      ...(await this.withPresignedUrls(restaurant)),
+      ownerIdPictureUrl,
+      applicationStatus: request?.status ?? null,
+      rejectionReason: request?.rejectionReason ?? null,
+    };
+
+    return { data, message: "تم استرجاع الملف الشخصي." };
   }
 
   async updateProfile(ownerId: string, dto: UpdateProfileDto) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.restaurantRepo.update(restaurant.id, { ...dto });
+    const updated = await this.restaurantRepo.findOne({ where: { id: restaurant.id } });
+    if (!updated) throw new NotFoundException("لم يُعثر على المطعم بعد التحديث.");
     return {
-      data: await this.restaurantRepo.findOne({ where: { id: restaurant.id } }),
-      message: "Profile updated",
+      data: await this.withPresignedUrls(updated),
+      message: "تم تحديث الملف الشخصي.",
     };
   }
 
@@ -307,7 +425,7 @@ export class RestaurantServiceService {
     await this.restaurantRepo.update(restaurant.id, { ...dto });
     return {
       data: await this.restaurantRepo.findOne({ where: { id: restaurant.id } }),
-      message: "Settings updated",
+      message: "تم تحديث الإعدادات.",
     };
   }
 
@@ -328,7 +446,7 @@ export class RestaurantServiceService {
     const hours = await this.hoursRepo.find({
       where: { restaurantId: restaurant.id },
     });
-    return { data: hours, message: "Hours retrieved" };
+    return { data: hours, message: "تم استرجاع أوقات العمل." };
   }
 
   async setHours(ownerId: string, dto: SetHoursDto) {
@@ -358,7 +476,7 @@ export class RestaurantServiceService {
     const hours = await this.hoursRepo.find({
       where: { restaurantId: restaurant.id },
     });
-    return { data: hours, message: "Hours updated" };
+    return { data: hours, message: "تم تحديث أوقات العمل." };
   }
 
   // ─── Public Listing ───────────────────────────────────────────────────────────
@@ -371,14 +489,14 @@ export class RestaurantServiceService {
     if (city) qb.andWhere("r.city ILIKE :city", { city: `%${city}%` });
 
     const restaurants = await qb.orderBy("r.rating", "DESC").getMany();
-    return { data: restaurants, message: "Restaurants retrieved" };
+    return { data: restaurants, message: "تم استرجاع المطاعم." };
   }
 
   async getPublicRestaurantWithMenu(restaurantId: string) {
     const restaurant = await this.restaurantRepo.findOne({
       where: { id: restaurantId, status: RestaurantStatus.ACTIVE },
     });
-    if (!restaurant) throw new NotFoundException("Restaurant not found");
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
 
     const menus = await this.menuRepo.find({
       where: { restaurantId, isActive: true },
@@ -430,7 +548,7 @@ export class RestaurantServiceService {
     const menus = await this.menuRepo.find({
       where: { restaurantId: restaurant.id },
     });
-    return { data: menus, message: "Menus retrieved" };
+    return { data: menus, message: "تم استرجاع القوائم." };
   }
 
   async createMenu(ownerId: string, dto: CreateMenuDto) {
@@ -443,7 +561,7 @@ export class RestaurantServiceService {
         displayOrder: dto.displayOrder ?? 0,
       }),
     );
-    return { data: menu, message: "Menu created" };
+    return { data: menu, message: "تم إنشاء القائمة." };
   }
 
   async updateMenu(ownerId: string, menuId: string, dto: UpdateMenuDto) {
@@ -452,7 +570,7 @@ export class RestaurantServiceService {
     await this.menuRepo.update(menu.id, { ...dto });
     return {
       data: await this.menuRepo.findOne({ where: { id: menu.id } }),
-      message: "Menu updated",
+      message: "تم تحديث القائمة.",
     };
   }
 
@@ -460,7 +578,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const menu = await this.assertMenuOwner(menuId, restaurant.id);
     await this.menuRepo.delete(menu.id);
-    return { data: null, message: "Menu deleted" };
+    return { data: null, message: "تم حذف القائمة." };
   }
 
   // ─── Menu Sections ────────────────────────────────────────────────────────────
@@ -469,7 +587,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.assertMenuOwner(menuId, restaurant.id);
     const sections = await this.sectionRepo.find({ where: { menuId } });
-    return { data: sections, message: "Sections retrieved" };
+    return { data: sections, message: "تم استرجاع الأقسام." };
   }
 
   async createSection(ownerId: string, menuId: string, dto: CreateSectionDto) {
@@ -482,7 +600,7 @@ export class RestaurantServiceService {
         displayOrder: dto.displayOrder ?? 0,
       }),
     );
-    return { data: section, message: "Section created" };
+    return { data: section, message: "تم إنشاء القسم." };
   }
 
   async updateSection(
@@ -495,7 +613,7 @@ export class RestaurantServiceService {
     await this.sectionRepo.update(section.id, { ...dto });
     return {
       data: await this.sectionRepo.findOne({ where: { id: section.id } }),
-      message: "Section updated",
+      message: "تم تحديث القسم.",
     };
   }
 
@@ -503,7 +621,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const section = await this.assertSectionOwner(sectionId, restaurant.id);
     await this.sectionRepo.delete(section.id);
-    return { data: null, message: "Section deleted" };
+    return { data: null, message: "تم حذف القسم." };
   }
 
   // ─── Meals ────────────────────────────────────────────────────────────────────
@@ -512,7 +630,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.assertSectionOwner(sectionId, restaurant.id);
     const meals = await this.mealRepo.find({ where: { sectionId } });
-    return { data: meals, message: "Meals retrieved" };
+    return { data: meals, message: "تم استرجاع الوجبات." };
   }
 
   async createMeal(ownerId: string, dto: CreateMealDto) {
@@ -534,7 +652,7 @@ export class RestaurantServiceService {
         displayOrder: dto.displayOrder ?? 0,
       }),
     );
-    return { data: meal, message: "Meal created" };
+    return { data: meal, message: "تم إنشاء الوجبة." };
   }
 
   async updateMeal(ownerId: string, mealId: string, dto: UpdateMealDto) {
@@ -548,7 +666,7 @@ export class RestaurantServiceService {
     await this.mealRepo.update(meal.id, { ...dto });
     return {
       data: await this.mealRepo.findOne({ where: { id: meal.id } }),
-      message: "Meal updated",
+      message: "تم تحديث الوجبة.",
     };
   }
 
@@ -556,7 +674,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const meal = await this.assertMealOwner(mealId, restaurant.id);
     await this.mealRepo.delete(meal.id);
-    return { data: null, message: "Meal deleted" };
+    return { data: null, message: "تم حذف الوجبة." };
   }
 
   async toggleMealAvailability(ownerId: string, mealId: string) {
@@ -576,7 +694,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.assertMealOwner(mealId, restaurant.id);
     const groups = await this.optionGroupRepo.find({ where: { mealId } });
-    return { data: groups, message: "Option groups retrieved" };
+    return { data: groups, message: "تم استرجاع مجموعات الخيارات." };
   }
 
   async createOptionGroup(
@@ -595,7 +713,7 @@ export class RestaurantServiceService {
         maxSelections: dto.maxSelections,
       }),
     );
-    return { data: group, message: "Option group created" };
+    return { data: group, message: "تم إنشاء مجموعة الخيارات." };
   }
 
   async updateOptionGroup(
@@ -608,7 +726,7 @@ export class RestaurantServiceService {
     await this.optionGroupRepo.update(group.id, { ...dto });
     return {
       data: await this.optionGroupRepo.findOne({ where: { id: group.id } }),
-      message: "Option group updated",
+      message: "تم تحديث مجموعة الخيارات.",
     };
   }
 
@@ -616,7 +734,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const group = await this.assertOptionGroupOwner(groupId, restaurant.id);
     await this.optionGroupRepo.delete(group.id);
-    return { data: null, message: "Option group deleted" };
+    return { data: null, message: "تم حذف مجموعة الخيارات." };
   }
 
   // ─── Meal Options ─────────────────────────────────────────────────────────────
@@ -625,7 +743,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.assertOptionGroupOwner(groupId, restaurant.id);
     const options = await this.optionRepo.find({ where: { groupId } });
-    return { data: options, message: "Options retrieved" };
+    return { data: options, message: "تم استرجاع الخيارات." };
   }
 
   async createOption(ownerId: string, groupId: string, dto: CreateOptionDto) {
@@ -639,27 +757,27 @@ export class RestaurantServiceService {
         isAvailable: dto.isAvailable ?? true,
       }),
     );
-    return { data: option, message: "Option created" };
+    return { data: option, message: "تم إنشاء الخيار." };
   }
 
   async updateOption(ownerId: string, optionId: string, dto: UpdateOptionDto) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const option = await this.optionRepo.findOne({ where: { id: optionId } });
-    if (!option) throw new NotFoundException("Option not found");
+    if (!option) throw new NotFoundException("الخيار غير موجود.");
     await this.assertOptionGroupOwner(option.groupId, restaurant.id);
     await this.optionRepo.update(option.id, { ...dto });
     return {
       data: await this.optionRepo.findOne({ where: { id: option.id } }),
-      message: "Option updated",
+      message: "تم تحديث الخيار.",
     };
   }
 
   async deleteOption(ownerId: string, optionId: string) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const option = await this.optionRepo.findOne({ where: { id: optionId } });
-    if (!option) throw new NotFoundException("Option not found");
+    if (!option) throw new NotFoundException("الخيار غير موجود.");
     await this.assertOptionGroupOwner(option.groupId, restaurant.id);
     await this.optionRepo.delete(option.id);
-    return { data: null, message: "Option deleted" };
+    return { data: null, message: "تم حذف الخيار." };
   }
 }

@@ -1,10 +1,27 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import { PaymentInfo } from '../common/payment-info';
 
 export enum RestaurantStatus {
   PENDING_APPROVAL = 'pending_approval',
   ACTIVE = 'active',
   SUSPENDED = 'suspended',
   CLOSED = 'closed',
+}
+
+export enum CuisineType {
+  FAST_FOOD    = 'fast_food',
+  SWEETS       = 'sweets',
+  DRINKS       = 'drinks',
+  KITCHEN      = 'kitchen',
+  PIZZA        = 'pizza',
+  SHAWARMA     = 'shawarma',
+  GRILLS       = 'grills',
+  SEAFOOD      = 'seafood',
+  SANDWICHES   = 'sandwiches',
+  BREAKFAST    = 'breakfast',
+  HEALTHY      = 'healthy',
+  ASIAN        = 'asian',
+  OTHER        = 'other',
 }
 
 @Entity('restaurants')
@@ -17,7 +34,7 @@ export class Restaurant {
   @Column({ name: 'owner_user_id', type: 'uuid' })
   ownerUserId: string;
 
-  @Column({ length: 200 })
+  @Column({ length: 200, nullable: true })
   name: string;
 
   @Column({ type: 'text', nullable: true })
@@ -35,8 +52,20 @@ export class Restaurant {
   @Column({ name: 'owner_name', length: 200, nullable: true })
   ownerName: string;
 
-  @Column({ name: 'cuisine_type', length: 100, nullable: true })
-  cuisineType: string;
+  @Column({ name: 'owner_national_id_number', length: 50, nullable: true })
+  ownerNationalIdNumber: string;
+
+  @Column({ name: 'commercial_reg_number', length: 50, nullable: true })
+  commercialRegNumber: string;
+
+  @Column({ name: 'cuisine_type', type: 'enum', enum: CuisineType, enumName: 'cuisine_type', nullable: true })
+  cuisineType: CuisineType;
+
+  @Column({ name: 'payment_info', type: 'jsonb', nullable: true })
+  paymentInfo: PaymentInfo;
+
+  @Column({ name: 'terms_accepted', default: false })
+  termsAccepted: boolean;
 
   @Column({ type: 'text', nullable: true })
   street: string;
@@ -51,14 +80,8 @@ export class Restaurant {
   @Column({ type: 'numeric', precision: 9, scale: 6, nullable: true })
   lng: number;
 
-  @Column({ name: 'delivery_radius_km', type: 'numeric', precision: 5, scale: 2, nullable: true })
-  deliveryRadiusKm: number;
-
   @Column({ name: 'min_order_amount', type: 'numeric', precision: 8, scale: 2, default: 0.00 })
   minOrderAmount: number;
-
-  @Column({ name: 'avg_delivery_minutes', nullable: true })
-  avgDeliveryMinutes: number;
 
   @Index()
   @Column({ type: 'numeric', precision: 3, scale: 2, default: 0.00 })

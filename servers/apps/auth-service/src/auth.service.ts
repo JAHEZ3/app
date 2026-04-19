@@ -7,6 +7,8 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cache } from "cache-manager";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
@@ -42,9 +44,56 @@ export class AuthService {
     private readonly jwtService: AppJwtService,
     @Inject("NATS_SERVICE")
     private readonly natsClient: ClientProxy,
+    @Inject(CACHE_MANAGER)
+    private readonly cache: Cache,
   ) {}
 
   // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  private loginAttemptKey(identifier: string): string {
+    return `login_fail:${identifier}`;
+  }
+
+  private async checkLoginRateLimit(identifier: string): Promise<void> {
+    try {
+      const record = await this.cache.get<{ count: number; lockedUntil?: number }>(
+        this.loginAttemptKey(identifier),
+      );
+      if (record?.lockedUntil && Date.now() < record.lockedUntil) {
+        const minutesLeft = Math.ceil((record.lockedUntil - Date.now()) / 60_000);
+        throw new UnauthorizedException(
+          `محاولات فاشلة كثيرة. حاول مجدداً بعد ${minutesLeft} دقيقة.`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
+      this.logger.error('Redis error in checkLoginRateLimit — allowing request', err);
+    }
+  }
+
+  private async recordFailedLogin(identifier: string): Promise<void> {
+    try {
+      const key = this.loginAttemptKey(identifier);
+      const record = await this.cache.get<{ count: number; lockedUntil?: number }>(key) ?? { count: 0 };
+      const count = record.count + 1;
+      const LOCK_MS = 15 * 60 * 1000;
+      if (count >= 5) {
+        await this.cache.set(key, { count, lockedUntil: Date.now() + LOCK_MS }, LOCK_MS);
+      } else {
+        await this.cache.set(key, { count }, LOCK_MS);
+      }
+    } catch (err) {
+      this.logger.error('Redis error in recordFailedLogin — skipping rate-limit record', err);
+    }
+  }
+
+  private async clearLoginAttempts(identifier: string): Promise<void> {
+    try {
+      await this.cache.del(this.loginAttemptKey(identifier));
+    } catch (err) {
+      this.logger.error('Redis error in clearLoginAttempts — skipping', err);
+    }
+  }
 
   private async issuePair(user: User) {
     const payload = {
@@ -78,8 +127,11 @@ export class AuthService {
     if (existing) {
       if (existing.role !== UserRole.CUSTOMER) {
         throw new ConflictException(
-          "Phone is already registered under a different account type.",
+          "رقم الهاتف مسجل بالفعل لنوع حساب مختلف.",
         );
+      }
+      if (existing.status === UserStatus.BANNED) {
+        throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
       }
       if (existing.status === UserStatus.PENDING) {
         await this.otpService.saveOtp(
@@ -88,12 +140,12 @@ export class AuthService {
           existing.phone,
         );
         return {
-          data: { userId: existing.id },
-          message: "Account pending verification. New OTP sent.",
+          data: { phone: existing.phone },
+          message: "الحساب قيد التحقق. تم إرسال رمز جديد.",
         };
       }
       throw new ConflictException(
-        "Phone already registered. Please use the login endpoint.",
+        "رقم الهاتف مسجل بالفعل. يرجى تسجيل الدخول.",
       );
     }
 
@@ -107,15 +159,16 @@ export class AuthService {
     );
 
     // customer-service creates the profile stub
-    this.natsClient.emit("user.customer.created", {
-      userId: user.id,
-      phone: user.phone,
-    });
+    try {
+      this.natsClient.emit("user.customer.created", { userId: user.id, phone: user.phone });
+    } catch (err) {
+      this.logger.error("NATS emit user.customer.created failed", err);
+    }
     await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
 
     return {
-      data: { userId: user.id },
-      message: "Account created. OTP sent to verify your phone.",
+      data: { phone: user.phone },
+      message: "تم إنشاء الحساب. تم إرسال رمز التحقق إلى هاتفك.",
     };
   }
 
@@ -127,8 +180,11 @@ export class AuthService {
     if (existing) {
       if (existing.role !== UserRole.DELIVERY) {
         throw new ConflictException(
-          "Phone is already registered under a different role.",
+          "رقم الهاتف مسجل بالفعل تحت دور مختلف.",
         );
+      }
+      if (existing.status === UserStatus.BANNED) {
+        throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
       }
       if (existing.status === UserStatus.PENDING) {
         await this.otpService.saveOtp(
@@ -137,12 +193,12 @@ export class AuthService {
           existing.phone,
         );
         return {
-          data: { userId: existing.id },
-          message: "Account pending verification. New OTP sent.",
+          data: { phone: existing.phone },
+          message: "الحساب قيد التحقق. تم إرسال رمز جديد.",
         };
       }
       throw new ConflictException(
-        "Phone already registered. Please use the login endpoint.",
+        "رقم الهاتف مسجل بالفعل. يرجى تسجيل الدخول.",
       );
     }
 
@@ -156,8 +212,8 @@ export class AuthService {
 
     await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
     return {
-      data: { userId: user.id },
-      message: "Account created. OTP sent to verify your phone.",
+      data: { phone: user.phone },
+      message: "تم إنشاء الحساب. تم إرسال رمز التحقق إلى هاتفك.",
     };
   }
 
@@ -169,22 +225,31 @@ export class AuthService {
     if (existing) {
       if (existing.role !== UserRole.RESTAURANT_OWNER) {
         throw new ConflictException(
-          "Phone is already registered under a different role.",
+          "رقم الهاتف مسجل بالفعل تحت دور مختلف.",
         );
       }
+      if (existing.status === UserStatus.BANNED) {
+        throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
+      }
       if (existing.status === UserStatus.PENDING) {
+        // Re-emit in case restaurant-service missed it the first time (NATS down)
+        try {
+          this.natsClient.emit("user.restaurant.created", { userId: existing.id, phone: existing.phone });
+        } catch (err) {
+          this.logger.error("NATS emit user.restaurant.created (re-emit) failed", err);
+        }
         await this.otpService.saveOtp(
           existing.id,
           OtpPurpose.PHONE_VERIFY,
           existing.phone,
         );
         return {
-          data: { userId: existing.id },
-          message: "Account pending verification. New OTP sent.",
+          data: { phone: existing.phone },
+          message: "الحساب قيد التحقق. تم إرسال رمز جديد.",
         };
       }
       throw new ConflictException(
-        "Phone already registered. Please use the login endpoint.",
+        "رقم الهاتف مسجل بالفعل. يرجى تسجيل الدخول.",
       );
     }
 
@@ -196,10 +261,17 @@ export class AuthService {
       }),
     );
 
+    // restaurant-service creates the profile stub on this event
+    try {
+      this.natsClient.emit("user.restaurant.created", { userId: user.id, phone: user.phone });
+    } catch (err) {
+      this.logger.error("NATS emit user.restaurant.created failed", err);
+    }
+
     await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
     return {
-      data: { userId: user.id },
-      message: "Account created. OTP sent to verify your phone.",
+      data: { phone: user.phone },
+      message: "تم إنشاء الحساب. تم إرسال رمز التحقق إلى هاتفك.",
     };
   }
 
@@ -208,16 +280,16 @@ export class AuthService {
   // client can call the downstream service profile-completion endpoint.
 
   async verifyRegistrationOtp(dto: VerifyOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found.");
+    const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.MANAGER) {
       throw new BadRequestException(
-        "OTP verification does not apply to manager accounts.",
+        "التحقق برمز OTP لا ينطبق على حسابات المديرين.",
       );
     }
     if (user.status !== UserStatus.PENDING) {
       throw new BadRequestException(
-        "Phone already verified. Please proceed to login.",
+        "تم التحقق من رقم الهاتف. يرجى تسجيل الدخول.",
       );
     }
 
@@ -235,8 +307,8 @@ export class AuthService {
 
     const message =
       user.role === UserRole.CUSTOMER
-        ? "Phone verified. Please complete your profile at /api/customer/profile."
-        : "Phone verified. Please complete your profile and submit your application for admin review.";
+        ? "تم التحقق من هاتفك. أكمل ملفك الشخصي."
+        : "تم التحقق من هاتفك. أكمل ملفك الشخصي وقدّم طلبك للمراجعة.";
 
     return { data: tokens, message };
   }
@@ -244,15 +316,15 @@ export class AuthService {
   // ─── Resend OTP (registration phase only) ────────────────────────────────────
 
   async resendOtp(dto: ResendOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found.");
+    const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.MANAGER)
-      throw new BadRequestException("OTP does not apply to managers.");
+      throw new BadRequestException("رمز OTP لا ينطبق على المديرين.");
     if (user.status === UserStatus.BANNED)
-      throw new UnauthorizedException("Account is banned.");
+      throw new UnauthorizedException("الحساب محظور.");
     if (user.status !== UserStatus.PENDING) {
       throw new BadRequestException(
-        "Phone already verified. Use the login endpoint.",
+        "تم التحقق من رقم الهاتف. استخدم تسجيل الدخول.",
       );
     }
     if (
@@ -262,11 +334,11 @@ export class AuthService {
       ))
     ) {
       throw new BadRequestException(
-        "Daily OTP limit reached. Try again after 24 hours.",
+        "تم بلوغ الحد اليومي لرمز التحقق. حاول مجدداً بعد 24 ساعة.",
       );
     }
     await this.otpService.saveOtp(user.id, OtpPurpose.PHONE_VERIFY, user.phone);
-    return { data: { userId: user.id }, message: "OTP resent." };
+    return { data: { phone: user.phone }, message: "تم إعادة إرسال رمز التحقق." };
   }
 
   // ─── Customer Login (OTP-based, two-step) ────────────────────────────────────
@@ -277,164 +349,225 @@ export class AuthService {
     });
     if (!user)
       throw new NotFoundException(
-        "No customer account found for this phone number.",
+        "لا يوجد حساب عميل لهذا الرقم.",
       );
 
     if (user.status === UserStatus.BANNED)
-      throw new UnauthorizedException("Account is banned. Contact support.");
+      throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
     if (user.status === UserStatus.PENDING) {
       throw new BadRequestException(
-        "Phone not verified. Please verify your OTP first.",
+        "رقم الهاتف غير مُحقَّق. يرجى التحقق من رمز OTP أولاً.",
       );
     }
-    if (user.status === UserStatus.SUSPENDED) {
-      throw new BadRequestException(
-        user.profileCompleted
-          ? "Account suspended. Contact support."
-          : "Please complete your profile at /api/customer/profile to activate your account.",
-      );
+    if (user.status === UserStatus.SUSPENDED && user.profileCompleted) {
+      throw new UnauthorizedException("الحساب موقوف. تواصل مع الدعم.");
     }
 
+    // ACTIVE → normal login OTP
+    // SUSPENDED + !profileCompleted → also send OTP; verifyLoginOtp will issue tokens
+    //   so the customer can immediately call POST /api/customer/profile
     await this.otpService.saveOtp(user.id, OtpPurpose.LOGIN, user.phone);
     return {
-      data: { userId: user.id },
-      message: "Login OTP sent to your phone.",
+      data: { phone: user.phone },
+      message:
+        user.status === UserStatus.SUSPENDED
+          ? "تم إرسال رمز التحقق. تحقق منه للحصول على رمز الوصول وإكمال ملفك."
+          : "تم إرسال رمز تسجيل الدخول إلى هاتفك.",
     };
   }
 
   async verifyLoginOtp(dto: VerifyOtpDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found.");
+    const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role !== UserRole.CUSTOMER)
-      throw new BadRequestException("OTP login is for customers only.");
-    if (user.status !== UserStatus.ACTIVE)
-      throw new UnauthorizedException("Account is not active.");
+      throw new BadRequestException("تسجيل الدخول برمز OTP متاح للعملاء فقط.");
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("رقم الهاتف غير مُحقَّق.");
+    // Allow ACTIVE and SUSPENDED+!profileCompleted — both get tokens.
+    // SUSPENDED+profileCompleted means manually suspended by admin.
+    if (user.status === UserStatus.SUSPENDED && user.profileCompleted)
+      throw new UnauthorizedException("الحساب موقوف. تواصل مع الدعم.");
 
     await this.otpService.verifyOtp(user.id, OtpPurpose.LOGIN, dto.otp);
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
     const tokens = await this.issuePair(user);
-    return { data: tokens, message: "Login successful." };
+
+    const message =
+      user.status === UserStatus.SUSPENDED
+        ? "تم التحقق من الرمز. يرجى إكمال ملفك الشخصي."
+        : "تم تسجيل الدخول بنجاح.";
+
+    return { data: tokens, message };
   }
 
   // ─── Delivery Login (phone + password) ───────────────────────────────────────
 
   async loginDelivery(dto: LoginDeliveryDto) {
+    await this.checkLoginRateLimit(dto.phone);
+
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.DELIVERY },
     });
-    if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials.");
-
-    const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+    if (!user) {
+      await this.recordFailedLogin(dto.phone);
+      throw new UnauthorizedException("بيانات الدخول غير صحيحة.");
+    }
 
     if (user.status === UserStatus.BANNED)
-      throw new UnauthorizedException("Account is banned. Contact support.");
+      throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
     if (user.status === UserStatus.PENDING)
-      throw new BadRequestException("Please verify your phone first.");
+      throw new BadRequestException("يرجى التحقق من رقم هاتفك أولاً.");
+
+    // No password means profile was never completed (password is set during completeProfile).
+    // Guide them to re-register to get a fresh access token.
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        "لم يتم تعيين كلمة مرور. سجّل من جديد لاستلام رمز الوصول وإكمال ملفك.",
+      );
+    }
+
+    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!ok) {
+      await this.recordFailedLogin(dto.phone);
+      throw new UnauthorizedException("بيانات الدخول غير صحيحة.");
+    }
+
+    await this.clearLoginAttempts(dto.phone);
 
     if (user.status === UserStatus.SUSPENDED) {
-      if (!user.profileCompleted) {
-        throw new BadRequestException(
-          "Please complete your profile at /api/delivery/profile/complete and submit your application.",
-        );
-      }
-      // Profile submitted — pending admin approval. Allow login with a notice.
       await this.userRepo.update(user.id, { lastLoginAt: new Date() });
       user.lastLoginAt = new Date();
       const tokens = await this.issuePair(user);
+      if (!user.profileCompleted) {
+        // Password was set via forgot-password but profile not yet submitted.
+        // Return tokens so they can reach the profile-completion endpoint.
+        return {
+          data: tokens,
+          message:
+            "تم تسجيل الدخول. أكمل ملفك الشخصي.",
+        };
+      }
+      // Profile submitted — awaiting admin approval.
       return {
         data: tokens,
-        message: "Login successful. Your account is pending admin approval.",
+        message: "تم تسجيل الدخول. حسابك قيد موافقة الإدارة.",
       };
     }
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
     const tokens = await this.issuePair(user);
-    return { data: tokens, message: "Login successful." };
+    return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
   // ─── Restaurant Login (phone + password) ─────────────────────────────────────
 
   async loginRestaurant(dto: LoginRestaurantDto) {
+    await this.checkLoginRateLimit(dto.phone);
+
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.RESTAURANT_OWNER },
     });
-    if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials.");
-
-    const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+    if (!user) {
+      await this.recordFailedLogin(dto.phone);
+      throw new UnauthorizedException("بيانات الدخول غير صحيحة.");
+    }
 
     if (user.status === UserStatus.BANNED)
-      throw new UnauthorizedException("Account is banned. Contact support.");
+      throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
     if (user.status === UserStatus.PENDING)
-      throw new BadRequestException("Please verify your phone first.");
+      throw new BadRequestException("يرجى التحقق من رقم هاتفك أولاً.");
+
+    // No password means profile was never completed.
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        "لم يتم تعيين كلمة مرور. سجّل من جديد لاستلام رمز الوصول وإكمال ملفك.",
+      );
+    }
+
+    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!ok) {
+      await this.recordFailedLogin(dto.phone);
+      throw new UnauthorizedException("بيانات الدخول غير صحيحة.");
+    }
+
+    await this.clearLoginAttempts(dto.phone);
 
     if (user.status === UserStatus.SUSPENDED) {
-      if (!user.profileCompleted) {
-        throw new BadRequestException(
-          "Please complete your restaurant profile at /api/restaurant/profile.",
-        );
-      }
       await this.userRepo.update(user.id, { lastLoginAt: new Date() });
       user.lastLoginAt = new Date();
       const tokens = await this.issuePair(user);
+      if (!user.profileCompleted) {
+        return {
+          data: tokens,
+          message:
+            "تم تسجيل الدخول. أكمل ملفك الشخصي.",
+        };
+      }
       return {
         data: tokens,
-        message: "Login successful. Your account is pending admin approval.",
+        message: "تم تسجيل الدخول. حسابك قيد موافقة الإدارة.",
       };
     }
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
     const tokens = await this.issuePair(user);
-    return { data: tokens, message: "Login successful." };
+    return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
   // ─── Manager Login (email + password) ────────────────────────────────────────
 
   async loginManager(dto: LoginManagerDto) {
+    await this.checkLoginRateLimit(dto.email);
+
     const user = await this.userRepo.findOne({
       where: { email: dto.email, role: UserRole.MANAGER },
     });
-    if (!user || !user.passwordHash)
-      throw new UnauthorizedException("Invalid credentials.");
+    if (!user || !user.passwordHash) {
+      await this.recordFailedLogin(dto.email);
+      throw new UnauthorizedException("بيانات الدخول غير صحيحة.");
+    }
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid credentials.");
+    if (!ok) {
+      await this.recordFailedLogin(dto.email);
+      throw new UnauthorizedException("بيانات الدخول غير صحيحة.");
+    }
 
     if (user.status !== UserStatus.ACTIVE)
-      throw new UnauthorizedException("Manager account is not active.");
+      throw new UnauthorizedException("حساب المدير غير نشط.");
 
+    await this.clearLoginAttempts(dto.email);
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
     const tokens = await this.issuePair(user);
-    return { data: tokens, message: "Login successful." };
+    return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
   // ─── Password Management ──────────────────────────────────────────────────────
 
   async forgotPassword(dto: ForgotPasswordDto) {
     if (!dto.phone && !dto.email)
-      throw new BadRequestException("Provide phone or email.");
+      throw new BadRequestException("يرجى إدخال رقم الهاتف أو البريد الإلكتروني.");
 
     const user = dto.phone
       ? await this.userRepo.findOne({ where: { phone: dto.phone } })
       : await this.userRepo.findOne({ where: { email: dto.email } });
 
     if (!user)
-      throw new NotFoundException("No account found with that contact.");
+      throw new NotFoundException("لا يوجد حساب لهذا الاتصال.");
     if (user.role === UserRole.CUSTOMER)
       throw new BadRequestException(
-        "Customers use OTP-based login and have no password.",
+        "العملاء يسجلون الدخول برمز OTP وليس لديهم كلمة مرور.",
       );
     if (user.status === UserStatus.BANNED)
-      throw new UnauthorizedException("Account is banned.");
+      throw new UnauthorizedException("الحساب محظور.");
     if (user.status === UserStatus.PENDING)
-      throw new BadRequestException("Verify your phone first.");
+      throw new BadRequestException("تحقق من رقم هاتفك أولاً.");
 
     const identifier = user.phone ?? user.email;
     await this.otpService.saveOtp(
@@ -442,14 +575,20 @@ export class AuthService {
       OtpPurpose.PASSWORD_RESET,
       identifier,
     );
-    return { data: { userId: user.id }, message: "Password reset OTP sent." };
+    return { data: null, message: "تم إرسال رمز إعادة تعيين كلمة المرور." };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException("User not found.");
+    if (!dto.phone && !dto.email)
+      throw new BadRequestException("يرجى إدخال رقم الهاتف أو البريد الإلكتروني.");
+
+    const user = dto.phone
+      ? await this.userRepo.findOne({ where: { phone: dto.phone } })
+      : await this.userRepo.findOne({ where: { email: dto.email } });
+
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.CUSTOMER)
-      throw new BadRequestException("Customers have no password.");
+      throw new BadRequestException("العملاء لا يملكون كلمة مرور.");
 
     await this.otpService.verifyOtp(
       user.id,
@@ -463,28 +602,29 @@ export class AuthService {
 
     return {
       data: null,
-      message: "Password reset successfully. Please log in again.",
+      message: "تمت إعادة تعيين كلمة المرور بنجاح. سجّل الدخول مجدداً.",
     };
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found.");
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.CUSTOMER)
-      throw new BadRequestException("Customers have no password.");
+      throw new BadRequestException("العملاء لا يملكون كلمة مرور.");
     if (!user.passwordHash)
       throw new BadRequestException(
-        "No password set. Use forgot-password flow.",
+        "لم يتم تعيين كلمة مرور. استخدم خاصية نسيت كلمة المرور.",
       );
 
     const ok = await bcrypt.compare(dto.oldPassword, user.passwordHash);
-    if (!ok) throw new BadRequestException("Current password is incorrect.");
+    if (!ok) throw new BadRequestException("كلمة المرور الحالية غير صحيحة.");
     if (dto.oldPassword === dto.newPassword)
-      throw new BadRequestException("New password must differ from current.");
+      throw new BadRequestException("يجب أن تختلف كلمة المرور الجديدة عن الحالية.");
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
     await this.userRepo.update(userId, { passwordHash });
-    return { data: null, message: "Password changed successfully." };
+    await this.jwtService.revokeAllUserTokens(userId);
+    return { data: null, message: "تم تغيير كلمة المرور بنجاح. سجّل الدخول مجدداً." };
   }
 
   // ─── Token Management ──────────────────────────────────────────────────────────
@@ -493,26 +633,20 @@ export class AuthService {
     const payload = await this.jwtService.verifyRefreshToken(token);
 
     const user = await this.userRepo.findOne({ where: { id: payload.sub } });
-    if (!user) throw new UnauthorizedException("User not found.");
+    if (!user) throw new UnauthorizedException("المستخدم غير موجود.");
     if (user.status === UserStatus.BANNED)
-      throw new UnauthorizedException("Account is banned.");
+      throw new UnauthorizedException("الحساب محظور.");
 
-    const newPayload = {
-      sub: user.id,
-      role: user.role,
-      ...(user.phone && { phone: user.phone }),
-      ...(user.email && { email: user.email }),
-      profileCompleted: user.profileCompleted,
-    };
-    return {
-      data: { accessToken: this.jwtService.signAccessToken(newPayload) },
-      message: "Token refreshed.",
-    };
+    // Revoke the old refresh token before issuing a new pair (rotation)
+    await this.jwtService.revokeRefreshToken(token);
+
+    const tokens = await this.issuePair(user);
+    return { data: tokens, message: "تم تجديد الرمز." };
   }
 
-  async logout(userId: string, token: string) {
+  async logout(_userId: string, token: string) {
     await this.jwtService.revokeRefreshToken(token);
-    return { data: null, message: "Logged out successfully." };
+    return { data: null, message: "تم تسجيل الخروج بنجاح." };
   }
 
   // ─── NATS Event Handlers — user status transitions ────────────────────────────
@@ -540,23 +674,24 @@ export class AuthService {
 
   /** delivery-service emits this after manager approves an application. */
   async onDeliveryAgentApproved(data: { userId: string }) {
-    await this.userRepo.update(
-      { id: data.userId, role: UserRole.DELIVERY },
-      { status: UserStatus.ACTIVE },
-    );
+    const user = await this.userRepo.findOne({ where: { id: data.userId } });
+    if (!user || user.role !== UserRole.DELIVERY) {
+      this.logger.warn(`onDeliveryAgentApproved: invalid userId or role for ${data.userId}`);
+      return;
+    }
+    await this.userRepo.update({ id: data.userId }, { status: UserStatus.ACTIVE });
     this.logger.log(`Delivery agent ${data.userId} approved → ACTIVE`);
   }
 
   /** delivery-service emits this after manager rejects an application. */
   async onDeliveryAgentRejected(data: { userId: string }) {
-    // Reset profileCompleted so the agent can resubmit a corrected application.
-    await this.userRepo.update(
-      { id: data.userId, role: UserRole.DELIVERY },
-      { profileCompleted: false },
-    );
-    this.logger.log(
-      `Delivery agent ${data.userId} rejected → profileCompleted reset`,
-    );
+    const user = await this.userRepo.findOne({ where: { id: data.userId } });
+    if (!user || user.role !== UserRole.DELIVERY) {
+      this.logger.warn(`onDeliveryAgentRejected: invalid userId or role for ${data.userId}`);
+      return;
+    }
+    await this.userRepo.update({ id: data.userId }, { profileCompleted: false });
+    this.logger.log(`Delivery agent ${data.userId} rejected → profileCompleted reset`);
   }
 
   /** restaurant-service emits this after owner saves their restaurant profile. */
@@ -570,30 +705,30 @@ export class AuthService {
 
   /** restaurant-service emits this after manager approves the restaurant. */
   async onRestaurantOwnerApproved(data: { userId: string }) {
-    await this.userRepo.update(
-      { id: data.userId, role: UserRole.RESTAURANT_OWNER },
-      { status: UserStatus.ACTIVE },
-    );
+    const user = await this.userRepo.findOne({ where: { id: data.userId } });
+    if (!user || user.role !== UserRole.RESTAURANT_OWNER) {
+      this.logger.warn(`onRestaurantOwnerApproved: invalid userId or role for ${data.userId}`);
+      return;
+    }
+    await this.userRepo.update({ id: data.userId }, { status: UserStatus.ACTIVE });
     this.logger.log(`Restaurant owner ${data.userId} approved → ACTIVE`);
   }
 
   /** restaurant-service emits this after manager rejects the restaurant. */
   async onRestaurantOwnerRejected(data: { userId: string }) {
-    await this.userRepo.update(
-      { id: data.userId, role: UserRole.RESTAURANT_OWNER },
-      { profileCompleted: false },
-    );
-    this.logger.log(
-      `Restaurant owner ${data.userId} rejected → profileCompleted reset`,
-    );
+    const user = await this.userRepo.findOne({ where: { id: data.userId } });
+    if (!user || user.role !== UserRole.RESTAURANT_OWNER) {
+      this.logger.warn(`onRestaurantOwnerRejected: invalid userId or role for ${data.userId}`);
+      return;
+    }
+    await this.userRepo.update({ id: data.userId }, { profileCompleted: false });
+    this.logger.log(`Restaurant owner ${data.userId} rejected → profileCompleted reset`);
   }
 
   /** delivery-service or restaurant-service set a password on behalf of user. */
-  async onPasswordSet(data: { userId: string; passwordHash: string }) {
-    await this.userRepo.update(
-      { id: data.userId },
-      { passwordHash: data.passwordHash },
-    );
+  async onPasswordSet(data: { userId: string; password: string }) {
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    await this.userRepo.update({ id: data.userId }, { passwordHash });
     this.logger.log(`Password set for user ${data.userId}`);
   }
 }

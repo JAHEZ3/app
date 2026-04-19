@@ -8,50 +8,34 @@ import {
   MinLength,
 } from 'class-validator';
 
-/**
- * Step 1 of customer registration — phone only.
- * OTP is sent; password is never needed (OTP-based login).
- */
 export class RegisterCustomerDto {
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone: string;
 
   @IsOptional()
-  @IsObject()
+  @IsObject({ message: 'معلومات الجهاز يجب أن تكون كائناً.' })
   deviceInfo?: Record<string, any>;
 }
 
-/**
- * Step 1 of delivery registration — phone only.
- * Password is set later via submit-request after OTP verification.
- */
 export class RegisterDeliveryDto {
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone: string;
 }
 
-/**
- * Step 1 of restaurant owner registration — phone only.
- * Password is set later via submit-request after OTP verification.
- */
 export class RegisterRestaurantDto {
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone: string;
 }
 
-/**
- * Manager accounts are created by existing managers — never self-registered.
- * Password is set at creation time; no OTP flow.
- */
 export class RegisterManagerDto {
-  @IsEmail()
+  @IsEmail({}, { message: 'البريد الإلكتروني غير صالح.' })
   email: string;
 
-  @IsString()
-  @MinLength(8)
+  @IsString({ message: 'كلمة المرور يجب أن تكون نصاً.' })
+  @MinLength(8, { message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.' })
   password: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'الاسم الكامل يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'الاسم الكامل مطلوب.' })
   fullName: string;
 }

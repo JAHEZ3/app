@@ -11,8 +11,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileFieldsInterceptor } from "@nestjs/platform-express";
-import { diskStorage } from "multer";
-import { extname } from "path";
+import { memoryStorage } from "multer";
 import { DeliveryServiceService } from "./delivery-service.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RolesGuard } from "./guards/roles.guard";
@@ -22,17 +21,7 @@ import { CompleteDeliveryProfileDto } from "./dto/complete-profile.dto";
 import { RejectApplicationDto } from "./dto/review-application.dto";
 
 const multerOptions = {
-  storage: diskStorage({
-    destination: "./uploads/delivery",
-    filename: (
-      _req: any,
-      file: Express.Multer.File,
-      cb: (err: any, name: string) => void,
-    ) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `${file.fieldname}-${unique}${extname(file.originalname)}`);
-    },
-  }),
+  storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (
     _req: any,
@@ -61,19 +50,30 @@ export class DeliveryServiceController {
     return { data: this.service.getQuestions() };
   }
 
+  /**
+   * GET /api/delivery/profile
+   * Auth: Bearer token (delivery role)
+   * Returns the agent's full profile + presigned photo URLs.
+   */
+  @Get("profile")
+  @UseGuards(JwtAuthGuard)
+  getProfile(@CurrentUser("sub") userId: string) {
+    return this.service.getProfile(userId);
+  }
+
   // ─── Profile: submit application (JWT required) ───────────────────────────────
 
   /**
    * POST /api/delivery/profile/complete
    * Auth: Bearer token (delivery role)
    * Multipart/form-data fields:
-   *   firstName, lastName, dateOfBirth, agentType  — text
+   *   firstName, lastName, dateOfBirth  — text
    *   vehicleType, vehiclePlate                    — text (optional)
    *   answers                                      — JSON string: [{ question, answer }, ...]
    *   profilePicture                               — image file
    *   idPicture                                    — image file
    */
-  @Post("profile/complete")
+  @Post("profile")
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileFieldsInterceptor(
@@ -88,23 +88,13 @@ export class DeliveryServiceController {
     @CurrentUser("sub") userId: string,
     @CurrentUser("phone") phone: string,
     @Body() dto: CompleteDeliveryProfileDto,
-    @Body("answers") answersRaw: string,
     @UploadedFiles()
     files: {
       profilePicture?: Express.Multer.File[];
       idPicture?: Express.Multer.File[];
     },
   ) {
-    let answers: { question: string; answer: string }[];
-    try {
-      answers = JSON.parse(answersRaw);
-    } catch {
-      throw new BadRequestException("answers must be a valid JSON array");
-    }
-    if (!Array.isArray(answers)) {
-      throw new BadRequestException("answers must be a JSON array");
-    }
-    return this.service.completeProfile(userId, phone, dto, answers, files);
+    return this.service.completeProfile(userId, phone, dto, dto.answers, files);
   }
 
   // ─── Manager: view submitted applications ────────────────────────────────────

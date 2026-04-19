@@ -19,21 +19,19 @@ export class JwtAuthGuard implements CanActivate {
     const authHeader: string = request.headers['authorization'];
 
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid authorization header');
+      throw new UnauthorizedException('رمز الوصول مفقود أو غير صالح.');
     }
+
+    const secret = this.configService.get<string>('JWT_ACCESS_SECRET');
+    if (!secret) throw new UnauthorizedException('خطأ في إعداد الخادم.');
 
     const token = authHeader.slice(7);
     try {
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>(
-          'JWT_ACCESS_SECRET',
-          'access-secret-change-in-prod',
-        ),
-      });
+      const payload = this.jwtService.verify(token, { secret });
       request.user = payload;
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid or expired access token');
+      throw new UnauthorizedException('رمز الوصول غير صالح أو منتهي الصلاحية.');
     }
   }
 }

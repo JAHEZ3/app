@@ -1,35 +1,31 @@
 import { IsEmail, IsMobilePhone, IsString, MinLength } from 'class-validator';
 
-// Customer: phone → OTP → verify-otp for tokens
 export class LoginCustomerDto {
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone: string;
 }
 
-// Delivery agent: phone + password
 export class LoginDeliveryDto {
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone: string;
 
-  @IsString()
+  @IsString({ message: 'كلمة المرور يجب أن تكون نصاً.' })
   password: string;
 }
 
-// Restaurant owner: phone + password
 export class LoginRestaurantDto {
-  @IsMobilePhone()
+  @IsMobilePhone(undefined, undefined, { message: 'رقم الهاتف غير صالح.' })
   phone: string;
 
-  @IsString()
+  @IsString({ message: 'كلمة المرور يجب أن تكون نصاً.' })
   password: string;
 }
 
-// Manager: email + password
 export class LoginManagerDto {
-  @IsEmail()
+  @IsEmail({}, { message: 'البريد الإلكتروني غير صالح.' })
   email: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsString({ message: 'كلمة المرور يجب أن تكون نصاً.' })
+  @MinLength(1, { message: 'كلمة المرور مطلوبة.' })
   password: string;
 }

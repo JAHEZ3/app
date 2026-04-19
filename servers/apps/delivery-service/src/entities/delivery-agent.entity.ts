@@ -1,15 +1,11 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import { PaymentInfo } from '../common/payment-info';
 
 export enum AgentStatus {
   PENDING_APPROVAL = 'pending_approval',
   ACTIVE = 'active',
   SUSPENDED = 'suspended',
   OFFLINE = 'offline',
-}
-
-export enum AgentType {
-  FREELANCER = 'freelancer',
-  COMPANY_EMPLOYEE = 'company_employee',
 }
 
 export enum VehicleType {
@@ -32,9 +28,6 @@ export class DeliveryAgent {
   @Index()
   @Column({ name: 'user_id', type: 'uuid', unique: true })
   userId: string;
-
-  @Column({ name: 'agent_type', type: 'enum', enum: AgentType, enumName: 'agent_type' })
-  agentType: AgentType;
 
   @Column({ name: 'full_name', length: 150 })
   fullName: string;
@@ -65,6 +58,24 @@ export class DeliveryAgent {
 
   @Column({ name: 'vehicle_plate', length: 20, nullable: true })
   vehiclePlate: string;
+
+  @Column({ name: 'vehicle_license_number', length: 50, nullable: true })
+  vehicleLicenseNumber: string;
+
+  @Column({ length: 100, nullable: true })
+  city: string;
+
+  @Column({ name: 'emergency_contact_name', length: 150, nullable: true })
+  emergencyContactName: string;
+
+  @Column({ name: 'emergency_contact_phone', length: 20, nullable: true })
+  emergencyContactPhone: string;
+
+  @Column({ name: 'payment_info', type: 'jsonb', nullable: true })
+  paymentInfo: PaymentInfo;
+
+  @Column({ name: 'terms_accepted', default: false })
+  termsAccepted: boolean;
 
   @Index()
   @Column({ type: 'enum', enum: AgentStatus, enumName: 'agent_status', default: AgentStatus.PENDING_APPROVAL })

@@ -178,7 +178,7 @@ export class AuthController {
 
   /** delivery-service or restaurant-service → password set for user */
   @EventPattern("user.password.set")
-  onPasswordSet(@Payload() data: { userId: string; passwordHash: string }) {
+  onPasswordSet(@Payload() data: { userId: string; password: string }) {
     return this.authService.onPasswordSet(data);
   }
 }

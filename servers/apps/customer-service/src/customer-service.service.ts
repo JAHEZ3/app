@@ -10,7 +10,7 @@ import { Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
 import { Customer } from "./entities/customer.entity";
 import { CompleteCustomerProfileDto } from "./dto/complete-profile.dto";
-import { console } from "inspector";
+import { S3Service } from "./s3.service";
 
 export interface CustomerCreatedPayload {
   userId: string;
@@ -26,6 +26,7 @@ export class CustomerServiceService {
     private readonly customerRepo: Repository<Customer>,
     @Inject("NATS_SERVICE")
     private readonly natsClient: ClientProxy,
+    private readonly s3: S3Service,
   ) {}
 
   // ─── NATS: create minimal stub on user registration ───────────────────────────
@@ -54,22 +55,25 @@ export class CustomerServiceService {
   // Called by the customer after OTP verification (status = SUSPENDED).
   // On success: emits 'customer.profile.completed' → auth-service sets ACTIVE.
 
-  async completeProfile(userId: string, dto: CompleteCustomerProfileDto) {
-    console.log("Completing profile for userId:", userId, "with data:", dto);
-
+  async completeProfile(
+    userId: string,
+    dto: CompleteCustomerProfileDto,
+    avatarFile?: Express.Multer.File,
+  ) {
     let customer = await this.customerRepo.findOne({ where: { userId } });
     if (!customer) {
-      // Stub may not exist if NATS event was missed — create it now
       customer = await this.customerRepo.save(
         this.customerRepo.create({ userId }),
       );
     }
 
     if (customer.profileCompleted) {
-      throw new BadRequestException(
-        "Profile already completed. Use PATCH /profile to update it.",
-      );
+      throw new BadRequestException("تم إكمال الملف الشخصي مسبقاً.");
     }
+
+    const avatarUrl = avatarFile
+      ? await this.s3.upload(avatarFile, "customer")
+      : dto.avatarUrl;
 
     await this.customerRepo.update(customer.id, {
       firstName: dto.firstName,
@@ -78,18 +82,22 @@ export class CustomerServiceService {
       ...(dto.dateOfBirth && { dateOfBirth: dto.dateOfBirth }),
       locationLat: dto.locationLat,
       locationLng: dto.locationLng,
-      ...(dto.avatarUrl && { avatarUrl: dto.avatarUrl }),
+      ...(avatarUrl && { avatarUrl }),
       profileCompleted: true,
     });
 
     // Notify auth-service: profileCompleted = true → user status → ACTIVE
-    this.natsClient.emit("customer.profile.completed", { userId });
+    try {
+      this.natsClient.emit("customer.profile.completed", { userId });
+    } catch (err) {
+      this.logger.error("NATS emit customer.profile.completed failed", err);
+    }
 
     this.logger.log(`Customer ${userId} profile completed`);
 
     return {
       data: { userId },
-      message: "Profile completed. Your account is now active.",
+      message: "تم إكمال الملف الشخصي. حسابك نشط الآن.",
     };
   }
 
@@ -98,9 +106,10 @@ export class CustomerServiceService {
   async updateProfile(
     userId: string,
     dto: Partial<CompleteCustomerProfileDto>,
+    avatarFile?: Express.Multer.File,
   ) {
     const customer = await this.customerRepo.findOne({ where: { userId } });
-    if (!customer) throw new NotFoundException("Customer profile not found.");
+    if (!customer) throw new NotFoundException("الملف الشخصي للعميل غير موجود.");
 
     const updates: Partial<Customer> = {};
     if (dto.firstName) updates.firstName = dto.firstName;
@@ -111,11 +120,15 @@ export class CustomerServiceService {
     if (dto.dateOfBirth) updates.dateOfBirth = dto.dateOfBirth;
     if (dto.locationLat !== undefined) updates.locationLat = dto.locationLat;
     if (dto.locationLng !== undefined) updates.locationLng = dto.locationLng;
-    if (dto.avatarUrl) updates.avatarUrl = dto.avatarUrl;
+    if (avatarFile) {
+      updates.avatarUrl = await this.s3.upload(avatarFile, "customer");
+    } else if (dto.avatarUrl) {
+      updates.avatarUrl = dto.avatarUrl;
+    }
 
     await this.customerRepo.update(customer.id, updates);
     const updated = await this.customerRepo.findOne({ where: { userId } });
-    return { data: updated, message: "Profile updated." };
+    return { data: updated, message: "تم تحديث الملف الشخصي." };
   }
 
   // ─── HTTP: get own profile ────────────────────────────────────────────────────
@@ -125,7 +138,7 @@ export class CustomerServiceService {
       where: { userId },
       relations: ["addresses"],
     });
-    if (!customer) throw new NotFoundException("Customer profile not found.");
-    return { data: customer, message: "Profile retrieved." };
+    if (!customer) throw new NotFoundException("الملف الشخصي للعميل غير موجود.");
+    return { data: customer, message: "تم استرجاع الملف الشخصي." };
   }
 }

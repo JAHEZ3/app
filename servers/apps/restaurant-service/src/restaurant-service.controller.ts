@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,8 +8,12 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { EventPattern, Payload } from "@nestjs/microservices";
 import { RestaurantServiceService } from "./restaurant-service.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
@@ -31,6 +36,21 @@ import { UpdateOptionGroupDto } from "./dto/update-option-group.dto";
 import { CreateOptionDto } from "./dto/create-option.dto";
 import { UpdateOptionDto } from "./dto/update-option.dto";
 
+const multerOptions = {
+  storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (
+    _req: any,
+    file: Express.Multer.File,
+    cb: (err: any, accept: boolean) => void,
+  ) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new BadRequestException("Only image files are allowed"), false);
+    }
+    cb(null, true);
+  },
+};
+
 @Controller()
 export class RestaurantServiceController {
   constructor(private readonly service: RestaurantServiceService) {}
@@ -52,12 +72,6 @@ export class RestaurantServiceController {
     return this.service.listPublicRestaurants(city);
   }
 
-  /** GET /api/restaurant/:id — full menu tree */
-  @Get(":id")
-  getRestaurant(@Param("id") id: string) {
-    return this.service.getPublicRestaurantWithMenu(id);
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
   // Restaurant owner — profile & settings
   // ═══════════════════════════════════════════════════════════════════════════
@@ -65,16 +79,36 @@ export class RestaurantServiceController {
   /**
    * POST /api/restaurant/profile
    * First-time profile completion (SUSPENDED → pending admin approval).
-   * Body: restaurantName, ownerName, password, [description, logoUrl, street, city, cuisineType]
+   * Multipart/form-data fields:
+   *   restaurantName, ownerName, ownerNationalIdNumber, commercialRegNumber,
+   *   restaurantPhone, password, lat, lng, deliveryRadiusKm, iban, termsAccepted  — text
+   *   description, street, city, cuisineType                                       — text (optional)
+   *   logo                                                                          — image file
+   *   ownerIdPicture                                                                — image file
    */
   @Post("profile")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "logo", maxCount: 1 },
+        { name: "ownerIdPicture", maxCount: 1 },
+      ],
+      multerOptions,
+    ),
+  )
   completeProfile(
     @CurrentUser("sub") userId: string,
+    @CurrentUser("phone") phone: string,
     @Body() dto: CompleteRestaurantProfileDto,
+    @UploadedFiles()
+    files: {
+      logo?: Express.Multer.File[];
+      ownerIdPicture?: Express.Multer.File[];
+    },
   ) {
-    return this.service.completeProfile(userId, dto);
+    return this.service.completeProfile(userId, phone, dto, files);
   }
 
   /** GET /api/restaurant/profile */
@@ -96,8 +130,8 @@ export class RestaurantServiceController {
     return this.service.updateProfile(userId, dto);
   }
 
-  /** POST /api/restaurant/settings */
-  @Post("settings")
+  /** PATCH /api/restaurant/settings */
+  @Patch("settings")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
   updateSettings(
@@ -387,5 +421,13 @@ export class RestaurantServiceController {
     @Param("optionId") optionId: string,
   ) {
     return this.service.deleteOption(userId, optionId);
+  }
+
+  // ─── Must be last: wildcard catches any GET /:id not matched above ────────────
+
+  /** GET /api/restaurant/:id — public full menu tree */
+  @Get(":id")
+  getRestaurant(@Param("id") id: string) {
+    return this.service.getPublicRestaurantWithMenu(id);
   }
 }
