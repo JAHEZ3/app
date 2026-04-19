@@ -18,7 +18,7 @@ import SplashLoadingDots from "../components/SplashLoadingDots";
 const { width, height } = Dimensions.get("window");
 
 const HERO =
-  "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=900&h=1600&fit=crop&crop=center";
+  "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=900&h=1600&fit=crop&crop=center";
 
 const ease = Easing.out(Easing.cubic);
 const gentleLoop = Easing.inOut(Easing.sin);

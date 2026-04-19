@@ -142,38 +142,63 @@ export default function LoginScreen() {
             justifyContent: "center",
           }}
         >
+          {/* Circle mark */}
           <View
             style={{
-              width: 62,
-              height: 62,
-              borderRadius: 18,
+              width: 72,
+              height: 72,
+              borderRadius: 36,
               backgroundColor: "#F55905",
               alignItems: "center",
               justifyContent: "center",
               shadowColor: "#F55905",
-              shadowOffset: { width: 0, height: 8 },
+              shadowOffset: { width: 0, height: 14 },
               shadowOpacity: 0.5,
-              shadowRadius: 16,
-              elevation: 12,
-              marginBottom: 10,
+              shadowRadius: 22,
+              elevation: 14,
+              marginBottom: 14,
             }}
           >
-            <Ionicons name="rocket" size={28} color="#fff" />
+            <Text
+              style={{
+                fontFamily: "Cairo_700Bold",
+                fontSize: 36,
+                color: "#fff",
+                lineHeight: 42,
+                marginTop: 4,
+              }}
+            >
+              ج
+            </Text>
           </View>
-          <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 42, color: "#fff" }}>
-            جهز
+
+          {/* App name */}
+          <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 48, color: "#fff", lineHeight: 54 }}>
+            جاهز
           </Text>
+
+          {/* Orange accent dot */}
+          <View
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 3.5,
+              backgroundColor: "#F55905",
+              marginTop: 2,
+              marginBottom: 10,
+            }}
+          />
+
           <Text
             style={{
               fontFamily: "Tajawal_400Regular",
-              fontSize: 11,
-              color: "rgba(255,255,255,0.7)",
-              letterSpacing: 3,
+              fontSize: 10,
+              color: "rgba(255,255,255,0.55)",
+              letterSpacing: 4,
               textTransform: "uppercase",
-              marginTop: 2,
             }}
           >
-            CULINARY DELIVERY
+            CULINARY · DELIVERY
           </Text>
         </View>
       </Animated.View>

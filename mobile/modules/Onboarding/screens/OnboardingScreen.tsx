@@ -30,7 +30,7 @@ const SLIDES: OnboardingSlideData[] = [
     badge: "أكثر من 50+ مطعم في خدمتك",
     images: {
       primary:
-        "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=900&h=1600&fit=crop&crop=center",
+        "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=900&h=1600&fit=crop&crop=center",
       secondary: "",
     },
   },
@@ -42,7 +42,7 @@ const SLIDES: OnboardingSlideData[] = [
     badge: "توصيل خلال 30 دقيقة",
     images: {
       primary:
-        "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=900&h=1600&fit=crop&crop=center",
+        "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=900&h=1600&fit=crop&crop=center",
       secondary: "",
     },
   },
@@ -54,7 +54,7 @@ const SLIDES: OnboardingSlideData[] = [
     badge: "عروض حصرية كل يوم",
     images: {
       primary:
-        "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=900&h=1600&fit=crop&crop=center",
+        "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=900&h=1600&fit=crop&crop=center",
       secondary: "",
     },
   },
