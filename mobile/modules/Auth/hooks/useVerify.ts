@@ -1,13 +1,21 @@
 import { useMutation } from "@tanstack/react-query";
-import { useAuth } from ".."
+import { useAuth } from "..";
+import { useToken } from "@/store/useToken";
+import * as SecureStore from 'expo-secure-store';
 
 export const useVerify = () => {
     const { verify } = useAuth();
+    const { setAccessToken } = useToken();
+
     return useMutation({
         mutationKey: ["verify"],
         mutationFn: verify,
-        onSuccess: (data) => {
-            console.log(data, 'from berify');
+        onSuccess: async (data) => {
+            setAccessToken(data.accessToken);
+            await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+        },
+        onError(error) {
+            console.log(error);
         }
     });
-}
+};

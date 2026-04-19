@@ -8,7 +8,7 @@ type AuthProviderShape = PropsWithChildren<{
     value: AuthRepository | null,
 }>
 
-const AUthProvider = ({ value, children }: AuthProviderShape) => {
+const AuthProvider = ({ value, children }: AuthProviderShape) => {
     return(
         <AuthContext.Provider value={value}>
             {children}
@@ -16,7 +16,7 @@ const AUthProvider = ({ value, children }: AuthProviderShape) => {
     )
 }
 
-export default AUthProvider;
+export default AuthProvider;
 
 
 export const useAuth = () => {

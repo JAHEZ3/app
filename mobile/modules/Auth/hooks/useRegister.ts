@@ -1,14 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
-import { useAuth } from ".."
+import { useAuth } from "..";
 
 export const useRegister = () => {
-    const { register} = useAuth();
+    const { register } = useAuth();
 
     return useMutation({
         mutationKey: ["register"],
         mutationFn: register,
-        onSuccess: (data) => {
-            console.log(data, 'from register');
-        }
     });
-}
+};

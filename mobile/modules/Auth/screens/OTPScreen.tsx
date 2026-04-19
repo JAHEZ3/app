@@ -21,6 +21,7 @@ import { router } from "expo-router";
 import OTPInput from "../components/OTPInput";
 import AppButton from "../../../components/ui/AppButton";
 import { useVerify } from "../hooks/useVerify";
+import { useResendOtp } from "../hooks/useResendOtp";
 import { usePhoneNumber } from "@/store/usePhoneNumber";
 import { mapAuthError } from "../utils/mapAuthError";
 
@@ -127,7 +128,7 @@ function Countdown({ seconds, onExpire }: { seconds: number; onExpire: () => voi
     if (left <= 0) { onExpire(); return; }
     const t = setTimeout(() => setLeft((p) => p - 1), 1000);
     return () => clearTimeout(t);
-  }, [left]);
+  }, [left, onExpire]);
 
   if (left <= 0) return null;
 
@@ -153,39 +154,40 @@ export default function OTPScreen() {
   const [canResend, setCanResend] = useState(false);
   const [resendKey, setResendKey] = useState(0);
   const { mutateAsync: verify, isPending, isError, error } = useVerify();
+  const { mutateAsync: resendOtp, isPending: isResending, error: resendError } = useResendOtp();
   const { phoneNumber } = usePhoneNumber();
-
-
-
 
   const headerOpacity = useSharedValue(0);
   const headerY = useSharedValue(-8);
   useEffect(() => {
     headerOpacity.value = withTiming(1, { duration: 420, easing: ease });
     headerY.value = withTiming(0, { duration: 420, easing: ease });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const headerStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
     transform: [{ translateY: headerY.value }],
   }));
 
-  const handleVerify = useCallback(async () => {
+  const handleVerify = useCallback(async (code?: string) => {
     try {
-      await verify({ otp: otpCode, phone: phoneNumber });
+      await verify({ otp: code ?? otpCode, phone: phoneNumber });
       router.push("/complete-profile");
-    } catch (error) {
-      console.log("Verify failed:", error);
+    } catch {
+      // error displayed via isError state below
+      
     }
   }, [otpCode, phoneNumber, verify]);
 
-  const handleResend = () => {
-    setOtpCode("");
-    setCanResend(false);
-    setResendKey((k) => k + 1);
-  };
-
-  
+  const handleResend = useCallback(async () => {
+    try {
+      await resendOtp(phoneNumber);
+      setOtpCode("");
+      setCanResend(false);
+      setResendKey((k) => k + 1);
+    } catch {
+      // error displayed via resendError below
+    }
+  }, [phoneNumber, resendOtp]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }} edges={["top", "bottom"]}>
@@ -313,30 +315,42 @@ export default function OTPScreen() {
           <Row delay={360}>
             <View style={{ alignItems: "center", marginTop: 20, minHeight: 30 }}>
               {canResend ? (
-                <TouchableOpacity
-                  onPress={handleResend}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderRadius: 20,
-                    borderWidth: 1.5,
-                    borderColor: "#F55905",
-                  }}
-                >
-                  <Ionicons name="refresh" size={14} color="#F55905" />
-                  <Text
+                <View style={{ alignItems: "center", gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={handleResend}
+                    disabled={isResending}
                     style={{
-                      fontFamily: "Tajawal_500Medium",
-                      fontSize: 14,
-                      color: "#F55905",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      borderWidth: 1.5,
+                      borderColor: isResending ? "#ccc" : "#F55905",
+                      opacity: isResending ? 0.6 : 1,
                     }}
                   >
-                    إعادة إرسال الرمز
-                  </Text>
-                </TouchableOpacity>
+                    <Ionicons name="refresh" size={14} color={isResending ? "#ccc" : "#F55905"} />
+                    <Text
+                      style={{
+                        fontFamily: "Tajawal_500Medium",
+                        fontSize: 14,
+                        color: isResending ? "#ccc" : "#F55905",
+                      }}
+                    >
+                      {isResending ? "جارٍ الإرسال..." : "إعادة إرسال الرمز"}
+                    </Text>
+                  </TouchableOpacity>
+                  {resendError && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <Ionicons name="alert-circle" size={13} color="#E53935" />
+                      <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#E53935" }}>
+                        {mapAuthError(resendError)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               ) : (
                 <Countdown
                   key={resendKey}
@@ -352,8 +366,8 @@ export default function OTPScreen() {
             <View style={{ marginTop: 28 }}>
               <AppButton
                 label="تأكيد الرمز"
-                onPress={handleVerify}
-                disabled={otpCode.length < 6}
+                onPress={() => handleVerify()}
+                disabled={otpCode.length < 6 || isPending}
                 icon={
                   <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
                 }

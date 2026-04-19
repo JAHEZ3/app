@@ -8,7 +8,7 @@ export const toAdapter = (data: UserDTO): User => {
         email: data.email,
         phone: data.phone,
         fullName: data.full_name,
-        Password: data.password_hash,
+        passwordHash: data.password_hash,
         role: data.role,
         status: data.status,
         emailVerified: data.email_verified_at,

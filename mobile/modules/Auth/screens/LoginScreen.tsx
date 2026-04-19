@@ -56,22 +56,15 @@ export default function LoginScreen() {
   const isPhoneValid = phone.replace(/^\+\d{3}/, "").length === 9;
   const { setPhoneNumber, phoneNumber } = usePhoneNumber();
 
-  console.log(phoneNumber);
-
   async function handleThePhoneRegister() {
     try {
       await register(phone);
       setPhoneNumber(phone);
       router.push("/otp");
-    } catch (err) {
-      console.log("Register failed:", err);
+    } catch {
+      // error displayed via isError state below
     }
   }
-
-  if (isError) {
-    console.log(error, 'me');
-  }
-
 
   const heroOpacity = useSharedValue(0);
   const cardY = useSharedValue(40);
