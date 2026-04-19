@@ -4,12 +4,18 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
+    // HTTP context فقط — NATS/RPC تنتشر بشكل مستقل
+    if (host.getType() !== 'http') return;
+
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
@@ -18,20 +24,29 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    let message: string | string[] = 'Internal server error';
+    if (!(exception instanceof HttpException)) {
+      this.logger.error(
+        `خطأ غير متوقع: ${(exception as Error)?.message ?? exception}`,
+        (exception as Error)?.stack,
+      );
+    }
+
+    let message = 'حدث خطأ في الخادم. يرجى المحاولة مجدداً.';
     if (exception instanceof HttpException) {
       const res = exception.getResponse();
-      message =
-        typeof res === 'object' && (res as any).message
+      const raw =
+        typeof res === 'object' && res !== null && (res as any).message
           ? (res as any).message
           : exception.message;
+      message = Array.isArray(raw) ? raw[0] : raw;
     }
 
     response.status(status).json({
       success: false,
       statusCode: status,
-      message: Array.isArray(message) ? message[0] : message,
+      message,
       data: null,
     });
   }
 }
+

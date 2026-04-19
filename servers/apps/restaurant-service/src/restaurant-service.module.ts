@@ -7,6 +7,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { redisStore } from 'cache-manager-redis-yet';
 import { RestaurantServiceController } from './restaurant-service.controller';
 import { RestaurantServiceService } from './restaurant-service.service';
+import { S3Service } from './s3.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Restaurant } from './entities/restaurant.entity';
@@ -73,6 +74,6 @@ import { MealOption } from './entities/meal-option.entity';
     }),
   ],
   controllers: [RestaurantServiceController],
-  providers: [RestaurantServiceService, JwtAuthGuard, RolesGuard],
+  providers: [RestaurantServiceService, JwtAuthGuard, RolesGuard, S3Service],
 })
 export class RestaurantServiceModule {}

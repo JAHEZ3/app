@@ -15,7 +15,7 @@ export class JwtAuthGuard implements CanActivate {
     const authHeader: string = request.headers['authorization'];
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid authorization header');
+      throw new UnauthorizedException('رمز الوصول مفقود أو غير صالح.');
     }
 
     const token = authHeader.slice(7);

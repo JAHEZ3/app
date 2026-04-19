@@ -10,22 +10,22 @@ import {
 } from 'class-validator';
 
 export class HourEntryDto {
-  @IsInt()
-  @Min(0)
-  @Max(6)
-  dayOfWeek: number; // 0 = Sunday … 6 = Saturday
+  @IsInt({ message: 'يوم الأسبوع يجب أن يكون رقماً صحيحاً.' })
+  @Min(0, { message: 'يوم الأسبوع يجب أن يكون بين 0 (الأحد) و 6 (السبت).' })
+  @Max(6, { message: 'يوم الأسبوع يجب أن يكون بين 0 (الأحد) و 6 (السبت).' })
+  dayOfWeek: number;
 
-  @IsString()
-  @Matches(/^\d{2}:\d{2}$/, { message: 'openTime must be HH:MM' })
+  @IsString({ message: 'وقت الفتح يجب أن يكون نصاً.' })
+  @Matches(/^\d{2}:\d{2}$/, { message: 'وقت الفتح يجب أن يكون بتنسيق HH:MM.' })
   openTime: string;
 
-  @IsString()
-  @Matches(/^\d{2}:\d{2}$/, { message: 'closeTime must be HH:MM' })
+  @IsString({ message: 'وقت الإغلاق يجب أن يكون نصاً.' })
+  @Matches(/^\d{2}:\d{2}$/, { message: 'وقت الإغلاق يجب أن يكون بتنسيق HH:MM.' })
   closeTime: string;
 }
 
 export class SetHoursDto {
-  @IsArray()
+  @IsArray({ message: 'أوقات العمل يجب أن تكون مصفوفة.' })
   @ValidateNested({ each: true })
   @Type(() => HourEntryDto)
   hours: HourEntryDto[];
