@@ -11,8 +11,12 @@ export const useVerify = () => {
         mutationKey: ["verify"],
         mutationFn: verify,
         onSuccess: async (data) => {
-            setAccessToken(data.accessToken);
-            await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+            try {
+                setAccessToken(data.accessToken);
+                await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+            } catch (error) {
+                console.log(error);
+            }
         },
         onError(error) {
             console.log(error);

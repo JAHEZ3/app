@@ -156,6 +156,10 @@ export default function SplashScreen() {
       )
     );
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => router.replace("/onboarding"), 3200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

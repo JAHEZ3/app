@@ -26,7 +26,8 @@ import FormField from "../components/FormField";
 import PrivacyCard from "../components/PrivacyCard";
 import AppButton from "../../../components/ui/AppButton";
 import { useCompleteProfile } from "../hooks/useCompleteProfile";
-import { mapAuthError } from "../utils/mapAuthError";
+import { useLocation } from "../hooks/useLocation";
+import { mapAuthError } from "../../Auth/utils/mapAuthError";
 
 const ease = Easing.out(Easing.cubic);
 const monthNames = [
@@ -187,17 +188,28 @@ export default function CompleteProfileScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthday, setBirthday] = useState("");
+  
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [displayedMonth, setDisplayedMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
   const { mutateAsync: completeProfile, isPending, isError, error } = useCompleteProfile();
+  const { coords } = useLocation();
 
   async function handleSubmit() {
     try {
-      await completeProfile({ firstName, lastName, birthday });
-      router.replace("/");
+      const parsed = parseBirthday(birthday);
+      const isoDate = parsed!.toISOString().split("T")[0];
+      await completeProfile({
+        firstName,
+        lastName,
+        dateOfBirth: isoDate,
+        locationLat: coords?.lat ?? null,
+        locationLng: coords?.lng ?? null,
+      });
+      router.replace("/home/Home");
+      // @NOTE: ADD IN THIS ALERT FOR تم اكمال ملفك الشخصي بامكانك المتالعه
     } catch {
       // error displayed via isError state below
     }

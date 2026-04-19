@@ -70,7 +70,7 @@ export default function OnboardingScreen() {
 
   const handleNext = () => {
     if (isLastSlide) {
-      router.replace("/login");
+      router.replace("/auth/login");
     } else {
       carouselRef.current?.scrollTo({ index: currentIndex + 1, animated: true });
     }
@@ -114,7 +114,7 @@ export default function OnboardingScreen() {
       >
         {/* Skip */}
         <TouchableOpacity
-          onPress={() => router.replace("/login")}
+          onPress={() => router.replace("/auth/login")}
           style={{
             paddingVertical: 7,
             paddingHorizontal: 14,

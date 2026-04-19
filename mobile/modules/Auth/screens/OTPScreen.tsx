@@ -171,7 +171,7 @@ export default function OTPScreen() {
   const handleVerify = useCallback(async (code?: string) => {
     try {
       await verify({ otp: code ?? otpCode, phone: phoneNumber });
-      router.push("/complete-profile");
+      router.push("/auth/complete-profile");
     } catch {
       // error displayed via isError state below
       

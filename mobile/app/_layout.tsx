@@ -15,8 +15,11 @@ import {
 } from "@expo-google-fonts/tajawal";
 import * as SplashScreen from "expo-splash-screen";
 import { createAuthModule } from "@/modules/Auth/index";
+import { createProfileModule } from "@/modules/Profile/index";
+
 
 import { QueryClientProvider , QueryClient} from '@tanstack/react-query';
+
 
 
 SplashScreen.preventAutoHideAsync();
@@ -24,8 +27,15 @@ SplashScreen.preventAutoHideAsync();
 
 
 const { Provider: AuthProvider } = createAuthModule();
+const { Provider: ProfileProvider } = createProfileModule();
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // keep cache for 24 hours
+    },
+  },
+});
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -49,13 +59,16 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="otp" />
-          <Stack.Screen name="complete-profile" />
-        </Stack>
+        <ProfileProvider>
+          <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="auth/login" />
+            <Stack.Screen name="auth/otp" />
+            <Stack.Screen name="auth/complete-profile" />
+            <Stack.Screen name="home/Home" />
+          </Stack>
+        </ProfileProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

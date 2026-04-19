@@ -39,7 +39,14 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "نحتاج موقعك لتحديد أقرب خدمة إليك.",
+          "locationWhenInUsePermission": "نحتاج موقعك لتحديد أقرب خدمة إليك."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

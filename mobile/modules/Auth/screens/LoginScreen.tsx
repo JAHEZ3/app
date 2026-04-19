@@ -60,7 +60,7 @@ export default function LoginScreen() {
     try {
       await register(phone);
       setPhoneNumber(phone);
-      router.push("/otp");
+      router.push("/auth/otp");
     } catch {
       // error displayed via isError state below
     }
