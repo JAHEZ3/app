@@ -17,11 +17,11 @@ export const restRepository = (): AuthRepository => {
             await authApi.post('/api/auth/resend-otp', { phone });
         },
         logout: async (refreshToken: string): Promise<void> => {
-            const res = await authApi.delete('/api/auth/logout', {
+            const accessToken = useAuthStore.getState().accessToken;
+            await authApi.delete('/api/auth/logout', {
                 data: { refreshToken },
+                headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
             });
-            console.log(res.data, 'response api');
-            console.log(refreshToken, 'refreshToken api');
         },
     };
 };

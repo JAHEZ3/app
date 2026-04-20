@@ -190,7 +190,7 @@ export default function CompleteProfileScreen() {
         locationLat: coords?.lat ?? null,
         locationLng: coords?.lng ?? null,
       });
-      router.replace("/home/Home", { replace: true });
+      router.replace("/home/Home");
     } catch {
       // error displayed via isError below
     }
