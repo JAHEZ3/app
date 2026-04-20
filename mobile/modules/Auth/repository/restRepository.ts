@@ -1,7 +1,6 @@
-import { authApi, customerApi } from "../../../lib/api";
-import { AuthRepository, CompleteProfileParams, VerifyParams } from "./AuthRepository";
-import type { User } from "../entities/User";
-import { toAdapter } from "../adapter/toAdapter";
+import { useAuthStore } from "@/store/useAuthStore";
+import { authApi } from "../../../lib/api";
+import { AuthRepository, VerifyParams } from "./AuthRepository";
 
 
 export const restRepository = (): AuthRepository => {
@@ -16,6 +15,13 @@ export const restRepository = (): AuthRepository => {
         },
         resendOtp: async (phone: string): Promise<void> => {
             await authApi.post('/api/auth/resend-otp', { phone });
+        },
+        logout: async (refreshToken: string): Promise<void> => {
+            const res = await authApi.delete('/api/auth/logout', {
+                data: { refreshToken },
+            });
+            console.log(res.data, 'response api');
+            console.log(refreshToken, 'refreshToken api');
         },
     };
 };

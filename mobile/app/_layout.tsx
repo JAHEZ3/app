@@ -3,6 +3,7 @@ import "../global.css";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { useFonts } from "expo-font";
+import { useAuthInit } from "@/hooks/useAuthInit";
 import {
   Cairo_400Regular,
   Cairo_600SemiBold,
@@ -38,6 +39,8 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
+  useAuthInit();
+
   const [fontsLoaded] = useFonts({
     Cairo_400Regular,
     Cairo_600SemiBold,

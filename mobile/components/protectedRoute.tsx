@@ -1,25 +1,35 @@
-import React, { PropsWithChildren } from "react";
-import { Redirect } from "expo-router";
-import { RouteAccess, useProtectedRoute } from "@/hooks/useProtectedRoute";
+import React, { type PropsWithChildren } from 'react';
+import { Redirect } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
+import { useAuthStore } from '@/store/useAuthStore';
 
-type ProtectedRouteAccess = Exclude<RouteAccess, "entry">;
-
-type ProtectedRouteProps = PropsWithChildren<{
-    access: ProtectedRouteAccess;
+type Props = PropsWithChildren<{
+    loadingFallback?: React.ReactNode;
 }>;
 
-export const ProtectedRoute = ({
-    children,
-    access,
-}: ProtectedRouteProps) => {
-    const { isLoading, redirectTo } = useProtectedRoute(access);
+/**
+ * Wraps any tree that requires authentication.
+ * - idle/loading → shows loading spinner (or custom fallback)
+ * - unauthenticated → hard redirect to /auth/login
+ * - authenticated → renders children
+ */
+export const ProtectedRoute = ({ children, loadingFallback }: Props) => {
+    const status = useAuthStore((s) => s.status);
 
-    if (isLoading) {
-        return null;
+    if (status === 'idle' || status === 'loading') {
+        return (
+            <>
+                {loadingFallback ?? (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                        <ActivityIndicator size="large" />
+                    </View>
+                )}
+            </>
+        );
     }
 
-    if (redirectTo) {
-        return <Redirect href={redirectTo} />;
+    if (status === 'unauthenticated') {
+        return <Redirect href="/auth/login" />;
     }
 
     return <>{children}</>;
