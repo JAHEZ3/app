@@ -3,6 +3,7 @@ import "../global.css";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { useFonts } from "expo-font";
+import { useAuthInit } from "@/hooks/useAuthInit";
 import {
   Cairo_400Regular,
   Cairo_600SemiBold,
@@ -32,12 +33,14 @@ const { Provider: ProfileProvider } = createProfileModule();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      gcTime: 1000 * 60 * 60 * 24, // keep cache for 24 hours
+      gcTime: 1000 * 60 * 60 * 24,
     },
   },
 });
 
 export default function RootLayout() {
+  useAuthInit();
+
   const [fontsLoaded] = useFonts({
     Cairo_400Regular,
     Cairo_600SemiBold,
@@ -63,10 +66,10 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth/login" />
+            <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
             <Stack.Screen name="auth/otp" />
             <Stack.Screen name="auth/complete-profile" />
-            <Stack.Screen name="home/Home" />
+            <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
           </Stack>
         </ProfileProvider>
       </AuthProvider>

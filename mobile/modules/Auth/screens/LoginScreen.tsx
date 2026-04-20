@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,13 +18,14 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import PhoneInput from "../components/PhoneInput";
 import AppButton from "../../../components/ui/AppButton";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRegister } from "../hooks/useRegister";
+import { useLogin } from "../hooks/useLogin";
 import { usePhoneNumber } from "@/store/usePhoneNumber";
 import { mapAuthError } from "../utils/mapAuthError";
+import type { AuthMode } from "@/store/usePhoneNumber";
 
 const { height } = Dimensions.get("window");
 
@@ -52,15 +54,25 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState("");
-  const { mutateAsync: register, isPending, isError, error } = useRegister();
-  const isPhoneValid = phone.replace(/^\+\d{3}/, "").length === 9;
-  const { setPhoneNumber, phoneNumber } = usePhoneNumber();
+  const [mode, setMode] = useState<AuthMode>("login");
 
-  async function handleThePhoneRegister() {
+  const { mutateAsync: register, isPending: isRegistering, isError: isRegisterError, error: registerError } = useRegister();
+  const { mutateAsync: login, isPending: isLoggingIn, isError: isLoginError, error: loginError } = useLogin();
+
+  const isPending = mode === 'login' ? isLoggingIn : isRegistering;
+  const isError = mode === 'login' ? isLoginError : isRegisterError;
+  const error = mode === 'login' ? loginError : registerError;
+
+  const isPhoneValid = phone.replace(/^\+\d{3}/, "").length === 9;
+
+  async function handleSubmit() {
     try {
-      await register(phone);
-      setPhoneNumber(phone);
-      router.push("/auth/otp");
+      if (mode === 'login') {
+        await login(phone);
+      } else {
+        await register(phone);
+      }
+      // navigation is handled inside useLogin/useRegister onSuccess
     } catch {
       // error displayed via isError state below
     }
@@ -227,6 +239,52 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            {/* Mode tabs */}
+            <Row delay={200}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  backgroundColor: "#F5F5F5",
+                  borderRadius: 16,
+                  padding: 4,
+                  marginTop: 14,
+                  marginBottom: 20,
+                }}
+              >
+                {(["login", "register"] as AuthMode[]).map((tab) => {
+                  const active = mode === tab;
+                  return (
+                    <TouchableOpacity
+                      key={tab}
+                      onPress={() => setMode(tab)}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: 13,
+                        alignItems: "center",
+                        backgroundColor: active ? "#fff" : "transparent",
+                        shadowColor: active ? "#000" : "transparent",
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: active ? 0.06 : 0,
+                        shadowRadius: 4,
+                        elevation: active ? 2 : 0,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: active ? "Cairo_700Bold" : "Tajawal_400Regular",
+                          fontSize: 14,
+                          color: active ? "#F55905" : "#767777",
+                        }}
+                      >
+                        {tab === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </Row>
+
             {/* Title */}
             <Row delay={260}>
               <View
@@ -235,14 +293,11 @@ export default function LoginScreen() {
                   alignItems: "center",
                   justifyContent: "flex-end",
                   gap: 10,
-                  marginTop: 8,
                   marginBottom: 4,
                 }}
               >
-                <Text
-                  style={{ fontFamily: "Cairo_700Bold", fontSize: 24, color: "#1E1E1E" }}
-                >
-                  تسجيل الدخول
+                <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 24, color: "#1E1E1E" }}>
+                  {mode === "login" ? "مرحباً بعودتك" : "إنشاء حساب جديد"}
                 </Text>
                 <View
                   style={{
@@ -254,7 +309,7 @@ export default function LoginScreen() {
                     justifyContent: "center",
                   }}
                 >
-                  <Ionicons name="arrow-back" size={18} color="#fff" />
+                  <Ionicons name={mode === "login" ? "arrow-back" : "person-add"} size={18} color="#fff" />
                 </View>
               </View>
             </Row>
@@ -271,7 +326,9 @@ export default function LoginScreen() {
                   marginBottom: 22,
                 }}
               >
-                أدخل رقم جوالك لإرسال رمز التحقق
+                {mode === "login"
+                  ? "أدخل رقم جوالك لإرسال رمز التحقق"
+                  : "أدخل رقم جوالك لإنشاء حساب جديد"}
               </Text>
             </Row>
 
@@ -332,7 +389,7 @@ export default function LoginScreen() {
                     <Ionicons name="arrow-back-circle-outline" size={22} color="#fff" />
                   }
                   iconPosition="left"
-                  onPress={handleThePhoneRegister}
+                  onPress={handleSubmit}
                   disabled={isPending || !isPhoneValid}
                 />
               </View>

@@ -17,10 +17,10 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import OTPInput from "../components/OTPInput";
 import AppButton from "../../../components/ui/AppButton";
 import { useVerify } from "../hooks/useVerify";
+import { useVerifyLogin } from "../hooks/useVerifyLogin";
 import { useResendOtp } from "../hooks/useResendOtp";
 import { usePhoneNumber } from "@/store/usePhoneNumber";
 import { mapAuthError } from "../utils/mapAuthError";
@@ -153,9 +153,19 @@ export default function OTPScreen() {
   const [otpCode, setOtpCode] = useState("");
   const [canResend, setCanResend] = useState(false);
   const [resendKey, setResendKey] = useState(0);
-  const { mutateAsync: verify, isPending, isError, error } = useVerify();
+
+  const { phoneNumber, authMode } = usePhoneNumber();
+
+  const registerVerify = useVerify();
+  const loginVerify = useVerifyLogin();
+  const {
+    mutateAsync: verify,
+    isPending,
+    isError,
+    error,
+  } = authMode === 'login' ? loginVerify : registerVerify;
+
   const { mutateAsync: resendOtp, isPending: isResending, error: resendError } = useResendOtp();
-  const { phoneNumber } = usePhoneNumber();
 
   const headerOpacity = useSharedValue(0);
   const headerY = useSharedValue(-8);
@@ -171,10 +181,9 @@ export default function OTPScreen() {
   const handleVerify = useCallback(async (code?: string) => {
     try {
       await verify({ otp: code ?? otpCode, phone: phoneNumber });
-      router.push("/auth/complete-profile");
+      // routing is handled inside the hook's onSuccess via decodeJwtPayload
     } catch {
       // error displayed via isError state below
-      
     }
   }, [otpCode, phoneNumber, verify]);
 

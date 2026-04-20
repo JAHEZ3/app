@@ -3,15 +3,15 @@ import { router } from "expo-router";
 import { useAuth } from "..";
 import { usePhoneNumber } from "@/store/usePhoneNumber";
 
-export const useRegister = () => {
-    const { register } = useAuth();
+export const useLogin = () => {
+    const { login } = useAuth();
     const { setFlow } = usePhoneNumber();
 
     return useMutation({
-        mutationKey: ["register"],
-        mutationFn: register,
+        mutationKey: ["login"],
+        mutationFn: login,
         onSuccess: (_, phone) => {
-            setFlow(phone, 'register');
+            setFlow(phone, 'login');
             router.push("/auth/otp");
         },
     });

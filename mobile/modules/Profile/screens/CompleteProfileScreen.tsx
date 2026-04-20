@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,6 +14,10 @@ import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   Easing,
+  SlideInLeft,
+  SlideInRight,
+  SlideOutLeft,
+  SlideOutRight,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -30,38 +35,22 @@ import { useLocation } from "../hooks/useLocation";
 import { mapAuthError } from "../../Auth/utils/mapAuthError";
 
 const ease = Easing.out(Easing.cubic);
-const monthNames = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
-const weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: CURRENT_YEAR - 1923 }, (_, i) => CURRENT_YEAR - i);
 
 function formatBirthdayInput(input: string) {
   const digits = input.replace(/\D/g, "").slice(0, 8);
   const parts: string[] = [];
-
-  if (digits.length > 0) {
-    parts.push(digits.slice(0, 2));
-  }
-
-  if (digits.length > 2) {
-    parts.push(digits.slice(2, 4));
-  }
-
-  if (digits.length > 4) {
-    parts.push(digits.slice(4, 8));
-  }
-
+  if (digits.length > 0) parts.push(digits.slice(0, 2));
+  if (digits.length > 2) parts.push(digits.slice(2, 4));
+  if (digits.length > 4) parts.push(digits.slice(4, 8));
   return parts.join("/");
 }
 
@@ -72,34 +61,33 @@ function parseBirthday(value: string) {
   const year = Number(yearText);
 
   if (
-    !dayText ||
-    !monthText ||
-    !yearText ||
-    dayText.length !== 2 ||
-    monthText.length !== 2 ||
-    yearText.length !== 4
-  ) {
-    return null;
-  }
+    !dayText || !monthText || !yearText ||
+    dayText.length !== 2 || monthText.length !== 2 || yearText.length !== 4
+  ) return null;
 
-  const parsedDate = new Date(year, month - 1, day);
-
+  const date = new Date(year, month - 1, day);
   if (
-    Number.isNaN(parsedDate.getTime()) ||
-    parsedDate.getDate() !== day ||
-    parsedDate.getMonth() !== month - 1 ||
-    parsedDate.getFullYear() !== year
-  ) {
-    return null;
-  }
+    Number.isNaN(date.getTime()) ||
+    date.getDate() !== day ||
+    date.getMonth() !== month - 1 ||
+    date.getFullYear() !== year
+  ) return null;
 
-  return parsedDate;
+  return date;
 }
 
 function formatDateValue(date: Date) {
-  const day = `${date.getDate()}`.padStart(2, "0");
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${day}/${month}/${date.getFullYear()}`;
+}
+
+// Formats to YYYY-MM-DD in local time — avoids UTC midnight shift bug.
+function toLocalISODate(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function buildCalendarDays(displayedMonth: Date) {
@@ -109,17 +97,9 @@ function buildCalendarDays(displayedMonth: Date) {
   const totalDays = new Date(year, month + 1, 0).getDate();
   const cells: Array<Date | null> = [];
 
-  for (let index = 0; index < firstDayIndex; index += 1) {
-    cells.push(null);
-  }
-
-  for (let day = 1; day <= totalDays; day += 1) {
-    cells.push(new Date(year, month, day));
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
+  for (let i = 0; i < firstDayIndex; i++) cells.push(null);
+  for (let day = 1; day <= totalDays; day++) cells.push(new Date(year, month, day));
+  while (cells.length % 7 !== 0) cells.push(null);
 
   return cells;
 }
@@ -137,10 +117,7 @@ function PhotoRing() {
       -1
     );
     opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.18, { duration: 2400 }),
-        withTiming(0.45, { duration: 2400 })
-      ),
+      withSequence(withTiming(0.18, { duration: 2400 }), withTiming(0.45, { duration: 2400 })),
       -1
     );
   }, [opacity, scale]);
@@ -188,30 +165,34 @@ export default function CompleteProfileScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthday, setBirthday] = useState("");
-  
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
+  const [isYearPickerVisible, setIsYearPickerVisible] = useState(false);
+  const [monthSlideDir, setMonthSlideDir] = useState<"left" | "right">("left");
   const [displayedMonth, setDisplayedMonth] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1);
+    const d = new Date();
+    return new Date(d.getFullYear() - 20, d.getMonth(), 1);
   });
+
+  const yearsListRef = useRef<FlatList>(null);
+  const sheetY = useSharedValue(600);
+  const overlayAlpha = useSharedValue(0);
+
   const { mutateAsync: completeProfile, isPending, isError, error } = useCompleteProfile();
   const { coords } = useLocation();
 
   async function handleSubmit() {
     try {
       const parsed = parseBirthday(birthday);
-      const isoDate = parsed!.toISOString().split("T")[0];
       await completeProfile({
         firstName,
         lastName,
-        dateOfBirth: isoDate,
+        dateOfBirth: toLocalISODate(parsed!),
         locationLat: coords?.lat ?? null,
         locationLng: coords?.lng ?? null,
       });
       router.replace("/home/Home");
-      // @NOTE: ADD IN THIS ALERT FOR تم اكمال ملفك الشخصي بامكانك المتالعه
     } catch {
-      // error displayed via isError state below
+      // error displayed via isError below
     }
   }
 
@@ -226,43 +207,56 @@ export default function CompleteProfileScreen() {
   }, [pageOpacity, photoScale]);
 
   const pageStyle = useAnimatedStyle(() => ({ opacity: pageOpacity.value }));
-  const photoStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: photoScale.value }],
-  }));
+  const photoStyle = useAnimatedStyle(() => ({ transform: [{ scale: photoScale.value }] }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetY.value }] }));
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayAlpha.value }));
 
-  const handleBirthdayChange = (text: string) => {
-    setBirthday(formatBirthdayInput(text));
-  };
+  const handleBirthdayChange = (text: string) => setBirthday(formatBirthdayInput(text));
 
   const openCalendar = () => {
-    const baseDate = selectedBirthday ?? new Date();
-    setDisplayedMonth(new Date(baseDate.getFullYear(), baseDate.getMonth(), 1));
+    const base = selectedBirthday ?? new Date(CURRENT_YEAR - 20, 0, 1);
+    setDisplayedMonth(new Date(base.getFullYear(), base.getMonth(), 1));
     setIsCalendarVisible(true);
+    sheetY.value = withTiming(0, { duration: 380, easing: Easing.out(Easing.cubic) });
+    overlayAlpha.value = withTiming(1, { duration: 300 });
   };
 
   const closeCalendar = () => {
-    setIsCalendarVisible(false);
+    sheetY.value = withTiming(600, { duration: 280, easing: Easing.in(Easing.cubic) });
+    overlayAlpha.value = withTiming(0, { duration: 280 });
+    setTimeout(() => {
+      setIsCalendarVisible(false);
+      setIsYearPickerVisible(false);
+    }, 290);
   };
 
-  const handleSelectBirthday = (date: Date) => {
+  const handleSelectDay = (date: Date) => {
     setBirthday(formatDateValue(date));
     closeCalendar();
   };
 
   const goToPreviousMonth = () => {
-    setDisplayedMonth((currentMonth) => {
-      const previousMonth = new Date(currentMonth);
-      previousMonth.setMonth(previousMonth.getMonth() - 1);
-      return new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 1);
-    });
+    setMonthSlideDir("right");
+    setDisplayedMonth((cur) => new Date(cur.getFullYear(), cur.getMonth() - 1, 1));
   };
 
   const goToNextMonth = () => {
-    setDisplayedMonth((currentMonth) => {
-      const nextMonth = new Date(currentMonth);
-      nextMonth.setMonth(nextMonth.getMonth() + 1);
-      return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
-    });
+    setMonthSlideDir("left");
+    setDisplayedMonth((cur) => new Date(cur.getFullYear(), cur.getMonth() + 1, 1));
+  };
+
+  const openYearPicker = () => {
+    setIsYearPickerVisible(true);
+    const idx = YEARS.indexOf(displayedMonth.getFullYear());
+    setTimeout(() => {
+      yearsListRef.current?.scrollToIndex({ index: Math.max(idx, 0), animated: false, viewPosition: 0.5 });
+    }, 60);
+  };
+
+  const selectYear = (year: number) => {
+    setMonthSlideDir("left");
+    setDisplayedMonth(new Date(year, displayedMonth.getMonth(), 1));
+    setIsYearPickerVisible(false);
   };
 
   return (
@@ -290,26 +284,15 @@ export default function CompleteProfileScreen() {
         </View>
       </Animated.View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
           <View style={{ alignItems: "center", paddingTop: 20, paddingBottom: 24 }}>
-            <View
-              style={{
-                width: 120,
-                height: 120,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+            <View style={{ width: 120, height: 120, alignItems: "center", justifyContent: "center" }}>
               <PhotoRing />
-
               <Animated.View style={photoStyle}>
                 <View
                   style={{
@@ -366,12 +349,7 @@ export default function CompleteProfileScreen() {
 
             <Row delay={280}>
               <TouchableOpacity
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                  marginTop: 10,
-                }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 }}
               >
                 <Ionicons name="camera-outline" size={13} color="#F55905" />
                 <Text
@@ -461,52 +439,56 @@ export default function CompleteProfileScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal
-        visible={isCalendarVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeCalendar}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(17, 24, 39, 0.4)",
-            justifyContent: "center",
-            paddingHorizontal: 20,
-          }}
-        >
+      {/* ── Bottom-sheet calendar ── */}
+      <Modal visible={isCalendarVisible} transparent animationType="none" onRequestClose={closeCalendar}>
+        <Animated.View style={[overlayStyle, { flex: 1, backgroundColor: "rgba(17,24,39,0.5)" }]}>
           <TouchableOpacity
             activeOpacity={1}
             onPress={closeCalendar}
-            style={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-            }}
+            style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
           />
 
-          <View
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: 24,
-              paddingHorizontal: 18,
-              paddingTop: 18,
-              paddingBottom: 20,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 12 },
-              shadowOpacity: 0.12,
-              shadowRadius: 22,
-              elevation: 10,
-            }}
+          <Animated.View
+            style={[
+              sheetStyle,
+              {
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: "#fff",
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                paddingBottom: Platform.OS === "ios" ? 36 : 24,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.08,
+                shadowRadius: 20,
+                elevation: 20,
+              },
+            ]}
           >
+            {/* drag handle */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: "#E0E0E0",
+                alignSelf: "center",
+                marginTop: 12,
+                marginBottom: 4,
+              }}
+            />
+
+            {/* header row */}
             <View
               style={{
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
-                marginBottom: 16,
+                paddingHorizontal: 20,
+                paddingVertical: 12,
               }}
             >
               <TouchableOpacity
@@ -523,9 +505,20 @@ export default function CompleteProfileScreen() {
                 <Ionicons name="chevron-back" size={20} color="#F55905" />
               </TouchableOpacity>
 
-              <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 16, color: "#1E1E1E" }}>
-                {`${monthNames[displayedMonth.getMonth()]} ${displayedMonth.getFullYear()}`}
-              </Text>
+              {/* tappable month+year → opens year picker */}
+              <TouchableOpacity
+                onPress={isYearPickerVisible ? () => setIsYearPickerVisible(false) : openYearPicker}
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 17, color: "#1E1E1E" }}>
+                  {`${MONTH_NAMES[displayedMonth.getMonth()]} ${displayedMonth.getFullYear()}`}
+                </Text>
+                <Ionicons
+                  name={isYearPickerVisible ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#F55905"
+                />
+              </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={goToNextMonth}
@@ -542,82 +535,124 @@ export default function CompleteProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 10 }}>
-              {weekdayLabels.map((dayLabel) => (
-                <View
-                  key={dayLabel}
-                  style={{
-                    width: "14.2857%",
-                    alignItems: "center",
-                    marginBottom: 8,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: "Tajawal_400Regular",
-                      fontSize: 13,
-                      color: "#7A7A7A",
-                    }}
-                  >
-                    {dayLabel}
-                  </Text>
-                </View>
-              ))}
-
-              {calendarDays.map((date, index) => {
-                const isSelected =
-                  !!date &&
-                  !!selectedBirthday &&
-                  date.getDate() === selectedBirthday.getDate() &&
-                  date.getMonth() === selectedBirthday.getMonth() &&
-                  date.getFullYear() === selectedBirthday.getFullYear();
-
-                return (
-                  <View
-                    key={date ? date.toISOString() : `empty-${index}`}
-                    style={{
-                      width: "14.2857%",
-                      alignItems: "center",
-                      marginBottom: 10,
-                    }}
-                  >
-                    {date ? (
-                      <TouchableOpacity
-                        onPress={() => handleSelectBirthday(date)}
+            {isYearPickerVisible ? (
+              /* ── Year picker ── */
+              <FlatList
+                ref={yearsListRef}
+                data={YEARS}
+                keyExtractor={(y) => String(y)}
+                style={{ height: 280, paddingHorizontal: 16 }}
+                numColumns={4}
+                showsVerticalScrollIndicator={false}
+                onScrollToIndexFailed={() => {}}
+                renderItem={({ item: year }) => {
+                  const isSelected = year === displayedMonth.getFullYear();
+                  return (
+                    <TouchableOpacity
+                      onPress={() => selectYear(year)}
+                      style={{
+                        flex: 1,
+                        margin: 4,
+                        paddingVertical: 10,
+                        borderRadius: 12,
+                        alignItems: "center",
+                        backgroundColor: isSelected ? "#F55905" : "#F7F7F7",
+                      }}
+                    >
+                      <Text
                         style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 20,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          backgroundColor: isSelected ? "#F55905" : "#fff",
+                          fontFamily: isSelected ? "Cairo_700Bold" : "Tajawal_400Regular",
+                          fontSize: 14,
+                          color: isSelected ? "#fff" : "#1E1E1E",
                         }}
                       >
-                        <Text
-                          style={{
-                            fontFamily: isSelected
-                              ? "Cairo_700Bold"
-                              : "Tajawal_400Regular",
-                            fontSize: 14,
-                            color: isSelected ? "#fff" : "#1E1E1E",
-                          }}
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            ) : (
+              /* ── Calendar grid ── */
+              <View style={{ paddingHorizontal: 16, overflow: "hidden" }}>
+                {/* weekday labels */}
+                <View style={{ flexDirection: "row", marginBottom: 6 }}>
+                  {WEEKDAY_LABELS.map((label) => (
+                    <View key={label} style={{ width: "14.2857%", alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#9E9E9E" }}>
+                        {label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* animated month grid — key forces remount for slide animation */}
+                <Animated.View
+                  key={`${displayedMonth.getFullYear()}-${displayedMonth.getMonth()}`}
+                  entering={
+                    monthSlideDir === "left"
+                      ? SlideInRight.duration(220).easing(Easing.out(Easing.cubic))
+                      : SlideInLeft.duration(220).easing(Easing.out(Easing.cubic))
+                  }
+                  exiting={
+                    monthSlideDir === "left"
+                      ? SlideOutLeft.duration(220).easing(Easing.in(Easing.cubic))
+                      : SlideOutRight.duration(220).easing(Easing.in(Easing.cubic))
+                  }
+                >
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {calendarDays.map((date, index) => {
+                      const isSelected =
+                        !!date &&
+                        !!selectedBirthday &&
+                        date.getDate() === selectedBirthday.getDate() &&
+                        date.getMonth() === selectedBirthday.getMonth() &&
+                        date.getFullYear() === selectedBirthday.getFullYear();
+
+                      return (
+                        <View
+                          key={date ? date.toISOString() : `e-${index}`}
+                          style={{ width: "14.2857%", alignItems: "center", marginBottom: 6 }}
                         >
-                          {date.getDate()}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={{ width: 40, height: 40 }} />
-                    )}
+                          {date ? (
+                            <TouchableOpacity
+                              onPress={() => handleSelectDay(date)}
+                              style={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: 19,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: isSelected ? "#F55905" : "transparent",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontFamily: isSelected ? "Cairo_700Bold" : "Tajawal_400Regular",
+                                  fontSize: 14,
+                                  color: isSelected ? "#fff" : "#1E1E1E",
+                                }}
+                              >
+                                {date.getDate()}
+                              </Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <View style={{ width: 38, height: 38 }} />
+                          )}
+                        </View>
+                      );
+                    })}
                   </View>
-                );
-              })}
-            </View>
+                </Animated.View>
+              </View>
+            )}
 
             <TouchableOpacity
               onPress={closeCalendar}
               style={{
                 alignSelf: "center",
-                paddingHorizontal: 18,
+                marginTop: 8,
+                paddingHorizontal: 28,
                 paddingVertical: 10,
                 borderRadius: 14,
                 backgroundColor: "#F7F7F7",
@@ -627,8 +662,8 @@ export default function CompleteProfileScreen() {
                 إغلاق
               </Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
       </Modal>
     </SafeAreaView>
   );
