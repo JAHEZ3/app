@@ -8,10 +8,10 @@ const clearSession = async (
     clearTokens: () => void,
     queryClient: ReturnType<typeof useQueryClient>
 ) => {
-    clearTokens();                                    
+    clearTokens();
     await SecureStore.deleteItemAsync('refreshToken');
     queryClient.clear();
-    router.replace('/auth/login');
+    router.replace('/');
 };
 
 export const useLogout = () => {

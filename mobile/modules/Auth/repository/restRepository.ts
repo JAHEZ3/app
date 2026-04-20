@@ -1,27 +1,35 @@
 import { useAuthStore } from "@/store/useAuthStore";
 import { authApi } from "../../../lib/api";
-import { AuthRepository, VerifyParams } from "./AuthRepository";
+import { AuthRepository, VerifyLoginParams, VerifyParams } from "./AuthRepository";
 
+export const restRepository = (): AuthRepository => ({
+    register: async (phone) => {
+        await authApi.post('/api/auth/customer/register', { phone });
+    },
 
-export const restRepository = (): AuthRepository => {
-    return {
-        register: async (phone: string): Promise<void> => {
-            const res = await authApi.post('/api/auth/customer/register', { phone });
-            return res.data;
-        },
-        verify: async (params: VerifyParams): Promise<{ accessToken: string, refreshToken: string }> => {
-            const res = await authApi.post('/api/auth/verify-otp', params);
-            return res.data.data
-        },
-        resendOtp: async (phone: string): Promise<void> => {
-            await authApi.post('/api/auth/resend-otp', { phone });
-        },
-        logout: async (refreshToken: string): Promise<void> => {
-            const accessToken = useAuthStore.getState().accessToken;
-            await authApi.delete('/api/auth/logout', {
-                data: { refreshToken },
-                headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-            });
-        },
-    };
-};
+    login: async (phone) => {
+        await authApi.post('/api/auth/customer/login', { phone });
+    },
+
+    verify: async (params: VerifyParams) => {
+        const res = await authApi.post('/api/auth/verify-otp', params);
+        return res.data.data;
+    },
+
+    verifyLogin: async (params: VerifyLoginParams) => {
+        const res = await authApi.post('/api/auth/customer/verify-login', params);
+        return res.data.data;
+    },
+
+    resendOtp: async (phone) => {
+        await authApi.post('/api/auth/resend-otp', { phone });
+    },
+
+    logout: async (refreshToken) => {
+        const accessToken = useAuthStore.getState().accessToken;
+        await authApi.delete('/api/auth/logout', {
+            data: { refreshToken },
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
+    },
+});

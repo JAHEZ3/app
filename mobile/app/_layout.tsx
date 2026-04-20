@@ -66,10 +66,10 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth/login" />
+            <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
             <Stack.Screen name="auth/otp" />
             <Stack.Screen name="auth/complete-profile" />
-            <Stack.Screen name="home/Home" />
+            <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
           </Stack>
         </ProfileProvider>
       </AuthProvider>

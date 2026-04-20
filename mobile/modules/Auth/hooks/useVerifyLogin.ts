@@ -5,13 +5,13 @@ import { useAuth } from '..';
 import { useAuthStore } from '@/store/useAuthStore';
 import { decodeJwtPayload } from '../utils/decodeToken';
 
-export const useVerify = () => {
-    const { verify } = useAuth();
+export const useVerifyLogin = () => {
+    const { verifyLogin } = useAuth();
     const { setTokens } = useAuthStore();
 
     return useMutation({
-        mutationKey: ['verify'],
-        mutationFn: verify,
+        mutationKey: ['verifyLogin'],
+        mutationFn: verifyLogin,
         onSuccess: async (data) => {
             await SecureStore.setItemAsync('refreshToken', data.refreshToken);
             setTokens(data.accessToken);

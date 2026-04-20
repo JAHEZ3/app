@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, Text, Dimensions, StatusBar } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -13,6 +13,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { router } from "expo-router";
+import { useAuthStore } from "@/store/useAuthStore";
 import SplashLoadingDots from "../components/SplashLoadingDots";
 
 const { width, height } = Dimensions.get("window");
@@ -159,8 +160,17 @@ export default function SplashScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Capture status at the moment this screen mounts so we know
+  // whether we arrived here from a logout ('unauthenticated') or a
+  // cold app start ('idle').
+  const statusAtMount = useRef(useAuthStore.getState().status);
+
   useEffect(() => {
-    const timer = setTimeout(() => router.replace("/onboarding"), 3200);
+    const fromLogout = statusAtMount.current === 'unauthenticated';
+    const timer = setTimeout(
+      () => router.replace(fromLogout ? '/auth/login' : '/onboarding'),
+      fromLogout ? 1800 : 3200,
+    );
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
