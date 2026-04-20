@@ -45,7 +45,6 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
 
   const selectCode = (code: string) => {
     setCountryCode(code);
-    // re-format value with new code
     const cleaned = value.replace(/^\+\d+/, "").replace(/[^0-9]/g, "").replace(/^0+/, "");
     onChangeText(`${code}${cleaned}`);
     closePicker();
@@ -106,7 +105,6 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
           },
         ]}
       >
-        {/* Input */}
         <TextInput
           value={displayValue}
           onChangeText={validatePhone}
@@ -127,37 +125,24 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
           }}
         />
 
-        {/* Divider */}
         <View style={{ width: 1, height: 28, backgroundColor: "#e5e5e5", marginHorizontal: 2 }} />
 
-        {/* Country selector */}
         <TouchableOpacity
           onPress={openPicker}
           activeOpacity={0.7}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 12,
-            gap: 5,
-          }}
+          style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 5 }}
         >
           <Text style={{ fontSize: 22 }}>🇵🇸</Text>
-
           <Animated.View style={chevronStyle}>
             <Ionicons name="chevron-down" size={12} color="#767777" />
           </Animated.View>
-
           <Ionicons name="call-outline" size={14} color="#F55905" />
-
-          <Animated.Text
-            style={{ fontFamily: "Tajawal_500Medium", fontSize: 14, color: "#1E1E1E" }}
-          >
+          <Animated.Text style={{ fontFamily: "Tajawal_500Medium", fontSize: 14, color: "#1E1E1E" }}>
             {countryCode}
           </Animated.Text>
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Error */}
       {error && (
         <Text
           style={{
@@ -172,7 +157,6 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
         </Text>
       )}
 
-      {/* Picker Modal */}
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={closePicker}>
         <Pressable
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}
@@ -189,7 +173,6 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
             }}
             onPress={() => {}}
           >
-            {/* Handle */}
             <View style={{ alignItems: "center", marginBottom: 16 }}>
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#e5e5e5" }} />
             </View>
@@ -226,7 +209,6 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
                     borderColor: selected ? "#F55905" : "#eeeeee",
                   }}
                 >
-                  {/* Right: flag + label */}
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <Text style={{ fontSize: 26 }}>🇵🇸</Text>
                     <View>
@@ -251,10 +233,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
                     </View>
                   </View>
 
-                  {/* Left: check */}
-                  {selected && (
-                    <Ionicons name="checkmark-circle" size={20} color="#F55905" />
-                  )}
+                  {selected && <Ionicons name="checkmark-circle" size={20} color="#F55905" />}
                 </TouchableOpacity>
               );
             })}

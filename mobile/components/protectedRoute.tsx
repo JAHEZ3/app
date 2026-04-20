@@ -7,12 +7,6 @@ type Props = PropsWithChildren<{
     loadingFallback?: React.ReactNode;
 }>;
 
-/**
- * Wraps any tree that requires authentication.
- * - idle/loading → shows loading spinner (or custom fallback)
- * - unauthenticated → hard redirect to /auth/login
- * - authenticated → renders children
- */
 export const ProtectedRoute = ({ children, loadingFallback }: Props) => {
     const status = useAuthStore((s) => s.status);
 

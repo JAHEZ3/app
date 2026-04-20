@@ -41,7 +41,6 @@ export default function AppButton({
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
-  // Reactively update opacity when disabled/loading changes
   useEffect(() => {
     opacity.value = withTiming(disabled || loading ? 0.4 : 1, { duration: 200 });
   }, [disabled, loading, opacity]);

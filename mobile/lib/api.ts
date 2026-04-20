@@ -12,8 +12,6 @@ export const customerApi = axios.create({
     timeout: 10000,
 });
 
-// --- Token refresh queue ---
-// Prevents multiple simultaneous refresh calls when concurrent requests all 401.
 let isRefreshing = false;
 let pendingQueue: Array<{
     resolve: (token: string) => void;
@@ -27,7 +25,6 @@ const drainQueue = (error: unknown, token: string | null) => {
     pendingQueue = [];
 };
 
-// --- Request interceptor ---
 customerApi.interceptors.request.use((config) => {
     const token = useAuthStore.getState().accessToken;
     if (token) {
@@ -36,7 +33,6 @@ customerApi.interceptors.request.use((config) => {
     return config;
 });
 
-// --- Response interceptor ---
 customerApi.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
@@ -46,12 +42,10 @@ customerApi.interceptors.response.use(
             return Promise.reject(error);
         }
 
-        // Already logged out — don't attempt refresh, just reject cleanly.
         if (useAuthStore.getState().status === 'unauthenticated') {
             return Promise.reject(error);
         }
 
-        // Queue this request while a refresh is already in progress.
         if (isRefreshing) {
             return new Promise<string>((resolve, reject) => {
                 pendingQueue.push({ resolve, reject });
@@ -71,7 +65,6 @@ customerApi.interceptors.response.use(
             const res = await authApi.post('/api/auth/refresh', { refreshToken: storedRefresh });
             const { accessToken, refreshToken: newRefreshToken } = res.data.data;
 
-            // Rotate both tokens.
             await SecureStore.setItemAsync('refreshToken', newRefreshToken);
             useAuthStore.getState().setTokens(accessToken);
 

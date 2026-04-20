@@ -43,23 +43,14 @@ function OTPBox({
   onChangeText,
   onKeyPress,
 }: OTPBoxProps) {
-  // Stagger entrance
   const entranceScale = useSharedValue(0);
   const entranceOpacity = useSharedValue(0);
-
-  // Per-digit bounce
   const bounceScale = useSharedValue(1);
 
   useEffect(() => {
-    entranceScale.value = withDelay(
-      index * 60,
-      withSpring(1, { damping: 12, stiffness: 100 })
-    );
-    entranceOpacity.value = withDelay(
-      index * 60,
-      withTiming(1, { duration: 300 })
-    );
-  }, []);
+    entranceScale.value = withDelay(index * 60, withSpring(1, { damping: 12, stiffness: 100 }));
+    entranceOpacity.value = withDelay(index * 60, withTiming(1, { duration: 300 }));
+  }, [entranceScale, entranceOpacity, index]);
 
   useEffect(() => {
     if (value) {
@@ -68,7 +59,7 @@ function OTPBox({
         withSpring(1, { damping: 12, stiffness: 200 })
       );
     }
-  }, [value]);
+  }, [value, bounceScale]);
 
   const entranceStyle = useAnimatedStyle(() => ({
     opacity: entranceOpacity.value,
@@ -166,14 +157,7 @@ export default function OTPInput({ onComplete, onChangeValue }: OTPInputProps) {
   };
 
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        gap: 10,
-        justifyContent: "center",
-        direction: "ltr",
-      }}
-    >
+    <View style={{ flexDirection: "row", gap: 10, justifyContent: "center", direction: "ltr" }}>
       {digits.map((digit, i) => (
         <OTPBox
           key={i}
@@ -181,9 +165,7 @@ export default function OTPInput({ onComplete, onChangeValue }: OTPInputProps) {
           value={digit}
           isFilled={!!digit}
           isActive={activeIndex === i}
-          inputRef={(ref) => {
-            inputRefs.current[i] = ref;
-          }}
+          inputRef={(ref) => { inputRefs.current[i] = ref; }}
           onChangeText={(t) => handleChange(t, i)}
           onKeyPress={(e) => handleKeyPress(e, i)}
         />
