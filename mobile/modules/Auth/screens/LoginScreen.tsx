@@ -18,6 +18,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import PhoneInput from "../components/PhoneInput";
 import AppButton from "../../../components/ui/AppButton";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
@@ -322,7 +323,10 @@ export default function LoginScreen() {
             <Row delay={580}>
               <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#767777", textAlign: "center", lineHeight: 20 }}>
                 {t("phone.termsPrefix")}
-                <Text style={{ color: "#F55905", textDecorationLine: "underline" }}>
+                <Text
+                  onPress={() => router.push("/auth/terms")}
+                  style={{ color: "#F55905", textDecorationLine: "underline" }}
+                >
                   {t("phone.termsLink")}
                 </Text>
               </Text>
