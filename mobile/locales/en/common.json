@@ -1,0 +1,21 @@
+{
+  "buttons": {
+    "submit": "Submit",
+    "continue": "Continue",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "done": "Done",
+    "retry": "Try Again",
+    "confirm": "Confirm"
+  },
+  "errors": {
+    "unexpected": "An unexpected error occurred, please try again",
+    "network": "Unable to connect to the server, check your internet connection",
+    "required": "This field is required",
+    "invalidFormat": "Invalid format"
+  },
+  "loading": "Loading...",
+  "success": "Done successfully",
+  "appName": "Jahez"
+}

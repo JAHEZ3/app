@@ -20,12 +20,14 @@ import Animated, {
 import { Ionicons } from "@expo/vector-icons";
 import PhoneInput from "../components/PhoneInput";
 import AppButton from "../../../components/ui/AppButton";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRegister } from "../hooks/useRegister";
 import { useLogin } from "../hooks/useLogin";
-import { usePhoneNumber } from "@/store/usePhoneNumber";
 import { mapAuthError } from "../utils/mapAuthError";
 import type { AuthMode } from "@/store/usePhoneNumber";
+import { useAuthT } from "@/hooks/useAppTranslation";
+import { useRTL } from "@/hooks/useRTL";
 
 const { height } = Dimensions.get("window");
 
@@ -34,7 +36,6 @@ const HERO =
 
 const ease = Easing.out(Easing.cubic);
 
-/* ─── Fade + tiny slide-up row ─── */
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
   const opacity = useSharedValue(0);
   const y = useSharedValue(10);
@@ -42,8 +43,7 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
   useEffect(() => {
     opacity.value = withDelay(delay, withTiming(1, { duration: 320, easing: ease }));
     y.value = withDelay(delay, withTiming(0, { duration: 320, easing: ease }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [opacity, y, delay]);
 
   const style = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -53,28 +53,30 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 }
 
 export default function LoginScreen() {
+  const { t } = useAuthT();
+  const isRTL = useRTL();
+
   const [phone, setPhone] = useState("");
   const [mode, setMode] = useState<AuthMode>("login");
 
   const { mutateAsync: register, isPending: isRegistering, isError: isRegisterError, error: registerError } = useRegister();
   const { mutateAsync: login, isPending: isLoggingIn, isError: isLoginError, error: loginError } = useLogin();
 
-  const isPending = mode === 'login' ? isLoggingIn : isRegistering;
-  const isError = mode === 'login' ? isLoginError : isRegisterError;
-  const error = mode === 'login' ? loginError : registerError;
+  const isPending = mode === "login" ? isLoggingIn : isRegistering;
+  const isError = mode === "login" ? isLoginError : isRegisterError;
+  const error = mode === "login" ? loginError : registerError;
 
   const isPhoneValid = phone.replace(/^\+\d{3}/, "").length === 9;
 
   async function handleSubmit() {
     try {
-      if (mode === 'login') {
+      if (mode === "login") {
         await login(phone);
       } else {
         await register(phone);
       }
-      // navigation is handled inside useLogin/useRegister onSuccess
     } catch {
-      // error displayed via isError state below
+      // error state handled via isError
     }
   }
 
@@ -82,12 +84,11 @@ export default function LoginScreen() {
   const cardY = useSharedValue(40);
   const cardOpacity = useSharedValue(0);
 
-
   useEffect(() => {
     heroOpacity.value = withTiming(1, { duration: 500, easing: ease });
     cardOpacity.value = withDelay(180, withTiming(1, { duration: 380, easing: ease }));
     cardY.value = withDelay(180, withTiming(0, { duration: 380, easing: ease }));
-  }, []);
+  }, [heroOpacity, cardOpacity, cardY]);
 
   const heroStyle = useAnimatedStyle(() => ({ opacity: heroOpacity.value }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -95,11 +96,13 @@ export default function LoginScreen() {
     transform: [{ translateY: cardY.value }],
   }));
 
+  const align = isRTL ? "flex-end" : "flex-start";
+  const textAlign = isRTL ? "right" : "left";
+
   return (
     <View style={{ flex: 1, backgroundColor: "#0a0a0a" }}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* ── Hero ── */}
       <Animated.View style={[heroStyle, { height: height * 0.5, overflow: "hidden" }]}>
         <Image
           source={{ uri: HERO }}
@@ -107,17 +110,13 @@ export default function LoginScreen() {
           contentFit="cover"
           transition={500}
         />
-        {/* Overlay */}
         <View
           style={{
             position: "absolute",
-            inset: 0,
             top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: "rgba(10,10,10,0.35)",
           }}
         />
-        {/* Bottom fade */}
-        {/* Smooth multi-stop bottom shadow */}
         <LinearGradient
           colors={[
             "transparent",
@@ -129,16 +128,9 @@ export default function LoginScreen() {
             "rgba(0,0,0,0.78)",
           ]}
           locations={[0, 0.15, 0.32, 0.50, 0.68, 0.84, 1]}
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 220,
-          }}
+          style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 220 }}
         />
 
-        {/* Logo */}
         <View
           style={{
             position: "absolute",
@@ -147,7 +139,6 @@ export default function LoginScreen() {
             justifyContent: "center",
           }}
         >
-          {/* Circle mark */}
           <View
             style={{
               width: 72,
@@ -164,55 +155,28 @@ export default function LoginScreen() {
               marginBottom: 14,
             }}
           >
-            <Text
-              style={{
-                fontFamily: "Cairo_700Bold",
-                fontSize: 36,
-                color: "#fff",
-                lineHeight: 42,
-                marginTop: 4,
-              }}
-            >
+            <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 36, color: "#fff", lineHeight: 42, marginTop: 4 }}>
               ج
             </Text>
           </View>
 
-          {/* App name */}
           <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 48, color: "#fff", lineHeight: 54 }}>
             جاهز
           </Text>
 
-          {/* Orange accent dot */}
-          <View
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: 3.5,
-              backgroundColor: "#F55905",
-              marginTop: 2,
-              marginBottom: 10,
-            }}
-          />
+          <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#F55905", marginTop: 2, marginBottom: 10 }} />
 
-          <Text
-            style={{
-              fontFamily: "Tajawal_400Regular",
-              fontSize: 10,
-              color: "rgba(255,255,255,0.55)",
-              letterSpacing: 4,
-              textTransform: "uppercase",
-            }}
-          >
+          <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)", letterSpacing: 4, textTransform: "uppercase" }}>
             CULINARY · DELIVERY
           </Text>
         </View>
+
+        <View style={{ position: "absolute", top: 52, right: 20 }}>
+          <LanguageSwitcher />
+        </View>
       </Animated.View>
 
-      {/* ── Card ── */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <Animated.View
           style={[
             cardStyle,
@@ -229,7 +193,6 @@ export default function LoginScreen() {
             },
           ]}
         >
-          {/* Handle */}
           <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#e5e5e5" }} />
           </View>
@@ -277,7 +240,7 @@ export default function LoginScreen() {
                           color: active ? "#F55905" : "#767777",
                         }}
                       >
-                        {tab === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
+                        {t(`tabs.${tab}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -285,33 +248,10 @@ export default function LoginScreen() {
               </View>
             </Row>
 
-            {/* Title */}
             <Row delay={260}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: 10,
-                  marginBottom: 4,
-                }}
-              >
-                <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 24, color: "#1E1E1E" }}>
-                  {mode === "login" ? "مرحباً بعودتك" : "إنشاء حساب جديد"}
-                </Text>
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: "#F55905",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Ionicons name={mode === "login" ? "arrow-back" : "person-add"} size={18} color="#fff" />
-                </View>
-              </View>
+              <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 24, color: "#1E1E1E", textAlign, marginBottom: 4 }}>
+                {t(mode === "login" ? "phone.loginTitle" : "phone.registerTitle")}
+              </Text>
             </Row>
 
             {/* Subtitle */}
@@ -321,34 +261,22 @@ export default function LoginScreen() {
                   fontFamily: "Tajawal_400Regular",
                   fontSize: 14,
                   color: "#767777",
-                  textAlign: "right",
+                  textAlign,
                   lineHeight: 22,
                   marginBottom: 22,
                 }}
               >
-                {mode === "login"
-                  ? "أدخل رقم جوالك لإرسال رمز التحقق"
-                  : "أدخل رقم جوالك لإنشاء حساب جديد"}
+                {t(mode === "login" ? "phone.loginSubtitle" : "phone.registerSubtitle")}
               </Text>
             </Row>
 
-            {/* Label */}
             <Row delay={380}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: 5,
-                  marginBottom: 10,
-                }}
-              >
-                <Text
-                  style={{ fontFamily: "Cairo_700Bold", fontSize: 14, color: "#1E1E1E" }}
-                >
-                  رقم الجوال
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: align, gap: 5, marginBottom: 10 }}>
+                {!isRTL && <Ionicons name="phone-portrait-outline" size={15} color="#F55905" />}
+                <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 14, color: "#1E1E1E" }}>
+                  {t("phone.label")}
                 </Text>
-                <Ionicons name="phone-portrait-outline" size={15} color="#F55905" />
+                {isRTL && <Ionicons name="phone-portrait-outline" size={15} color="#F55905" />}
               </View>
             </Row>
 
@@ -356,26 +284,12 @@ export default function LoginScreen() {
             <Row delay={420}>
               <PhoneInput value={phone} onChangeText={setPhone} />
               {isError && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    gap: 4,
-                    marginTop: 6,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: "Tajawal_400Regular",
-                      fontSize: 12,
-                      color: "#E53935",
-                      textAlign: "right",
-                    }}
-                  >
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: align, gap: 4, marginTop: 6 }}>
+                  {!isRTL && <Ionicons name="alert-circle" size={14} color="#E53935" />}
+                  <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#E53935", textAlign }}>
                     {mapAuthError(error as Error)}
                   </Text>
-                  <Ionicons name="alert-circle" size={14} color="#E53935" />
+                  {isRTL && <Ionicons name="alert-circle" size={14} color="#E53935" />}
                 </View>
               )}
             </Row>
@@ -384,10 +298,8 @@ export default function LoginScreen() {
             <Row delay={480}>
               <View style={{ marginTop: 18 }}>
                 <AppButton
-                  label="إرسال رمز التحقق"
-                  icon={
-                    <Ionicons name="arrow-back-circle-outline" size={22} color="#fff" />
-                  }
+                  label={t("phone.sendCode")}
+                  icon={<Ionicons name="arrow-back-circle-outline" size={22} color="#fff" />}
                   iconPosition="left"
                   onPress={handleSubmit}
                   disabled={isPending || !isPhoneValid}
@@ -397,43 +309,21 @@ export default function LoginScreen() {
 
             {/* Security row */}
             <Row delay={540}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 10,
-                  marginVertical: 18,
-                }}
-              >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 18 }}>
                 <View style={{ flex: 1, height: 1, backgroundColor: "#eeeeee" }} />
                 <Ionicons name="lock-closed-outline" size={13} color="#c0c0c0" />
-                <Text
-                  style={{
-                    fontFamily: "Tajawal_400Regular",
-                    fontSize: 12,
-                    color: "#c0c0c0",
-                  }}
-                >
-                  بياناتك محمية وآمنة
+                <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#c0c0c0" }}>
+                  {t("phone.security")}
                 </Text>
                 <View style={{ flex: 1, height: 1, backgroundColor: "#eeeeee" }} />
               </View>
             </Row>
 
-            {/* Terms */}
             <Row delay={580}>
-              <Text
-                style={{
-                  fontFamily: "Tajawal_400Regular",
-                  fontSize: 12,
-                  color: "#767777",
-                  textAlign: "center",
-                  lineHeight: 20,
-                }}
-              >
-                بإنشاء حساب، أنت توافق على{" "}
+              <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#767777", textAlign: "center", lineHeight: 20 }}>
+                {t("phone.termsPrefix")}
                 <Text style={{ color: "#F55905", textDecorationLine: "underline" }}>
-                  الشروط والأحكام
+                  {t("phone.termsLink")}
                 </Text>
               </Text>
             </Row>

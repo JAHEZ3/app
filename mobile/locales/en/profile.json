@@ -1,0 +1,23 @@
+{
+  "title": "My Profile",
+  "edit": "Edit Profile",
+  "changePhoto": "Change profile photo",
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "notifications": "Notifications",
+    "theme": "Appearance"
+  },
+  "account": {
+    "title": "Account",
+    "logout": "Sign Out",
+    "deleteAccount": "Delete Account"
+  },
+  "language": {
+    "title": "Select Language",
+    "arabic": "Arabic",
+    "english": "English",
+    "restartRequired": "Restart required to apply language direction change.",
+    "restart": "Restart Now"
+  }
+}

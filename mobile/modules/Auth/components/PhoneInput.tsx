@@ -13,6 +13,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import { useAuthT } from "@/hooks/useAppTranslation";
+import { useRTL } from "@/hooks/useRTL";
 
 const COUNTRIES = [
   { code: "+970", label: "فلسطين — غزة / الضفة", flag: "🇵🇸" },
@@ -25,7 +27,9 @@ interface PhoneInputProps {
 }
 
 export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
-  const [focused, setFocused] = useState(false);
+  const { t } = useAuthT();
+  const isRTL = useRTL();
+
   const [error, setError] = useState<string | null>(null);
   const [countryCode, setCountryCode] = useState("+970");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -51,7 +55,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
   };
 
   const toE164 = (phone: string) => {
-    let cleaned = phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
+    const cleaned = phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     return { cleaned, full: `${countryCode}${cleaned}` };
   };
 
@@ -60,23 +64,21 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
     onChangeText(full);
     if (cleaned.length === 0) { setError(null); return; }
     if (cleaned.length !== 9) {
-      setError("رقم الجوال يجب أن يكون 9 أرقام");
+      setError(t("phone.error"));
     } else {
       setError(null);
     }
   };
 
   const handleFocus = () => {
-    setFocused(true);
     borderAnim.value = withTiming(1, { duration: 200 });
   };
 
   const handleBlur = () => {
-    setFocused(false);
     borderAnim.value = withTiming(0, { duration: 200 });
     const cleaned = value.replace(countryCode, "").replace(/[^0-9]/g, "");
     if (cleaned.length > 0 && cleaned.length !== 9) {
-      setError("رقم الجوال يجب أن يكون 9 أرقام");
+      setError(t("phone.error"));
     }
   };
 
@@ -90,6 +92,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
   }));
 
   const displayValue = value.replace(countryCode, "").replace(/[^0-9]/g, "");
+  const textAlign = isRTL ? "right" : "left";
 
   return (
     <View>
@@ -108,7 +111,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
         <TextInput
           value={displayValue}
           onChangeText={validatePhone}
-          placeholder="رقم الجوال"
+          placeholder={t("phone.placeholder")}
           placeholderTextColor="#b0b0b0"
           keyboardType="phone-pad"
           onFocus={handleFocus}
@@ -121,7 +124,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
             color: "#1E1E1E",
             paddingVertical: 16,
             paddingHorizontal: 16,
-            textAlign: "right",
+            textAlign,
           }}
         />
 
@@ -150,7 +153,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
             fontSize: 12,
             marginTop: 6,
             fontFamily: "Tajawal_400Regular",
-            textAlign: "right",
+            textAlign,
           }}
         >
           {error}
@@ -186,7 +189,7 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
                 marginBottom: 18,
               }}
             >
-              اختر رمز الدولة
+              {t("phone.countryPickerTitle")}
             </Text>
 
             {COUNTRIES.map((c) => {
@@ -212,27 +215,14 @@ export default function PhoneInput({ value, onChangeText }: PhoneInputProps) {
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <Text style={{ fontSize: 26 }}>🇵🇸</Text>
                     <View>
-                      <Text
-                        style={{
-                          fontFamily: "Cairo_700Bold",
-                          fontSize: 15,
-                          color: selected ? "#F55905" : "#1E1E1E",
-                        }}
-                      >
+                      <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 15, color: selected ? "#F55905" : "#1E1E1E" }}>
                         {c.code}
                       </Text>
-                      <Text
-                        style={{
-                          fontFamily: "Tajawal_400Regular",
-                          fontSize: 12,
-                          color: "#767777",
-                        }}
-                      >
+                      <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#767777" }}>
                         {c.label}
                       </Text>
                     </View>
                   </View>
-
                   {selected && <Ionicons name="checkmark-circle" size={20} color="#F55905" />}
                 </TouchableOpacity>
               );

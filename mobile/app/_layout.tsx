@@ -1,8 +1,10 @@
 import "../global.css";
+import "@/lib/i18n";
 
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { useFonts } from "expo-font";
+import { useLanguageInit } from "@/hooks/useLanguageInit";
 import { useAuthInit } from "@/hooks/useAuthInit";
 import {
   Cairo_400Regular,
@@ -40,6 +42,7 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   useAuthInit();
+  const i18nReady = useLanguageInit();
 
   const [fontsLoaded] = useFonts({
     Cairo_400Regular,
@@ -51,12 +54,12 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded && i18nReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, i18nReady]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !i18nReady) return null;
   
 
   return (
