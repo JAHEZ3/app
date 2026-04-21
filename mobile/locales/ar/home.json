@@ -1,0 +1,27 @@
+{
+  "greeting": {
+    "morning": "صباح الخير",
+    "afternoon": "مساء الخير",
+    "evening": "مساء النور"
+  },
+  "search": {
+    "placeholder": "ابحث عن مطاعم أو وجبات..."
+  },
+  "sections": {
+    "categories": "الفئات",
+    "popular": "الأكثر طلباً",
+    "nearYou": "بالقرب منك",
+    "featured": "مميز"
+  },
+  "restaurant": {
+    "open": "مفتوح",
+    "closed": "مغلق",
+    "minOrder": "أقل طلب",
+    "deliveryTime": "{{min}}-{{max}} دقيقة",
+    "deliveryFee": "رسوم التوصيل"
+  },
+  "empty": {
+    "title": "لا توجد نتائج",
+    "subtitle": "جرّب مصطلح بحث مختلف"
+  }
+}

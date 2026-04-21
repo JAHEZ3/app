@@ -1,0 +1,23 @@
+{
+  "title": "My Orders",
+  "empty": {
+    "title": "No orders yet",
+    "subtitle": "Your orders will appear here"
+  },
+  "status": {
+    "pending": "Pending",
+    "confirmed": "Confirmed",
+    "preparing": "Preparing",
+    "onTheWay": "On the Way",
+    "delivered": "Delivered",
+    "cancelled": "Cancelled"
+  },
+  "details": {
+    "title": "Order Details",
+    "total": "Total",
+    "deliveryFee": "Delivery Fee",
+    "subtotal": "Subtotal",
+    "placedAt": "Placed at"
+  },
+  "reorder": "Reorder"
+}

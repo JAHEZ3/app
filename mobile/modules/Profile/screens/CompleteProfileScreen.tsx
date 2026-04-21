@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   Easing,
@@ -21,27 +20,21 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
-  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import FormField from "../components/FormField";
+import LocationCard from "../components/LocationCard";
 import PrivacyCard from "../components/PrivacyCard";
 import AppButton from "../../../components/ui/AppButton";
 import { useCompleteProfile } from "../hooks/useCompleteProfile";
 import { useLocation } from "../hooks/useLocation";
 import { mapAuthError } from "../../Auth/utils/mapAuthError";
+import { useAuthT } from "@/hooks/useAppTranslation";
+import { useRTL } from "@/hooks/useRTL";
 
 const ease = Easing.out(Easing.cubic);
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: CURRENT_YEAR - 1923 }, (_, i) => CURRENT_YEAR - i);
 
@@ -82,7 +75,6 @@ function formatDateValue(date: Date) {
   return `${day}/${month}/${date.getFullYear()}`;
 }
 
-// Formats to YYYY-MM-DD in local time — avoids UTC midnight shift bug.
 function toLocalISODate(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -90,58 +82,16 @@ function toLocalISODate(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
-function buildCalendarDays(displayedMonth: Date) {
+function buildCalendarDays(displayedMonth: Date): (Date | null)[] {
   const year = displayedMonth.getFullYear();
   const month = displayedMonth.getMonth();
   const firstDayIndex = new Date(year, month, 1).getDay();
   const totalDays = new Date(year, month + 1, 0).getDate();
-  const cells: Array<Date | null> = [];
-
+  const cells: (Date | null)[] = [];
   for (let i = 0; i < firstDayIndex; i++) cells.push(null);
   for (let day = 1; day <= totalDays; day++) cells.push(new Date(year, month, day));
   while (cells.length % 7 !== 0) cells.push(null);
-
   return cells;
-}
-
-function PhotoRing() {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(0.45);
-
-  useEffect(() => {
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.07, { duration: 2400, easing: Easing.inOut(Easing.sin) }),
-        withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1
-    );
-    opacity.value = withRepeat(
-      withSequence(withTiming(0.18, { duration: 2400 }), withTiming(0.45, { duration: 2400 })),
-      -1
-    );
-  }, [opacity, scale]);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        style,
-        {
-          position: "absolute",
-          width: 116,
-          height: 116,
-          borderRadius: 58,
-          borderWidth: 2,
-          borderColor: "#F55905",
-        },
-      ]}
-    />
-  );
 }
 
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
@@ -162,102 +112,126 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 }
 
 export default function CompleteProfileScreen() {
+  const { t } = useAuthT();
+  const isRTL = useRTL();
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthday, setBirthday] = useState("");
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [isYearPickerVisible, setIsYearPickerVisible] = useState(false);
   const [monthSlideDir, setMonthSlideDir] = useState<"left" | "right">("left");
-  const [displayedMonth, setDisplayedMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear() - 20, d.getMonth(), 1);
-  });
+  const [displayedMonth, setDisplayedMonth] = useState(
+    () => new Date(CURRENT_YEAR - 20, 0, 1)
+  );
 
   const yearsListRef = useRef<FlatList>(null);
   const sheetY = useSharedValue(600);
   const overlayAlpha = useSharedValue(0);
 
   const { mutateAsync: completeProfile, isPending, isError, error } = useCompleteProfile();
-  const { coords } = useLocation();
+  const {
+    coords,
+    hasPermission,
+    canAskAgain,
+    isLoading: isLocationLoading,
+    requestLocation,
+    refreshLocation,
+  } = useLocation();
 
-  async function handleSubmit() {
-    try {
-      const parsed = parseBirthday(birthday);
-      await completeProfile({
-        firstName,
-        lastName,
-        dateOfBirth: toLocalISODate(parsed!),
-        locationLat: coords?.lat ?? null,
-        locationLng: coords?.lng ?? null,
-      });
-      router.replace("/home/Home");
-    } catch {
-      // error displayed via isError below
-    }
-  }
+  const monthNames = useMemo(
+    () => t("completeProfile.calendar.months", { returnObjects: true }) as string[],
+    [t]
+  );
+  const weekdayLabels = useMemo(
+    () => t("completeProfile.calendar.weekdays", { returnObjects: true }) as string[],
+    [t]
+  );
+
+  const selectedBirthday = useMemo(() => parseBirthday(birthday), [birthday]);
+  const calendarDays = useMemo(() => buildCalendarDays(displayedMonth), [displayedMonth]);
 
   const pageOpacity = useSharedValue(0);
-  const photoScale = useSharedValue(0.9);
-  const selectedBirthday = parseBirthday(birthday);
-  const calendarDays = buildCalendarDays(displayedMonth);
 
   useEffect(() => {
     pageOpacity.value = withTiming(1, { duration: 300, easing: ease });
-    photoScale.value = withDelay(100, withTiming(1, { duration: 350, easing: ease }));
-  }, [pageOpacity, photoScale]);
+  }, [pageOpacity]);
+
+  useEffect(() => {
+    if (coords) {
+      console.log("CompleteProfile location:", coords);
+    }
+  }, [coords]);
 
   const pageStyle = useAnimatedStyle(() => ({ opacity: pageOpacity.value }));
-  const photoStyle = useAnimatedStyle(() => ({ transform: [{ scale: photoScale.value }] }));
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetY.value }] }));
   const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayAlpha.value }));
 
-  const handleBirthdayChange = (text: string) => setBirthday(formatBirthdayInput(text));
+  const handleBirthdayChange = useCallback((text: string) => setBirthday(formatBirthdayInput(text)), []);
 
-  const openCalendar = () => {
+  const openCalendar = useCallback(() => {
     const base = selectedBirthday ?? new Date(CURRENT_YEAR - 20, 0, 1);
     setDisplayedMonth(new Date(base.getFullYear(), base.getMonth(), 1));
     setIsCalendarVisible(true);
     sheetY.value = withTiming(0, { duration: 380, easing: Easing.out(Easing.cubic) });
     overlayAlpha.value = withTiming(1, { duration: 300 });
-  };
+  }, [selectedBirthday, sheetY, overlayAlpha]);
 
-  const closeCalendar = () => {
+  const closeCalendar = useCallback(() => {
     sheetY.value = withTiming(600, { duration: 280, easing: Easing.in(Easing.cubic) });
     overlayAlpha.value = withTiming(0, { duration: 280 });
     setTimeout(() => {
       setIsCalendarVisible(false);
       setIsYearPickerVisible(false);
     }, 290);
-  };
+  }, [sheetY, overlayAlpha]);
 
-  const handleSelectDay = (date: Date) => {
+  const handleSelectDay = useCallback((date: Date) => {
     setBirthday(formatDateValue(date));
     closeCalendar();
-  };
+  }, [closeCalendar]);
 
-  const goToPreviousMonth = () => {
+  const goToPreviousMonth = useCallback(() => {
     setMonthSlideDir("right");
     setDisplayedMonth((cur) => new Date(cur.getFullYear(), cur.getMonth() - 1, 1));
-  };
+  }, []);
 
-  const goToNextMonth = () => {
+  const goToNextMonth = useCallback(() => {
     setMonthSlideDir("left");
     setDisplayedMonth((cur) => new Date(cur.getFullYear(), cur.getMonth() + 1, 1));
-  };
+  }, []);
 
-  const openYearPicker = () => {
+  const openYearPicker = useCallback(() => {
     setIsYearPickerVisible(true);
     const idx = YEARS.indexOf(displayedMonth.getFullYear());
     setTimeout(() => {
       yearsListRef.current?.scrollToIndex({ index: Math.max(idx, 0), animated: false, viewPosition: 0.5 });
     }, 60);
-  };
+  }, [displayedMonth]);
 
-  const selectYear = (year: number) => {
+  const selectYear = useCallback((year: number) => {
     setMonthSlideDir("left");
-    setDisplayedMonth(new Date(year, displayedMonth.getMonth(), 1));
+    setDisplayedMonth((cur) => new Date(year, cur.getMonth(), 1));
     setIsYearPickerVisible(false);
-  };
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    try {
+      await completeProfile({
+        firstName,
+        lastName,
+        dateOfBirth: toLocalISODate(selectedBirthday!),
+        locationLat: coords?.lat ?? null,
+        locationLng: coords?.lng ?? null,
+      });
+      router.replace("/home/Home");
+    } catch {
+      // error displayed via isError
+    }
+  }, [completeProfile, firstName, lastName, selectedBirthday, coords]);
+
+  const textAlign = isRTL ? "right" : "left";
+  const align = isRTL ? "flex-end" : "flex-start";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }} edges={["top", "bottom"]}>
@@ -276,11 +250,12 @@ export default function CompleteProfileScreen() {
           },
         ]}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, justifyContent: align }}>
+          {!isRTL && <Ionicons name="arrow-forward" size={17} color="#F55905" />}
           <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 16, color: "#1E1E1E" }}>
-            إكمال الملف الشخصي
+            {t("completeProfile.title")}
           </Text>
-          <Ionicons name="arrow-forward" size={17} color="#F55905" />
+          {isRTL && <Ionicons name="arrow-forward" size={17} color="#F55905" />}
         </View>
       </Animated.View>
 
@@ -290,87 +265,13 @@ export default function CompleteProfileScreen() {
           contentContainerStyle={{ paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={{ alignItems: "center", paddingTop: 20, paddingBottom: 24 }}>
-            <View style={{ width: 120, height: 120, alignItems: "center", justifyContent: "center" }}>
-              <PhotoRing />
-              <Animated.View style={photoStyle}>
-                <View
-                  style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: 50,
-                    shadowColor: "#F55905",
-                    shadowOffset: { width: 0, height: 5 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 12,
-                    elevation: 8,
-                    backgroundColor: "#fff",
-                  }}
-                >
-                  <View
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      borderRadius: 50,
-                      overflow: "hidden",
-                      borderWidth: 2.5,
-                      borderColor: "#fff",
-                    }}
-                  >
-                    <Image
-                      source={{
-                        uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face",
-                      }}
-                      style={{ width: "100%", height: "100%" }}
-                      contentFit="cover"
-                    />
-                  </View>
-                </View>
-
-                <View
-                  style={{
-                    position: "absolute",
-                    bottom: 2,
-                    left: 2,
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: "#F55905",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: 2,
-                    borderColor: "#fff",
-                  }}
-                >
-                  <Ionicons name="pencil" size={12} color="#fff" />
-                </View>
-              </Animated.View>
-            </View>
-
-            <Row delay={280}>
-              <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 }}
-              >
-                <Ionicons name="camera-outline" size={13} color="#F55905" />
-                <Text
-                  style={{
-                    fontFamily: "Tajawal_400Regular",
-                    fontSize: 13,
-                    color: "#F55905",
-                    textDecorationLine: "underline",
-                  }}
-                >
-                  تغيير الصورة الشخصية
-                </Text>
-              </TouchableOpacity>
-            </Row>
-          </View>
+          <View style={{ paddingTop: 20, paddingBottom: 24 }} />
 
           <View style={{ paddingHorizontal: 24, gap: 18 }}>
             <Row delay={340}>
               <FormField
-                label="الاسم الأول"
-                placeholder="أدخل اسمك الأول"
+                label={t("completeProfile.firstName")}
+                placeholder={t("completeProfile.firstNamePlaceholder")}
                 value={firstName}
                 onChangeText={setFirstName}
               />
@@ -378,8 +279,8 @@ export default function CompleteProfileScreen() {
 
             <Row delay={400}>
               <FormField
-                label="اسم العائلة"
-                placeholder="أدخل اسم العائلة"
+                label={t("completeProfile.lastName")}
+                placeholder={t("completeProfile.lastNamePlaceholder")}
                 value={lastName}
                 onChangeText={setLastName}
               />
@@ -387,8 +288,8 @@ export default function CompleteProfileScreen() {
 
             <Row delay={460}>
               <FormField
-                label="تاريخ الميلاد"
-                placeholder="يوم / شهر / سنة"
+                label={t("completeProfile.birthDate")}
+                placeholder={t("completeProfile.birthDatePlaceholder")}
                 value={birthday}
                 onChangeText={handleBirthdayChange}
                 keyboardType="number-pad"
@@ -399,47 +300,43 @@ export default function CompleteProfileScreen() {
             </Row>
 
             <Row delay={520}>
+              <LocationCard
+                coords={coords}
+                hasPermission={hasPermission}
+                canAskAgain={canAskAgain}
+                isLoading={isLocationLoading}
+                onAllowLocation={requestLocation}
+                onRefreshLocation={refreshLocation}
+              />
+            </Row>
+
+            <Row delay={560}>
               <PrivacyCard />
             </Row>
 
             {isError && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: 4,
-                  marginTop: 4,
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: "Tajawal_400Regular",
-                    fontSize: 12,
-                    color: "#E53935",
-                    textAlign: "right",
-                  }}
-                >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: align, gap: 4, marginTop: 4 }}>
+                {!isRTL && <Ionicons name="alert-circle" size={14} color="#E53935" />}
+                <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#E53935", textAlign }}>
                   {mapAuthError(error as Error)}
                 </Text>
-                <Ionicons name="alert-circle" size={14} color="#E53935" />
+                {isRTL && <Ionicons name="alert-circle" size={14} color="#E53935" />}
               </View>
             )}
 
-            <Row delay={580}>
+            <Row delay={620}>
               <AppButton
-                label="حفظ ومتابعة"
+                label={t("completeProfile.saveAndContinue")}
                 onPress={handleSubmit}
-                disabled={isPending || !firstName || !lastName || !birthday}
+                disabled={isPending || !firstName || !lastName || !selectedBirthday}
                 icon={<Ionicons name="arrow-back-circle-outline" size={22} color="#fff" />}
-                iconPosition="left"
+                iconPosition={isRTL ? "left" : "right"}
               />
             </Row>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── Bottom-sheet calendar ── */}
       <Modal visible={isCalendarVisible} transparent animationType="none" onRequestClose={closeCalendar}>
         <Animated.View style={[overlayStyle, { flex: 1, backgroundColor: "rgba(17,24,39,0.5)" }]}>
           <TouchableOpacity
@@ -452,91 +349,45 @@ export default function CompleteProfileScreen() {
             style={[
               sheetStyle,
               {
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                right: 0,
+                position: "absolute", bottom: 0, left: 0, right: 0,
                 backgroundColor: "#fff",
-                borderTopLeftRadius: 28,
-                borderTopRightRadius: 28,
+                borderTopLeftRadius: 28, borderTopRightRadius: 28,
                 paddingBottom: Platform.OS === "ios" ? 36 : 24,
                 shadowColor: "#000",
                 shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.08,
-                shadowRadius: 20,
-                elevation: 20,
+                shadowOpacity: 0.08, shadowRadius: 20, elevation: 20,
               },
             ]}
           >
-            {/* drag handle */}
-            <View
-              style={{
-                width: 40,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: "#E0E0E0",
-                alignSelf: "center",
-                marginTop: 12,
-                marginBottom: 4,
-              }}
-            />
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: "#E0E0E0", alignSelf: "center", marginTop: 12, marginBottom: 4 }} />
 
-            {/* header row */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                paddingHorizontal: 20,
-                paddingVertical: 12,
-              }}
-            >
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 }}>
               <TouchableOpacity
                 onPress={goToPreviousMonth}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: "#FFF3EC",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
+                style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFF3EC", alignItems: "center", justifyContent: "center" }}
               >
                 <Ionicons name="chevron-back" size={20} color="#F55905" />
               </TouchableOpacity>
 
-              {/* tappable month+year → opens year picker */}
               <TouchableOpacity
                 onPress={isYearPickerVisible ? () => setIsYearPickerVisible(false) : openYearPicker}
                 style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
               >
                 <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 17, color: "#1E1E1E" }}>
-                  {`${MONTH_NAMES[displayedMonth.getMonth()]} ${displayedMonth.getFullYear()}`}
+                  {`${monthNames[displayedMonth.getMonth()]} ${displayedMonth.getFullYear()}`}
                 </Text>
-                <Ionicons
-                  name={isYearPickerVisible ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color="#F55905"
-                />
+                <Ionicons name={isYearPickerVisible ? "chevron-up" : "chevron-down"} size={16} color="#F55905" />
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={goToNextMonth}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: "#FFF3EC",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
+                style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFF3EC", alignItems: "center", justifyContent: "center" }}
               >
                 <Ionicons name="chevron-forward" size={20} color="#F55905" />
               </TouchableOpacity>
             </View>
 
             {isYearPickerVisible ? (
-              /* ── Year picker ── */
               <FlatList
                 ref={yearsListRef}
                 data={YEARS}
@@ -551,21 +402,12 @@ export default function CompleteProfileScreen() {
                     <TouchableOpacity
                       onPress={() => selectYear(year)}
                       style={{
-                        flex: 1,
-                        margin: 4,
-                        paddingVertical: 10,
-                        borderRadius: 12,
+                        flex: 1, margin: 4, paddingVertical: 10, borderRadius: 12,
                         alignItems: "center",
                         backgroundColor: isSelected ? "#F55905" : "#F7F7F7",
                       }}
                     >
-                      <Text
-                        style={{
-                          fontFamily: isSelected ? "Cairo_700Bold" : "Tajawal_400Regular",
-                          fontSize: 14,
-                          color: isSelected ? "#fff" : "#1E1E1E",
-                        }}
-                      >
+                      <Text style={{ fontFamily: isSelected ? "Cairo_700Bold" : "Tajawal_400Regular", fontSize: 14, color: isSelected ? "#fff" : "#1E1E1E" }}>
                         {year}
                       </Text>
                     </TouchableOpacity>
@@ -573,11 +415,9 @@ export default function CompleteProfileScreen() {
                 }}
               />
             ) : (
-              /* ── Calendar grid ── */
               <View style={{ paddingHorizontal: 16, overflow: "hidden" }}>
-                {/* weekday labels */}
                 <View style={{ flexDirection: "row", marginBottom: 6 }}>
-                  {WEEKDAY_LABELS.map((label) => (
+                  {weekdayLabels.map((label) => (
                     <View key={label} style={{ width: "14.2857%", alignItems: "center" }}>
                       <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#9E9E9E" }}>
                         {label}
@@ -586,25 +426,15 @@ export default function CompleteProfileScreen() {
                   ))}
                 </View>
 
-                {/* animated month grid — key forces remount for slide animation */}
                 <Animated.View
                   key={`${displayedMonth.getFullYear()}-${displayedMonth.getMonth()}`}
-                  entering={
-                    monthSlideDir === "left"
-                      ? SlideInRight.duration(220).easing(Easing.out(Easing.cubic))
-                      : SlideInLeft.duration(220).easing(Easing.out(Easing.cubic))
-                  }
-                  exiting={
-                    monthSlideDir === "left"
-                      ? SlideOutLeft.duration(220).easing(Easing.in(Easing.cubic))
-                      : SlideOutRight.duration(220).easing(Easing.in(Easing.cubic))
-                  }
+                  entering={monthSlideDir === "left" ? SlideInRight.duration(220).easing(Easing.out(Easing.cubic)) : SlideInLeft.duration(220).easing(Easing.out(Easing.cubic))}
+                  exiting={monthSlideDir === "left" ? SlideOutLeft.duration(220).easing(Easing.in(Easing.cubic)) : SlideOutRight.duration(220).easing(Easing.in(Easing.cubic))}
                 >
                   <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
                     {calendarDays.map((date, index) => {
                       const isSelected =
-                        !!date &&
-                        !!selectedBirthday &&
+                        !!date && !!selectedBirthday &&
                         date.getDate() === selectedBirthday.getDate() &&
                         date.getMonth() === selectedBirthday.getMonth() &&
                         date.getFullYear() === selectedBirthday.getFullYear();
@@ -617,22 +447,9 @@ export default function CompleteProfileScreen() {
                           {date ? (
                             <TouchableOpacity
                               onPress={() => handleSelectDay(date)}
-                              style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: 19,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: isSelected ? "#F55905" : "transparent",
-                              }}
+                              style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: isSelected ? "#F55905" : "transparent" }}
                             >
-                              <Text
-                                style={{
-                                  fontFamily: isSelected ? "Cairo_700Bold" : "Tajawal_400Regular",
-                                  fontSize: 14,
-                                  color: isSelected ? "#fff" : "#1E1E1E",
-                                }}
-                              >
+                              <Text style={{ fontFamily: isSelected ? "Cairo_700Bold" : "Tajawal_400Regular", fontSize: 14, color: isSelected ? "#fff" : "#1E1E1E" }}>
                                 {date.getDate()}
                               </Text>
                             </TouchableOpacity>
@@ -649,17 +466,10 @@ export default function CompleteProfileScreen() {
 
             <TouchableOpacity
               onPress={closeCalendar}
-              style={{
-                alignSelf: "center",
-                marginTop: 8,
-                paddingHorizontal: 28,
-                paddingVertical: 10,
-                borderRadius: 14,
-                backgroundColor: "#F7F7F7",
-              }}
+              style={{ alignSelf: "center", marginTop: 8, paddingHorizontal: 28, paddingVertical: 10, borderRadius: 14, backgroundColor: "#F7F7F7" }}
             >
               <Text style={{ fontFamily: "Cairo_700Bold", fontSize: 14, color: "#1E1E1E" }}>
-                إغلاق
+                {t("completeProfile.calendar.close")}
               </Text>
             </TouchableOpacity>
           </Animated.View>

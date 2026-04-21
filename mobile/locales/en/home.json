@@ -1,0 +1,27 @@
+{
+  "greeting": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "search": {
+    "placeholder": "Search restaurants or meals..."
+  },
+  "sections": {
+    "categories": "Categories",
+    "popular": "Most Popular",
+    "nearYou": "Near You",
+    "featured": "Featured"
+  },
+  "restaurant": {
+    "open": "Open",
+    "closed": "Closed",
+    "minOrder": "Min. order",
+    "deliveryTime": "{{min}}-{{max}} min",
+    "deliveryFee": "Delivery fee"
+  },
+  "empty": {
+    "title": "No results found",
+    "subtitle": "Try a different search term"
+  }
+}

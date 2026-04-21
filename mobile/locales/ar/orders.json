@@ -1,0 +1,23 @@
+{
+  "title": "طلباتي",
+  "empty": {
+    "title": "لا توجد طلبات بعد",
+    "subtitle": "ستظهر طلباتك هنا"
+  },
+  "status": {
+    "pending": "قيد الانتظار",
+    "confirmed": "مؤكد",
+    "preparing": "قيد التحضير",
+    "onTheWay": "في الطريق",
+    "delivered": "تم التسليم",
+    "cancelled": "ملغي"
+  },
+  "details": {
+    "title": "تفاصيل الطلب",
+    "total": "المجموع",
+    "deliveryFee": "رسوم التوصيل",
+    "subtotal": "المجموع الفرعي",
+    "placedAt": "وقت الطلب"
+  },
+  "reorder": "إعادة الطلب"
+}

@@ -1,0 +1,23 @@
+{
+  "title": "ملفي الشخصي",
+  "edit": "تعديل الملف",
+  "changePhoto": "تغيير الصورة الشخصية",
+  "settings": {
+    "title": "الإعدادات",
+    "language": "اللغة",
+    "notifications": "الإشعارات",
+    "theme": "المظهر"
+  },
+  "account": {
+    "title": "الحساب",
+    "logout": "تسجيل الخروج",
+    "deleteAccount": "حذف الحساب"
+  },
+  "language": {
+    "title": "اختر اللغة",
+    "arabic": "العربية",
+    "english": "الإنجليزية",
+    "restartRequired": "يلزم إعادة التشغيل لتطبيق تغيير اتجاه التخطيط.",
+    "restart": "إعادة التشغيل الآن"
+  }
+}

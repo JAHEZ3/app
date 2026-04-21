@@ -14,6 +14,8 @@ import { useSharedValue } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useOnboardingStore } from "@/store/useOnboardingStore";
 import OnboardingSlide from "../components/OnboardingSlide";
 import PaginationDots from "../components/PaginationDots";
 import AppButton from "../../../components/ui/AppButton";
@@ -65,12 +67,19 @@ export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const progress     = useSharedValue<number>(0);
   const insets       = useSafeAreaInsets();
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const markOnboardingSeen = useOnboardingStore((state) => state.markOnboardingSeen);
 
   const isLastSlide = currentIndex === SLIDES.length - 1;
 
+  const finishOnboarding = () => {
+    markOnboardingSeen();
+    router.replace(accessToken ? "/home/Home" : "/auth/login");
+  };
+
   const handleNext = () => {
     if (isLastSlide) {
-      router.replace("/auth/login");
+      finishOnboarding();
     } else {
       carouselRef.current?.scrollTo({ index: currentIndex + 1, animated: true });
     }
@@ -114,7 +123,7 @@ export default function OnboardingScreen() {
       >
         {/* Skip */}
         <TouchableOpacity
-          onPress={() => router.replace("/auth/login")}
+          onPress={finishOnboarding}
           style={{
             paddingVertical: 7,
             paddingHorizontal: 14,
