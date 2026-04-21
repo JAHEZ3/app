@@ -25,6 +25,7 @@ import Animated, {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import FormField from "../components/FormField";
+import LocationCard from "../components/LocationCard";
 import PrivacyCard from "../components/PrivacyCard";
 import AppButton from "../../../components/ui/AppButton";
 import { useCompleteProfile } from "../hooks/useCompleteProfile";
@@ -129,7 +130,14 @@ export default function CompleteProfileScreen() {
   const overlayAlpha = useSharedValue(0);
 
   const { mutateAsync: completeProfile, isPending, isError, error } = useCompleteProfile();
-  const { coords } = useLocation();
+  const {
+    coords,
+    hasPermission,
+    canAskAgain,
+    isLoading: isLocationLoading,
+    requestLocation,
+    refreshLocation,
+  } = useLocation();
 
   const monthNames = useMemo(
     () => t("completeProfile.calendar.months", { returnObjects: true }) as string[],
@@ -148,6 +156,12 @@ export default function CompleteProfileScreen() {
   useEffect(() => {
     pageOpacity.value = withTiming(1, { duration: 300, easing: ease });
   }, [pageOpacity]);
+
+  useEffect(() => {
+    if (coords) {
+      console.log("CompleteProfile location:", coords);
+    }
+  }, [coords]);
 
   const pageStyle = useAnimatedStyle(() => ({ opacity: pageOpacity.value }));
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetY.value }] }));
@@ -286,6 +300,17 @@ export default function CompleteProfileScreen() {
             </Row>
 
             <Row delay={520}>
+              <LocationCard
+                coords={coords}
+                hasPermission={hasPermission}
+                canAskAgain={canAskAgain}
+                isLoading={isLocationLoading}
+                onAllowLocation={requestLocation}
+                onRefreshLocation={refreshLocation}
+              />
+            </Row>
+
+            <Row delay={560}>
               <PrivacyCard />
             </Row>
 
@@ -299,7 +324,7 @@ export default function CompleteProfileScreen() {
               </View>
             )}
 
-            <Row delay={580}>
+            <Row delay={620}>
               <AppButton
                 label={t("completeProfile.saveAndContinue")}
                 onPress={handleSubmit}

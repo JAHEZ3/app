@@ -10,30 +10,20 @@ const secureStorage = createJSONStorage(() => ({
 
 interface OnboardingState {
   hasSeenOnboarding: boolean;
-  forceShowOnboarding: boolean;
   markOnboardingSeen: () => void;
-  triggerOnboardingAfterLogout: () => void;
-  clearForcedOnboarding: () => void;
 }
 
 export const useOnboardingStore = create<OnboardingState>()(
   persist(
     (set) => ({
       hasSeenOnboarding: false,
-      forceShowOnboarding: false,
-      markOnboardingSeen: () =>
-        set({ hasSeenOnboarding: true, forceShowOnboarding: false }),
-      triggerOnboardingAfterLogout: () =>
-        set({ forceShowOnboarding: true }),
-      clearForcedOnboarding: () =>
-        set({ forceShowOnboarding: false }),
+      markOnboardingSeen: () => set({ hasSeenOnboarding: true }),
     }),
     {
       name: "app-onboarding",
       storage: secureStorage,
       partialize: (state) => ({
         hasSeenOnboarding: state.hasSeenOnboarding,
-        forceShowOnboarding: state.forceShowOnboarding,
       }),
     }
   )

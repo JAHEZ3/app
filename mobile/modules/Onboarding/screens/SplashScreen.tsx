@@ -104,7 +104,6 @@ export default function SplashScreen() {
   const status = useAuthStore((state) => state.status);
   const accessToken = useAuthStore((state) => state.accessToken);
   const hasSeenOnboarding = useOnboardingStore((state) => state.hasSeenOnboarding);
-  const forceShowOnboarding = useOnboardingStore((state) => state.forceShowOnboarding);
   const [onboardingReady, setOnboardingReady] = useState(
     () => useOnboardingStore.persist.hasHydrated()
   );
@@ -186,17 +185,15 @@ export default function SplashScreen() {
       return;
     }
 
-    const nextRoute = forceShowOnboarding
+    const nextRoute = !hasSeenOnboarding
       ? "/onboarding"
-      : !hasSeenOnboarding
-        ? "/onboarding"
-        : accessToken
-          ? "/home/Home"
-          : "/auth/login";
+      : accessToken
+        ? "/home/Home"
+        : "/auth/login";
 
     const timer = setTimeout(() => router.replace(nextRoute), 3200);
     return () => clearTimeout(timer);
-  }, [accessToken, forceShowOnboarding, hasSeenOnboarding, onboardingReady, status]);
+  }, [accessToken, hasSeenOnboarding, onboardingReady, status]);
 
   /* ── animated styles ── */
   const imgStyle     = useAnimatedStyle(() => ({ opacity: imgOpacity.value }));

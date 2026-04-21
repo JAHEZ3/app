@@ -9,7 +9,6 @@ export default function Onboarding() {
   const status = useAuthStore((state) => state.status);
   const accessToken = useAuthStore((state) => state.accessToken);
   const hasSeenOnboarding = useOnboardingStore((state) => state.hasSeenOnboarding);
-  const forceShowOnboarding = useOnboardingStore((state) => state.forceShowOnboarding);
   const [isReady, setIsReady] = useState(() => useOnboardingStore.persist.hasHydrated());
 
   useEffect(() => {
@@ -33,7 +32,7 @@ export default function Onboarding() {
     );
   }
 
-  if (hasSeenOnboarding && !forceShowOnboarding) {
+  if (hasSeenOnboarding) {
     return <Redirect href={accessToken ? "/home/Home" : "/auth/login"} />;
   }
 
