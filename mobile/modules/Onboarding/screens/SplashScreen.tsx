@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, Dimensions, StatusBar } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { router } from "expo-router";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useOnboardingStore } from "@/store/useOnboardingStore";
 import SplashLoadingDots from "../components/SplashLoadingDots";
 
 const { width, height } = Dimensions.get("window");
@@ -100,6 +101,13 @@ function LogoMark({ style }: { style?: any }) {
 }
 
 export default function SplashScreen() {
+  const status = useAuthStore((state) => state.status);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const hasSeenOnboarding = useOnboardingStore((state) => state.hasSeenOnboarding);
+  const forceShowOnboarding = useOnboardingStore((state) => state.forceShowOnboarding);
+  const [onboardingReady, setOnboardingReady] = useState(
+    () => useOnboardingStore.persist.hasHydrated()
+  );
   /* ── shared values ── */
   const imgOpacity    = useSharedValue(0);
   const markScale     = useSharedValue(0.6);
@@ -160,20 +168,35 @@ export default function SplashScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Capture status at the moment this screen mounts so we know
-  // whether we arrived here from a logout ('unauthenticated') or a
-  // cold app start ('idle').
-  const statusAtMount = useRef(useAuthStore.getState().status);
+  useEffect(() => {
+    if (useOnboardingStore.persist.hasHydrated()) {
+      setOnboardingReady(true);
+      return;
+    }
+
+    const unsub = useOnboardingStore.persist.onFinishHydration(() => {
+      setOnboardingReady(true);
+    });
+
+    return unsub;
+  }, []);
 
   useEffect(() => {
-    const fromLogout = statusAtMount.current === 'unauthenticated';
-    const timer = setTimeout(
-      () => router.replace(fromLogout ? '/auth/login' : '/onboarding'),
-      fromLogout ? 1800 : 3200,
-    );
+    if (!onboardingReady || status === "idle" || status === "loading") {
+      return;
+    }
+
+    const nextRoute = forceShowOnboarding
+      ? "/onboarding"
+      : !hasSeenOnboarding
+        ? "/onboarding"
+        : accessToken
+          ? "/home/Home"
+          : "/auth/login";
+
+    const timer = setTimeout(() => router.replace(nextRoute), 3200);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [accessToken, forceShowOnboarding, hasSeenOnboarding, onboardingReady, status]);
 
   /* ── animated styles ── */
   const imgStyle     = useAnimatedStyle(() => ({ opacity: imgOpacity.value }));

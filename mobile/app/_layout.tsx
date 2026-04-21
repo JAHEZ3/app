@@ -71,7 +71,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" />
             <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
             <Stack.Screen name="auth/terms" />
-            <Stack.Screen name="auth/otp" />
+            <Stack.Screen name="auth/otp" options={{ gestureEnabled: false }} />
             <Stack.Screen name="auth/complete-profile" options={{ gestureEnabled: false }} />
             <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
           </Stack>

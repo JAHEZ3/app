@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   Easing,
@@ -21,8 +20,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
-  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
@@ -84,46 +81,16 @@ function toLocalISODate(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
-function buildCalendarDays(displayedMonth: Date): Array<Date | null> {
+function buildCalendarDays(displayedMonth: Date): (Date | null)[] {
   const year = displayedMonth.getFullYear();
   const month = displayedMonth.getMonth();
   const firstDayIndex = new Date(year, month, 1).getDay();
   const totalDays = new Date(year, month + 1, 0).getDate();
-  const cells: Array<Date | null> = [];
+  const cells: (Date | null)[] = [];
   for (let i = 0; i < firstDayIndex; i++) cells.push(null);
   for (let day = 1; day <= totalDays; day++) cells.push(new Date(year, month, day));
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
-}
-
-function PhotoRing() {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(0.45);
-
-  useEffect(() => {
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.07, { duration: 2400, easing: Easing.inOut(Easing.sin) }),
-        withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1
-    );
-    opacity.value = withRepeat(
-      withSequence(withTiming(0.18, { duration: 2400 }), withTiming(0.45, { duration: 2400 })),
-      -1
-    );
-  }, [opacity, scale]);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <Animated.View
-      style={[style, { position: "absolute", width: 116, height: 116, borderRadius: 58, borderWidth: 2, borderColor: "#F55905" }]}
-    />
-  );
 }
 
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
@@ -177,15 +144,12 @@ export default function CompleteProfileScreen() {
   const calendarDays = useMemo(() => buildCalendarDays(displayedMonth), [displayedMonth]);
 
   const pageOpacity = useSharedValue(0);
-  const photoScale = useSharedValue(0.9);
 
   useEffect(() => {
     pageOpacity.value = withTiming(1, { duration: 300, easing: ease });
-    photoScale.value = withDelay(100, withTiming(1, { duration: 350, easing: ease }));
-  }, [pageOpacity, photoScale]);
+  }, [pageOpacity]);
 
   const pageStyle = useAnimatedStyle(() => ({ opacity: pageOpacity.value }));
-  const photoStyle = useAnimatedStyle(() => ({ transform: [{ scale: photoScale.value }] }));
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetY.value }] }));
   const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayAlpha.value }));
 
@@ -287,51 +251,7 @@ export default function CompleteProfileScreen() {
           contentContainerStyle={{ paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={{ alignItems: "center", paddingTop: 20, paddingBottom: 24 }}>
-            <View style={{ width: 120, height: 120, alignItems: "center", justifyContent: "center" }}>
-              <PhotoRing />
-              <Animated.View style={photoStyle}>
-                <View
-                  style={{
-                    width: 100, height: 100, borderRadius: 50,
-                    shadowColor: "#F55905",
-                    shadowOffset: { width: 0, height: 5 },
-                    shadowOpacity: 0.2, shadowRadius: 12, elevation: 8,
-                    backgroundColor: "#fff",
-                  }}
-                >
-                  <View style={{ width: "100%", height: "100%", borderRadius: 50, overflow: "hidden", borderWidth: 2.5, borderColor: "#fff" }}>
-                    <Image
-                      source={{ uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face" }}
-                      style={{ width: "100%", height: "100%" }}
-                      contentFit="cover"
-                    />
-                  </View>
-                </View>
-
-                <View
-                  style={{
-                    position: "absolute", bottom: 2, left: 2,
-                    width: 28, height: 28, borderRadius: 14,
-                    backgroundColor: "#F55905",
-                    alignItems: "center", justifyContent: "center",
-                    borderWidth: 2, borderColor: "#fff",
-                  }}
-                >
-                  <Ionicons name="pencil" size={12} color="#fff" />
-                </View>
-              </Animated.View>
-            </View>
-
-            <Row delay={280}>
-              <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 }}>
-                <Ionicons name="camera-outline" size={13} color="#F55905" />
-                <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 13, color: "#F55905", textDecorationLine: "underline" }}>
-                  {t("completeProfile.changePhoto")}
-                </Text>
-              </TouchableOpacity>
-            </Row>
-          </View>
+          <View style={{ paddingTop: 20, paddingBottom: 24 }} />
 
           <View style={{ paddingHorizontal: 24, gap: 18 }}>
             <Row delay={340}>
