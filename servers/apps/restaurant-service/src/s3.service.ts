@@ -4,6 +4,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { extname } from "path";
@@ -55,5 +56,27 @@ export class S3Service {
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn },
     );
+  }
+
+  /** Delete an object. No-op if the key is missing or the object doesn't exist. */
+  async delete(key: string): Promise<void> {
+    if (!key) return;
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+  }
+
+  /**
+   * Return a ready-to-use URL for an imageUrl field.
+   * - external URLs (http/https): return as-is — tolerates legacy rows.
+   * - S3 keys: generate a presigned URL.
+   */
+  async resolveImageUrl(
+    value: string | null | undefined,
+    expiresIn = 3600,
+  ): Promise<string | null> {
+    if (!value) return null;
+    if (/^https?:\/\//i.test(value)) return value;
+    return this.presignedUrl(value, expiresIn);
   }
 }

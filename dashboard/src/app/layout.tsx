@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { ToastProvider } from "@/providers/ToastProvider";
+import { RouterProvider } from "@/providers/RouterProvider";
 
 export const metadata: Metadata = {
   title: "جاهز | لوحة تحكم المطعم",
@@ -25,11 +26,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <QueryProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
+          <RouterProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </RouterProvider>
         </QueryProvider>
       </body>
     </html>

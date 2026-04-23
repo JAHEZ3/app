@@ -5,14 +5,15 @@ import { restaurantApi } from "@/lib/api";
 import { queryKeys, queryClient } from "@/lib/queryClient";
 import { Restaurant, DashboardStats, SalesDataPoint, RestaurantHour } from "@/types/restaurant.types";
 import { TopSellingMeal } from "@/types/menu.types";
-import { UpdateRestaurantDto, UpdateStoreStatusDto, UpdateRestaurantHourDto } from "@/dto/restaurant.dto";
+import { UpdateRestaurantDto, UpdateSettingsDto, UpdateStoreStatusDto, RestaurantHourEntryDto } from "@/dto/restaurant.dto";
 
 export function useRestaurant() {
   return useQuery<Restaurant>({
     queryKey: queryKeys.restaurant.me,
     queryFn: async () => {
-      const res = await restaurantApi.getMe();
-      return res.data;
+      const res = await restaurantApi.getProfile();
+      // Backend wraps responses in `{ data, message }`
+      return (res.data?.data ?? res.data) as Restaurant;
     },
   });
 }
@@ -51,16 +52,26 @@ export function useTopMeals() {
 export function useRestaurantHours() {
   return useQuery<RestaurantHour[]>({
     queryKey: queryKeys.restaurant.hours,
-    queryFn: async () => {
+    queryFn: async () => { 
       const res = await restaurantApi.getHours();
-      return res.data;
+      // Backend wraps responses in `{ data, message }`
+      return (res.data?.data ?? res.data ?? []) as RestaurantHour[];
     },
   });
 }
 
 export function useUpdateRestaurant() {
   return useMutation({
-    mutationFn: (data: UpdateRestaurantDto) => restaurantApi.update(data),
+    mutationFn: (data: UpdateRestaurantDto) => restaurantApi.updateProfile(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.restaurant.me });
+    },
+  });
+}
+
+export function useUpdateSettings() {
+  return useMutation({
+    mutationFn: (data: UpdateSettingsDto) => restaurantApi.updateSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.restaurant.me });
     },
@@ -69,16 +80,18 @@ export function useUpdateRestaurant() {
 
 export function useToggleStoreStatus() {
   return useMutation({
-    mutationFn: (data: UpdateStoreStatusDto) => restaurantApi.toggleOpen(data.isOpen),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    mutationFn: (_data: UpdateStoreStatusDto) => restaurantApi.toggleOpen(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.restaurant.me });
     },
   });
 }
 
-export function useUpdateHour() {
+export function useSetHours() {
   return useMutation({
-    mutationFn: (data: UpdateRestaurantHourDto) => restaurantApi.updateHour(data),
+    mutationFn: (hours: RestaurantHourEntryDto[]) =>
+      restaurantApi.setHours(hours),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.restaurant.hours });
     },

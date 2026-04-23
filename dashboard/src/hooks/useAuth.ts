@@ -1,50 +1,125 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { authApi } from "@/lib/api";
-import { queryKeys, queryClient } from "@/lib/queryClient";
-import { LoginCredentials, AuthUser } from "@/types/auth.types";
+import { useMutation } from "@tanstack/react-query";
 import Cookies from "js-cookie";
-import { useRouter } from "next/navigation";
+import { authApi, normalizeTokens } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+import { useAuthStore } from "@/store/authStore";
+import { navigateTo } from "@/lib/navigation";
 
-export function useMe() {
-  return useQuery<AuthUser>({
-    queryKey: queryKeys.auth.me,
-    queryFn: async () => {
-      const res = await authApi.me();
-      return res.data;
+export function useLogin() {
+  const { setTokens } = useAuthStore();
+  console.log("useLogin hook initialized"); // Debug log
+  return useMutation({
+    mutationFn: async ({ phone, password }: { phone: string; password: string }) => {
+      const res = await authApi.loginRestaurant(phone, password);
+      return normalizeTokens(res.data);
     },
-    retry: false,
+    onSuccess: (tokens) => {
+      if (!tokens) return;
+      setTokens(tokens.accessToken, tokens.refreshToken);
+      // StatusGuard on /dashboard will redirect based on profile status
+      navigateTo("/dashboard");
+    },
   });
 }
 
-export function useLogin() {
-  const router = useRouter();
+export function useRegister() {
+  return useMutation({
+    mutationFn: async (phone: string) => {
+      const res = await authApi.registerRestaurant(phone);
+      return res.data as { message: string };
+    },
+  });
+}
+
+export function useVerifyOtp() {
+  const { setTokens } = useAuthStore();
 
   return useMutation({
-    mutationFn: async (creds: LoginCredentials) => {
-      const res = await authApi.login(creds.email, creds.password);
+    mutationFn: async ({ phone, otp }: { phone: string; otp: string }) => {
+      const res = await authApi.verifyOtp(phone, otp);
+      return normalizeTokens(res.data);
+    },
+    onSuccess: (tokens) => {
+      if (!tokens) return;
+      setTokens(tokens.accessToken, tokens.refreshToken);
+      // Navigation is handled by the consumer so UI can show a "done" step first
+    },
+  });
+}
+
+export function useResendOtp() {
+  return useMutation({
+    mutationFn: (phone: string) => authApi.resendOtp(phone),
+  });
+}
+
+export function useCompleteProfile() {
+  const { setTokens, setAccessToken } = useAuthStore();
+
+  return useMutation({
+    mutationFn: async (formData: FormData) => {
+      const { restaurantApi } = await import("@/lib/api");
+      const res = await restaurantApi.completeProfile(formData);
       return res.data;
     },
     onSuccess: (data) => {
-      Cookies.set("access_token", data.tokens.accessToken, { expires: 7 });
-      Cookies.set("refresh_token", data.tokens.refreshToken, { expires: 30 });
-      queryClient.setQueryData(queryKeys.auth.me, data.user);
-      router.push("/dashboard");
+      const tokens = normalizeTokens(data);
+      if (tokens) {
+        setTokens(tokens.accessToken, tokens.refreshToken);
+      } else {
+        const inner = (data as { data?: Record<string, unknown> } | undefined)?.data ?? data;
+        const lone = inner as { accessToken?: string; access_token?: string } | undefined;
+        const accessOnly = lone?.accessToken ?? lone?.access_token;
+        if (accessOnly) setAccessToken(accessOnly);
+      }
+      // StatusGuard will pick up the new status (pending_approval) and route accordingly
+      navigateTo("/dashboard");
     },
   });
 }
 
 export function useLogout() {
-  const router = useRouter();
+  const { logout } = useAuthStore();
 
   return useMutation({
-    mutationFn: () => authApi.logout(),
+    mutationFn: async () => {
+      const refreshToken = Cookies.get("refresh_token");
+      if (refreshToken) {
+        try { await authApi.logout(refreshToken); } catch { /* ignore */ }
+      }
+    },
     onSettled: () => {
-      Cookies.remove("access_token");
-      Cookies.remove("refresh_token");
+      logout();
       queryClient.clear();
-      router.push("/login");
+      navigateTo("/login");
     },
   });
+}
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (phone: string) => authApi.forgotPassword(phone),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: ({ phone, otp, newPassword }: { phone: string; otp: string; newPassword: string }) =>
+      authApi.resetPassword(phone, otp, newPassword),
+  });
+}
+
+export function useAuth() {
+  const login           = useLogin();
+  const register        = useRegister();
+  const verifyOtp       = useVerifyOtp();
+  const resendOtp       = useResendOtp();
+  const completeProfile = useCompleteProfile();
+  const logout          = useLogout();
+  const forgotPassword  = useForgotPassword();
+  const resetPassword   = useResetPassword();
+
+  return { login, register, verifyOtp, resendOtp, completeProfile, logout, forgotPassword, resetPassword };
 }

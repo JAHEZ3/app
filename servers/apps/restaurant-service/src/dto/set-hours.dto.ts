@@ -1,5 +1,8 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsInt,
   IsString,
@@ -26,6 +29,11 @@ export class HourEntryDto {
 
 export class SetHoursDto {
   @IsArray({ message: 'أوقات العمل يجب أن تكون مصفوفة.' })
+  @ArrayMinSize(7, { message: 'يجب إرسال أوقات العمل لجميع أيام الأسبوع (7 أيام).' })
+  @ArrayMaxSize(7, { message: 'يجب إرسال أوقات العمل لجميع أيام الأسبوع (7 أيام).' })
+  @ArrayUnique((o: HourEntryDto) => o.dayOfWeek, {
+    message: 'لا يجوز تكرار يوم الأسبوع في أوقات العمل.',
+  })
   @ValidateNested({ each: true })
   @Type(() => HourEntryDto)
   hours: HourEntryDto[];

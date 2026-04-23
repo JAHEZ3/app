@@ -12,7 +12,7 @@ import { AuthService } from "./auth.service";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ".env" }),
 
     TypeOrmModule.forRootAsync({
       useFactory: (config: ConfigService) => ({

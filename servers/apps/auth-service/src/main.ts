@@ -17,11 +17,24 @@ async function bootstrap() {
   const app = await NestFactory.create(AuthServiceModule);
   const config = app.get(ConfigService);
 
+  const rawOrigins = config.get<string>("CORS_ORIGINS", "");
+  const allowedOrigins = rawOrigins ? rawOrigins.split(",").map((o) => o.trim()) : [];
+  const isProd = config.get<string>("NODE_ENV") === "production";
+  const LOCALHOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
   app.enableCors({
-    origin: config.get<string>("CORS_ORIGINS", "*").split(","),
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!isProd && LOCALHOST_RE.test(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     allowedHeaders: "Content-Type,Authorization",
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   app.useGlobalPipes(
