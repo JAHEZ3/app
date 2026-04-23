@@ -18,6 +18,7 @@ export const queryClient = new QueryClient({
 export const queryKeys = {
   auth: {
     me: ["auth", "me"] as const,
+    sessions: ["auth", "sessions"] as const,
   },
   restaurant: {
     me: ["restaurant", "me"] as const,
@@ -32,5 +33,7 @@ export const queryKeys = {
   },
   menu: {
     all: ["menu"] as const,
+    optionGroups: (mealId: string) => ["menu", "option-groups", mealId] as const,
+    options: (groupId: string) => ["menu", "options", groupId] as const,
   },
 };

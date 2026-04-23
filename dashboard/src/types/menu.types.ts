@@ -1,21 +1,24 @@
+export enum MenuSelectionType {
+  SINGLE = "single",
+  MULTIPLE = "multiple",
+}
+
 export interface MealOption {
   id: string;
   groupId: string;
   name: string;
-  additionalPrice: number;
-  isDefault: boolean;
-  displayOrder: number;
+  extraPrice: number;
+  isAvailable: boolean;
 }
 
 export interface MealOptionGroup {
   id: string;
   mealId: string;
   name: string;
+  selectionType: MenuSelectionType;
   isRequired: boolean;
-  minSelections: number;
-  maxSelections: number;
-  displayOrder: number;
-  options: MealOption[];
+  maxSelections: number | null;
+  options?: MealOption[];
 }
 
 export interface Meal {
@@ -40,9 +43,7 @@ export interface MenuSection {
   id: string;
   menuId: string;
   name: string;
-  description: string | null;
   displayOrder: number;
-  isActive: boolean;
   meals: Meal[];
 }
 

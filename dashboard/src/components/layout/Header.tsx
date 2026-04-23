@@ -1,15 +1,33 @@
 "use client";
 
+import { useState } from "react";
 import { Bell, Search } from "lucide-react";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { cn } from "@/lib/utils";
 
-interface HeaderProps {
-  title?: string;
-  subtitle?: string;
+function RestaurantAvatar({ logoUrl, fallback }: { logoUrl: string | null; fallback: string }) {
+  const [failed, setFailed] = useState(false);
+  const showImage = Boolean(logoUrl) && !failed;
+
+  return (
+    <div className="w-9 h-9 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center text-primary font-bold text-sm border border-primary/20 group-hover:bg-primary/15 transition-colors">
+      {showImage ? (
+        // Presigned S3 URL rotates and may be http in dev — plain img is the most robust.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl!}
+          alt=""
+          className="w-full h-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span>{fallback}</span>
+      )}
+    </div>
+  );
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
+export function Header() {
   const { data: restaurant } = useRestaurant();
 
   return (
@@ -52,9 +70,12 @@ export function Header({ title, subtitle }: HeaderProps) {
             </p>
             <p className="text-xs text-muted-foreground leading-tight">مالك المطعم</p>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm border border-primary/20 group-hover:bg-primary/15 transition-colors">
-            {restaurant?.name?.[0] ?? "م"}
-          </div>
+          <RestaurantAvatar
+            key={restaurant?.logoUrl ?? "none"}
+            logoUrl={restaurant?.logoUrl ?? null}
+            fallback={restaurant?.name?.trim()?.[0] ?? "م"}
+          />
+
         </div>
       </div>
     </header>
