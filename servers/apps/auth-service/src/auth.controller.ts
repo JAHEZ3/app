@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import type { Request } from "express";
 import { EventPattern, Payload } from "@nestjs/microservices";
 import { AuthService } from "./auth.service";
 import {
@@ -17,12 +30,25 @@ import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { AdminListUsersDto } from "./dto/admin-list-users.dto";
+import { AdminUpdateUserDto } from "./dto/admin-update-user.dto";
+import { AdminChangeStatusDto } from "./dto/admin-change-status.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { RolesGuard } from "./guards/roles.guard";
+import { Roles } from "./decorators/roles.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 
 @Controller()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  private sessionContext(req: Request) {
+    const ua = req.headers["user-agent"];
+    return {
+      ip: req.ip,
+      ...(typeof ua === "string" && { userAgent: ua }),
+    };
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // REGISTRATION  —  Step 1: phone → OTP (status: PENDING)
@@ -49,8 +75,8 @@ export class AuthController {
 
   /** Verifies the PHONE_VERIFY OTP for any phone-based role. */
   @Post("verify-otp")
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyRegistrationOtp(dto);
+  verifyOtp(@Body() dto: VerifyOtpDto, @Req() req: Request) {
+    return this.authService.verifyRegistrationOtp(dto, this.sessionContext(req));
   }
 
   /** Resends PHONE_VERIFY OTP (max 3 / 24 h). */
@@ -71,23 +97,23 @@ export class AuthController {
 
   /** Step 2 of customer OTP login — verifies OTP and returns tokens. */
   @Post("customer/verify-login")
-  verifyLoginOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyLoginOtp(dto);
+  verifyLoginOtp(@Body() dto: VerifyOtpDto, @Req() req: Request) {
+    return this.authService.verifyLoginOtp(dto, this.sessionContext(req));
   }
 
   @Post("delivery/login")
-  loginDelivery(@Body() dto: LoginDeliveryDto) {
-    return this.authService.loginDelivery(dto);
+  loginDelivery(@Body() dto: LoginDeliveryDto, @Req() req: Request) {
+    return this.authService.loginDelivery(dto, this.sessionContext(req));
   }
 
   @Post("restaurant/login")
-  loginRestaurant(@Body() dto: LoginRestaurantDto) {
-    return this.authService.loginRestaurant(dto);
+  loginRestaurant(@Body() dto: LoginRestaurantDto, @Req() req: Request) {
+    return this.authService.loginRestaurant(dto, this.sessionContext(req));
   }
 
   @Post("manager/login")
-  loginManager(@Body() dto: LoginManagerDto) {
-    return this.authService.loginManager(dto);
+  loginManager(@Body() dto: LoginManagerDto, @Req() req: Request) {
+    return this.authService.loginManager(dto, this.sessionContext(req));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -118,14 +144,99 @@ export class AuthController {
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Post("refresh")
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refreshToken);
+  refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
+    return this.authService.refresh(dto.refreshToken, this.sessionContext(req));
   }
 
   @Delete("logout")
   @UseGuards(JwtAuthGuard)
   logout(@CurrentUser("sub") userId: string, @Body() dto: RefreshTokenDto) {
     return this.authService.logout(userId, dto.refreshToken);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SESSIONS  —  list / revoke active refresh-token sessions
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/auth/sessions?refreshToken=...  (refreshToken optional; used to mark the current session) */
+  @Get("sessions")
+  @UseGuards(JwtAuthGuard)
+  listSessions(
+    @CurrentUser("sub") userId: string,
+    @Query("refreshToken") refreshToken?: string,
+  ) {
+    return this.authService.listSessions(userId, refreshToken);
+  }
+
+  /** DELETE /api/auth/sessions/:id — revoke one session by its jti. */
+  @Delete("sessions/:id")
+  @UseGuards(JwtAuthGuard)
+  revokeSession(
+    @CurrentUser("sub") userId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.authService.revokeSession(userId, id);
+  }
+
+  /** DELETE /api/auth/sessions — revoke all sessions EXCEPT the one owning the passed refresh token. */
+  @Delete("sessions")
+  @UseGuards(JwtAuthGuard)
+  revokeOtherSessions(
+    @CurrentUser("sub") userId: string,
+    @Body() dto: RefreshTokenDto,
+  ) {
+    return this.authService.revokeOtherSessions(userId, dto.refreshToken);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANAGER DASHBOARD — User Administration
+  // All endpoints require an authenticated manager.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/auth/manager/users?role=&status=&search=&page=&limit= */
+  @Get("manager/users")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminListUsers(@Query() query: AdminListUsersDto) {
+    return this.authService.adminListUsers(query);
+  }
+
+  /** GET /api/auth/manager/users/:id */
+  @Get("manager/users/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminGetUser(@Param("id", ParseUUIDPipe) id: string) {
+    return this.authService.adminGetUser(id);
+  }
+
+  /** PATCH /api/auth/manager/users/:id */
+  @Patch("manager/users/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminUpdateUser(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AdminUpdateUserDto,
+  ) {
+    return this.authService.adminUpdateUser(id, dto);
+  }
+
+  /** PATCH /api/auth/manager/users/:id/status */
+  @Patch("manager/users/:id/status")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminChangeStatus(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AdminChangeStatusDto,
+  ) {
+    return this.authService.adminChangeStatus(id, dto);
+  }
+
+  /** DELETE /api/auth/manager/users/:id */
+  @Delete("manager/users/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminDeleteUser(@Param("id", ParseUUIDPipe) id: string) {
+    return this.authService.adminDeleteUser(id);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

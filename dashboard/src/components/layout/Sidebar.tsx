@@ -15,11 +15,11 @@ import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
 
 const navItems = [
-  { href: "/dashboard",           icon: LayoutDashboard, label: "الرئيسية"   },
-  { href: "/dashboard/orders",    icon: ShoppingBag,     label: "الطلبات"    },
-  { href: "/dashboard/menu",      icon: UtensilsCrossed, label: "القائمة"    },
-  { href: "/dashboard/analytics", icon: BarChart3,       label: "الإحصائيات" },
-  { href: "/dashboard/settings",  icon: Settings,        label: "الإعدادات"  },
+  { href: "/dashboard", icon: LayoutDashboard, label: "الرئيسية" },
+  { href: "/orders", icon: ShoppingBag, label: "الطلبات" },
+  { href: "/menu", icon: UtensilsCrossed, label: "القائمة" },
+  { href: "/analytics", icon: BarChart3, label: "الإحصائيات" },
+  { href: "/settings", icon: Settings, label: "الإعدادات" },
 ];
 
 export function Sidebar() {
@@ -29,7 +29,10 @@ export function Sidebar() {
   return (
     <aside
       className="fixed right-0 top-0 h-full flex flex-col bg-white z-40"
-      style={{ width: "var(--sidebar-width, 240px)", boxShadow: "-2px 0 16px rgba(0,0,0,0.07)" }}
+      style={{
+        width: "var(--sidebar-width, 240px)",
+        boxShadow: "-2px 0 16px rgba(0,0,0,0.07)",
+      }}
     >
       {/* Logo */}
       <div className="flex items-center justify-center h-16 border-b border-border/60 px-4">
@@ -59,13 +62,15 @@ export function Sidebar() {
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group",
                 isActive
                   ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <Icon
                 className={cn(
                   "w-5 h-5 shrink-0 transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground group-hover:text-foreground",
                 )}
               />
               <span>{label}</span>

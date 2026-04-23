@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -35,6 +36,9 @@ import { CreateOptionGroupDto } from "./dto/create-option-group.dto";
 import { UpdateOptionGroupDto } from "./dto/update-option-group.dto";
 import { CreateOptionDto } from "./dto/create-option.dto";
 import { UpdateOptionDto } from "./dto/update-option.dto";
+import { AdminListRestaurantsDto } from "./dto/admin-list-restaurants.dto";
+import { AdminChangeRestaurantStatusDto } from "./dto/admin-change-restaurant-status.dto";
+import { ReorderDto } from "./dto/reorder.dto";
 
 const multerOptions = {
   storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
@@ -220,6 +224,14 @@ export class RestaurantServiceController {
     return this.service.createMenu(userId, dto);
   }
 
+  /** PATCH /api/restaurant/menus/reorder — body: { items: [{id, displayOrder}] } */
+  @Patch("menus/reorder")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  reorderMenus(@CurrentUser("sub") userId: string, @Body() dto: ReorderDto) {
+    return this.service.reorderMenus(userId, dto);
+  }
+
   @Patch("menus/:menuId")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
@@ -264,6 +276,18 @@ export class RestaurantServiceController {
     return this.service.createSection(userId, menuId, dto);
   }
 
+  /** PATCH /api/restaurant/menus/:menuId/sections/reorder */
+  @Patch("menus/:menuId/sections/reorder")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  reorderSections(
+    @CurrentUser("sub") userId: string,
+    @Param("menuId") menuId: string,
+    @Body() dto: ReorderDto,
+  ) {
+    return this.service.reorderSections(userId, menuId, dto);
+  }
+
   @Patch("sections/:sectionId")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
@@ -297,22 +321,53 @@ export class RestaurantServiceController {
     return this.service.getMeals(userId, sectionId);
   }
 
+  /**
+   * POST /api/restaurant/meals
+   * Multipart/form-data. Text fields from CreateMealDto + optional `image` file.
+   */
   @Post("meals")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
-  createMeal(@CurrentUser("sub") userId: string, @Body() dto: CreateMealDto) {
-    return this.service.createMeal(userId, dto);
+  @UseInterceptors(
+    FileFieldsInterceptor([{ name: "image", maxCount: 1 }], multerOptions),
+  )
+  createMeal(
+    @CurrentUser("sub") userId: string,
+    @Body() dto: CreateMealDto,
+    @UploadedFiles() files: { image?: Express.Multer.File[] },
+  ) {
+    return this.service.createMeal(userId, dto, files?.image?.[0]);
   }
 
+  /** PATCH /api/restaurant/sections/:sectionId/meals/reorder */
+  @Patch("sections/:sectionId/meals/reorder")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  reorderMeals(
+    @CurrentUser("sub") userId: string,
+    @Param("sectionId") sectionId: string,
+    @Body() dto: ReorderDto,
+  ) {
+    return this.service.reorderMeals(userId, sectionId, dto);
+  }
+
+  /**
+   * PATCH /api/restaurant/meals/:mealId
+   * Multipart/form-data. Any UpdateMealDto field + optional `image` file.
+   */
   @Patch("meals/:mealId")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("restaurant_owner")
+  @UseInterceptors(
+    FileFieldsInterceptor([{ name: "image", maxCount: 1 }], multerOptions),
+  )
   updateMeal(
     @CurrentUser("sub") userId: string,
     @Param("mealId") mealId: string,
     @Body() dto: UpdateMealDto,
+    @UploadedFiles() files: { image?: Express.Multer.File[] },
   ) {
-    return this.service.updateMeal(userId, mealId, dto);
+    return this.service.updateMeal(userId, mealId, dto, files?.image?.[0]);
   }
 
   @Delete("meals/:mealId")
@@ -421,6 +476,56 @@ export class RestaurantServiceController {
     @Param("optionId") optionId: string,
   ) {
     return this.service.deleteOption(userId, optionId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANAGER DASHBOARD — Restaurant Administration
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/restaurant/manager/restaurants?status=&cuisineType=&city=&search=&page=&limit= */
+  @Get("manager/restaurants")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminListRestaurants(@Query() query: AdminListRestaurantsDto) {
+    return this.service.adminListRestaurants(query);
+  }
+
+  /** GET /api/restaurant/manager/restaurants/:id */
+  @Get("manager/restaurants/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminGetRestaurant(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.adminGetRestaurant(id);
+  }
+
+  /** PATCH /api/restaurant/manager/restaurants/:id */
+  @Patch("manager/restaurants/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminUpdateRestaurant(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.service.adminUpdateRestaurant(id, dto);
+  }
+
+  /** PATCH /api/restaurant/manager/restaurants/:id/status */
+  @Patch("manager/restaurants/:id/status")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminChangeRestaurantStatus(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AdminChangeRestaurantStatusDto,
+  ) {
+    return this.service.adminChangeRestaurantStatus(id, dto);
+  }
+
+  /** DELETE /api/restaurant/manager/restaurants/:id */
+  @Delete("manager/restaurants/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminDeleteRestaurant(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.adminDeleteRestaurant(id);
   }
 
   // ─── Must be last: wildcard catches any GET /:id not matched above ────────────

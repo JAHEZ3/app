@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -15,8 +15,28 @@ export interface JwtPayload {
   profileCompleted?: boolean;
 }
 
+export interface SessionContext {
+  ip?: string;
+  userAgent?: string;
+  deviceInfo?: Record<string, any>;
+}
+
 interface RefreshTokenRecord {
   token: string;
+  userId: string;
+  createdAt: number;
+  lastUsedAt: number;
+  ip?: string;
+  userAgent?: string;
+  deviceInfo?: Record<string, any>;
+}
+
+export interface SessionSummary {
+  id: string;
+  createdAt: number;
+  lastUsedAt: number;
+  ip?: string;
+  userAgent?: string;
   deviceInfo?: Record<string, any>;
 }
 
@@ -75,20 +95,31 @@ export class AppJwtService implements OnModuleInit {
 
   // ─── Refresh Token ────────────────────────────────────────────────────────────
 
-  async signRefreshToken(payload: Omit<JwtPayload, 'jti'>, deviceInfo?: Record<string, any>): Promise<string> {
+  async signRefreshToken(
+    payload: Omit<JwtPayload, 'jti'>,
+    context?: SessionContext,
+  ): Promise<string> {
     const jti = randomUUID();
+    const now = Date.now();
 
     const token = this.jwtService.sign(
       { ...payload, jti },
       { secret: this.refreshSecret, expiresIn: '30d' },
     );
 
-    // Store only token + optional device info — payload is recoverable from the JWT itself
-    const record: RefreshTokenRecord = { token, ...(deviceInfo && { deviceInfo }) };
+    const record: RefreshTokenRecord = {
+      token,
+      userId: payload.sub,
+      createdAt: now,
+      lastUsedAt: now,
+      ...(context?.ip && { ip: context.ip }),
+      ...(context?.userAgent && { userAgent: context.userAgent }),
+      ...(context?.deviceInfo && { deviceInfo: context.deviceInfo }),
+    };
     await this.cache.set(this.rtKey(jti), record, RT_TTL_MS);
 
-    // Track this jti under the user so we can revoke all at once
-    const existing = await this.cache.get<string[]>(this.userTokensKey(payload.sub)) ?? [];
+    // Track this jti under the user so we can revoke all at once or list sessions
+    const existing = (await this.cache.get<string[]>(this.userTokensKey(payload.sub))) ?? [];
     await this.cache.set(this.userTokensKey(payload.sub), [...existing, jti], RT_TTL_MS);
 
     return token;
@@ -107,6 +138,17 @@ export class AppJwtService implements OnModuleInit {
       throw new UnauthorizedException('رمز التحديث ملغى أو غير موجود.');
     }
 
+    // Best-effort lastUsedAt refresh
+    try {
+      await this.cache.set(
+        this.rtKey(decoded.jti),
+        { ...record, lastUsedAt: Date.now() },
+        RT_TTL_MS,
+      );
+    } catch {
+      // ignore — not critical for auth correctness
+    }
+
     return decoded;
   }
 
@@ -119,20 +161,93 @@ export class AppJwtService implements OnModuleInit {
     }
 
     await this.cache.del(this.rtKey(decoded.jti));
-
-    // Remove jti from user's token list
-    const tokens = await this.cache.get<string[]>(this.userTokensKey(decoded.sub)) ?? [];
-    const updated = tokens.filter((jti) => jti !== decoded.jti);
-    if (updated.length > 0) {
-      await this.cache.set(this.userTokensKey(decoded.sub), updated, RT_TTL_MS);
-    } else {
-      await this.cache.del(this.userTokensKey(decoded.sub));
-    }
+    await this.removeJtiFromUserList(decoded.sub, decoded.jti);
   }
 
   async revokeAllUserTokens(userId: string): Promise<void> {
-    const tokens = await this.cache.get<string[]>(this.userTokensKey(userId)) ?? [];
+    const tokens = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
     await Promise.all(tokens.map((jti) => this.cache.del(this.rtKey(jti))));
     await this.cache.del(this.userTokensKey(userId));
+  }
+
+  // ─── Sessions ─────────────────────────────────────────────────────────────────
+
+  async listSessions(userId: string): Promise<SessionSummary[]> {
+    const jtis = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
+    const records = await Promise.all(
+      jtis.map((jti) => this.cache.get<RefreshTokenRecord>(this.rtKey(jti))),
+    );
+
+    const alive: { jti: string; rec: RefreshTokenRecord }[] = [];
+    const expired: string[] = [];
+    jtis.forEach((jti, i) => {
+      const rec = records[i];
+      if (rec) alive.push({ jti, rec });
+      else expired.push(jti);
+    });
+
+    // Best-effort cleanup of expired jtis from user list
+    if (expired.length > 0) {
+      const remaining = alive.map((a) => a.jti);
+      if (remaining.length > 0) {
+        await this.cache.set(this.userTokensKey(userId), remaining, RT_TTL_MS);
+      } else {
+        await this.cache.del(this.userTokensKey(userId));
+      }
+    }
+
+    return alive
+      .map(({ jti, rec }) => ({
+        id: jti,
+        createdAt: rec.createdAt,
+        lastUsedAt: rec.lastUsedAt,
+        ...(rec.ip && { ip: rec.ip }),
+        ...(rec.userAgent && { userAgent: rec.userAgent }),
+        ...(rec.deviceInfo && { deviceInfo: rec.deviceInfo }),
+      }))
+      .sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  }
+
+  /** Resolve a refresh token to its jti without throwing if it's already revoked. */
+  decodeJtiFromRefreshToken(token: string): string | null {
+    try {
+      const decoded = this.jwtService.verify<JwtPayload>(token, { secret: this.refreshSecret });
+      return decoded.jti ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async revokeSessionByJti(userId: string, jti: string): Promise<void> {
+    const record = await this.cache.get<RefreshTokenRecord>(this.rtKey(jti));
+    if (!record || record.userId !== userId) {
+      throw new NotFoundException('الجلسة غير موجودة.');
+    }
+    await this.cache.del(this.rtKey(jti));
+    await this.removeJtiFromUserList(userId, jti);
+  }
+
+  async revokeAllUserSessionsExcept(userId: string, keepJti: string): Promise<number> {
+    const jtis = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
+    const toRevoke = jtis.filter((jti) => jti !== keepJti);
+    await Promise.all(toRevoke.map((jti) => this.cache.del(this.rtKey(jti))));
+
+    const remaining = jtis.includes(keepJti) ? [keepJti] : [];
+    if (remaining.length > 0) {
+      await this.cache.set(this.userTokensKey(userId), remaining, RT_TTL_MS);
+    } else {
+      await this.cache.del(this.userTokensKey(userId));
+    }
+    return toRevoke.length;
+  }
+
+  private async removeJtiFromUserList(userId: string, jti: string): Promise<void> {
+    const tokens = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
+    const updated = tokens.filter((t) => t !== jti);
+    if (updated.length > 0) {
+      await this.cache.set(this.userTokensKey(userId), updated, RT_TTL_MS);
+    } else {
+      await this.cache.del(this.userTokensKey(userId));
+    }
   }
 }

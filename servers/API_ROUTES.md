@@ -35,6 +35,57 @@ Full URL is always: `http://localhost:<PORT>/<PREFIX>/<route>`
 
 ---
 
+## Manager Dashboard — Quick Index
+
+All manager-only CRUD endpoints consumed by the admin dashboard. Every route below requires `Authorization: Bearer <accessToken>` where the token's role is `manager`. Login first with `POST /api/auth/manager/login` (email + password).
+
+**Seeded accounts (dev only — run `npm run seed:managers`):**
+
+| Email               | Password       |
+| ------------------- | -------------- |
+| `admin@jahez.com`   | `Admin@1234`   |
+| `manager@jahez.com` | `Manager@1234` |
+
+### Users (auth-service — port 3004)
+
+| Method | Route                                      | Description                              |
+| ------ | ------------------------------------------ | ---------------------------------------- |
+| GET    | `/api/auth/manager/users`                  | List users (filters: role/status/search) |
+| GET    | `/api/auth/manager/users/:id`              | Get one user                             |
+| PATCH  | `/api/auth/manager/users/:id`              | Edit fullName / email / phone            |
+| PATCH  | `/api/auth/manager/users/:id/status`       | Change status                            |
+| DELETE | `/api/auth/manager/users/:id`              | Delete user                              |
+
+### Restaurants (restaurant-service — port 3003)
+
+| Method | Route                                               | Description                                       |
+| ------ | --------------------------------------------------- | ------------------------------------------------- |
+| GET    | `/api/restaurant/manager/applications`              | Pending owner applications (existing)             |
+| PATCH  | `/api/restaurant/manager/applications/:id/approve`  | Approve a pending application (existing)          |
+| PATCH  | `/api/restaurant/manager/applications/:id/reject`   | Reject a pending application (existing)           |
+| GET    | `/api/restaurant/manager/restaurants`               | List restaurants (filters: status/cuisine/city)   |
+| GET    | `/api/restaurant/manager/restaurants/:id`           | Get one restaurant (with presigned image URLs)    |
+| PATCH  | `/api/restaurant/manager/restaurants/:id`           | Edit restaurant                                   |
+| PATCH  | `/api/restaurant/manager/restaurants/:id/status`    | Change restaurant status                          |
+| DELETE | `/api/restaurant/manager/restaurants/:id`           | Delete restaurant                                 |
+
+### Delivery agents (delivery-service — port 3002)
+
+| Method | Route                                             | Description                                 |
+| ------ | ------------------------------------------------- | ------------------------------------------- |
+| GET    | `/api/delivery/manager/applications`              | Pending agent applications (existing)       |
+| PATCH  | `/api/delivery/manager/applications/:id/approve`  | Approve agent application (existing)        |
+| PATCH  | `/api/delivery/manager/applications/:id/reject`   | Reject agent application (existing)         |
+| GET    | `/api/delivery/manager/agents`                    | List agents (filters: status/vehicle/city)  |
+| GET    | `/api/delivery/manager/agents/:id`                | Get one agent                               |
+| PATCH  | `/api/delivery/manager/agents/:id`                | Edit agent                                  |
+| PATCH  | `/api/delivery/manager/agents/:id/status`         | Change agent status                         |
+| DELETE | `/api/delivery/manager/agents/:id`                | Delete agent                                |
+
+Full request/response details for each route appear in the per-service sections below.
+
+---
+
 ## Auth Service — `http://localhost:3004/api/auth`
 
 ### Registration — Step 1 (phone → OTP, status: PENDING)
@@ -97,6 +148,26 @@ Full URL is always: `http://localhost:<PORT>/<PREFIX>/<route>`
 | ------ | ---------- | ---- | -------------- | --------------------------------------- |
 | POST   | `/refresh` | 🔓   | `refreshToken` | Rotate refresh token — returns new pair |
 | DELETE | `/logout`  | 🔑   | `refreshToken` | Revoke refresh token                    |
+
+---
+
+### Manager Dashboard — Users
+
+All endpoints require a manager access token. Response envelope: `{ data, message }`.
+
+| Method | Route                         | Auth  | Body / Query                                                    | Description                                     |
+| ------ | ----------------------------- | ----- | --------------------------------------------------------------- | ----------------------------------------------- |
+| GET    | `/manager/users`              | 🔑 🧑‍💼 | query: `role`, `status`, `search`, `page=1`, `limit=20`         | Paginated list of users                         |
+| GET    | `/manager/users/:id`          | 🔑 🧑‍💼 | —                                                               | Single user                                     |
+| PATCH  | `/manager/users/:id`          | 🔑 🧑‍💼 | body: `fullName?`, `email?`, `phone?`                           | Edit basic user fields                          |
+| PATCH  | `/manager/users/:id/status`   | 🔑 🧑‍💼 | body: `status` = `pending \| active \| suspended \| banned`     | Change status (revokes tokens on BANNED/SUSPENDED) |
+| DELETE | `/manager/users/:id`          | 🔑 🧑‍💼 | —                                                               | Delete user (revokes tokens, emits NATS event)   |
+
+**Enums**
+- `role`: `customer`, `restaurant_owner`, `delivery`, `manager`
+- `status`: `pending`, `active`, `suspended`, `banned`
+
+**List response:** `{ data: { items: User[], total, page, limit, pages }, message }`
 
 ---
 
@@ -206,6 +277,22 @@ Full URL is always: `http://localhost:<PORT>/<PREFIX>/<route>`
 | GET    | `/manager/applications`             | 🔑 🧑‍💼 | —        | List all pending delivery applications |
 | PATCH  | `/manager/applications/:id/approve` | 🔑 🧑‍💼 | —        | Approve agent → ACTIVE                 |
 | PATCH  | `/manager/applications/:id/reject`  | 🔑 🧑‍💼 | `reason` | Reject agent (can resubmit)            |
+
+---
+
+#### Manager Dashboard — Delivery Agents
+
+| Method | Route                         | Auth  | Body / Query                                                                                                                                                         | Description                 |
+| ------ | ----------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| GET    | `/manager/agents`             | 🔑 🧑‍💼 | query: `status`, `vehicleType`, `city`, `search`, `page=1`, `limit=20`                                                                                               | Paginated list of agents    |
+| GET    | `/manager/agents/:id`         | 🔑 🧑‍💼 | —                                                                                                                                                                    | Single agent                |
+| PATCH  | `/manager/agents/:id`         | 🔑 🧑‍💼 | body: `firstName?`, `lastName?`, `phone?`, `city?`, `vehicleType?`, `vehiclePlate?`, `vehicleLicenseNumber?`, `emergencyContactName?`, `emergencyContactPhone?`     | Edit agent (auto-updates fullName) |
+| PATCH  | `/manager/agents/:id/status`  | 🔑 🧑‍💼 | body: `status` = `pending_approval \| active \| suspended \| offline`                                                                                                | Change agent status         |
+| DELETE | `/manager/agents/:id`         | 🔑 🧑‍💼 | —                                                                                                                                                                    | Delete agent (emits event)  |
+
+**Enums**
+- `status`: `pending_approval`, `active`, `suspended`, `offline`
+- `vehicleType`: `motorcycle`, `bicycle`, `car`, `on_foot`
 
 ---
 
@@ -344,6 +431,22 @@ Full URL is always: `http://localhost:<PORT>/<PREFIX>/<route>`
 | GET    | `/manager/applications`             | 🔑 🧑‍💼 | —        | List pending restaurant applications   |
 | PATCH  | `/manager/applications/:id/approve` | 🔑 🧑‍💼 | —        | Approve restaurant → ACTIVE            |
 | PATCH  | `/manager/applications/:id/reject`  | 🔑 🧑‍💼 | `reason` | Reject restaurant (owner can resubmit) |
+
+---
+
+#### Manager Dashboard — Restaurants
+
+| Method | Route                              | Auth  | Body / Query                                                                     | Description                                        |
+| ------ | ---------------------------------- | ----- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
+| GET    | `/manager/restaurants`             | 🔑 🧑‍💼 | query: `status`, `cuisineType`, `city`, `search`, `page=1`, `limit=20`           | Paginated list of restaurants                      |
+| GET    | `/manager/restaurants/:id`         | 🔑 🧑‍💼 | —                                                                                | Single restaurant (with presigned logo/cover URLs) |
+| PATCH  | `/manager/restaurants/:id`         | 🔑 🧑‍💼 | body: `name?`, `description?`, `logoUrl?`, `coverUrl?`, `phone?`, `street?`, `city?`, `cuisineType?` | Edit restaurant (same shape as owner `PATCH /profile`) |
+| PATCH  | `/manager/restaurants/:id/status`  | 🔑 🧑‍💼 | body: `status` = `pending_approval \| active \| suspended \| closed`             | Change status (forces `isOpen=false` if not ACTIVE) |
+| DELETE | `/manager/restaurants/:id`         | 🔑 🧑‍💼 | —                                                                                | Delete restaurant (emits event)                    |
+
+**Enums**
+- `status`: `pending_approval`, `active`, `suspended`, `closed`
+- `cuisineType`: `fast_food`, `sweets`, `drinks`, `kitchen`, `pizza`, `shawarma`, `grills`, `seafood`, `sandwiches`, `breakfast`, `healthy`, `asian`, `other`
 
 ---
 

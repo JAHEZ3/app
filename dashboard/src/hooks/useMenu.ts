@@ -1,72 +1,127 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { menuApi, mealsApi } from "@/lib/api";
+import { menuApi, mealsApi, optionGroupsApi, optionsApi } from "@/lib/api";
 import { queryKeys, queryClient } from "@/lib/queryClient";
-import { Menu } from "@/types/menu.types";
-import { CreateMealDto, UpdateMealDto, CreateMenuDto, CreateMenuSectionDto } from "@/dto/meal.dto";
+import type {
+  Menu,
+  MenuSection,
+  Meal,
+  MealOptionGroup,
+  MealOption,
+} from "@/types/menu.types";
+import type {
+  CreateMenuDto,
+  UpdateMenuDto,
+  CreateMenuSectionDto,
+  UpdateMenuSectionDto,
+  CreateMealDto,
+  UpdateMealDto,
+  CreateOptionGroupDto,
+  UpdateOptionGroupDto,
+  CreateOptionDto,
+  UpdateOptionDto,
+} from "@/dto/meal.dto";
 
+// Backend wraps every response in `{ data, message }`. Unwrap once.
+function unwrap<T>(res: { data: { data?: T } | T }): T {
+  const payload = res.data as { data?: T } | T;
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return (payload as { data?: T }).data as T;
+  }
+  return payload as T;
+}
+
+// ── Menu tree ────────────────────────────────────────────────────────────────
+// The backend exposes /menus, /menus/:id/sections, and /sections/:id/meals
+// separately. The UI expects a tree, so we compose it client-side.
 export function useMenu() {
   return useQuery<Menu[]>({
     queryKey: queryKeys.menu.all,
     queryFn: async () => {
-      const res = await menuApi.getAll();
-      return res.data;
+      const menus = unwrap<Menu[]>(await menuApi.listMenus()) ?? [];
+
+      const withSections = await Promise.all(
+        menus.map(async (menu) => {
+          const sections =
+            unwrap<MenuSection[]>(await menuApi.listSections(menu.id)) ?? [];
+          const sectionsWithMeals = await Promise.all(
+            sections.map(async (section) => {
+              const meals =
+                unwrap<Meal[]>(await mealsApi.list(section.id)) ?? [];
+              return { ...section, meals };
+            }),
+          );
+          return { ...menu, sections: sectionsWithMeals };
+        }),
+      );
+
+      return withSections;
     },
   });
 }
 
-// ── Menu CRUD ────────────────────────────────────────────
+const invalidateMenu = () =>
+  queryClient.invalidateQueries({ queryKey: queryKeys.menu.all });
+
+// ── Menus ────────────────────────────────────────────────────────────────────
 export function useCreateMenu() {
   return useMutation({
     mutationFn: (data: CreateMenuDto) => menuApi.createMenu(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
 export function useUpdateMenu() {
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateMenuDto> }) =>
+    mutationFn: ({ id, data }: { id: string; data: UpdateMenuDto }) =>
       menuApi.updateMenu(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
 export function useDeleteMenu() {
   return useMutation({
     mutationFn: (id: string) => menuApi.deleteMenu(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
-// ── Section CRUD ─────────────────────────────────────────
+// ── Sections ────────────────────────────────────────────────────────────────
+// menuId goes in the URL, NOT the body — backend rejects extra body keys.
 export function useCreateSection() {
   return useMutation({
-    mutationFn: (data: CreateMenuSectionDto) => menuApi.createSection(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    mutationFn: ({
+      menuId,
+      data,
+    }: {
+      menuId: string;
+      data: CreateMenuSectionDto;
+    }) => menuApi.createSection(menuId, data),
+    onSuccess: invalidateMenu,
   });
 }
 
 export function useUpdateSection() {
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateMenuSectionDto> }) =>
+    mutationFn: ({ id, data }: { id: string; data: UpdateMenuSectionDto }) =>
       menuApi.updateSection(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
 export function useDeleteSection() {
   return useMutation({
     mutationFn: (id: string) => menuApi.deleteSection(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
-// ── Meal CRUD ─────────────────────────────────────────────
+// ── Meals ───────────────────────────────────────────────────────────────────
 export function useCreateMeal() {
   return useMutation({
     mutationFn: (data: CreateMealDto) => mealsApi.create(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
@@ -74,21 +129,127 @@ export function useUpdateMeal() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateMealDto }) =>
       mealsApi.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
 export function useDeleteMeal() {
   return useMutation({
     mutationFn: (id: string) => mealsApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    onSuccess: invalidateMenu,
   });
 }
 
+// Backend flips the flag server-side; caller only passes the id.
 export function useToggleMealAvailability() {
   return useMutation({
-    mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) =>
-      mealsApi.toggleAvailability(id, isAvailable),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.menu.all }),
+    mutationFn: (id: string) => mealsApi.toggleAvailability(id),
+    onSuccess: invalidateMenu,
+  });
+}
+
+// ── Option groups ───────────────────────────────────────────────────────────
+export function useOptionGroups(mealId: string | undefined) {
+  return useQuery<MealOptionGroup[]>({
+    queryKey: queryKeys.menu.optionGroups(mealId ?? ""),
+    queryFn: async () =>
+      unwrap<MealOptionGroup[]>(await optionGroupsApi.list(mealId!)) ?? [],
+    enabled: Boolean(mealId),
+  });
+}
+
+export function useCreateOptionGroup() {
+  return useMutation({
+    mutationFn: ({
+      mealId,
+      data,
+    }: {
+      mealId: string;
+      data: CreateOptionGroupDto;
+    }) => optionGroupsApi.create(mealId, data),
+    onSuccess: (_res, vars) =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.menu.optionGroups(vars.mealId),
+      }),
+  });
+}
+
+export function useUpdateOptionGroup(mealId?: string) {
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateOptionGroupDto }) =>
+      optionGroupsApi.update(id, data),
+    onSuccess: () => {
+      if (mealId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.menu.optionGroups(mealId),
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteOptionGroup(mealId?: string) {
+  return useMutation({
+    mutationFn: (id: string) => optionGroupsApi.delete(id),
+    onSuccess: () => {
+      if (mealId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.menu.optionGroups(mealId),
+        });
+      }
+    },
+  });
+}
+
+// ── Options ─────────────────────────────────────────────────────────────────
+export function useOptions(groupId: string | undefined) {
+  return useQuery<MealOption[]>({
+    queryKey: queryKeys.menu.options(groupId ?? ""),
+    queryFn: async () =>
+      unwrap<MealOption[]>(await optionsApi.list(groupId!)) ?? [],
+    enabled: Boolean(groupId),
+  });
+}
+
+export function useCreateOption() {
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      data,
+    }: {
+      groupId: string;
+      data: CreateOptionDto;
+    }) => optionsApi.create(groupId, data),
+    onSuccess: (_res, vars) =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.menu.options(vars.groupId),
+      }),
+  });
+}
+
+export function useUpdateOption(groupId?: string) {
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateOptionDto }) =>
+      optionsApi.update(id, data),
+    onSuccess: () => {
+      if (groupId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.menu.options(groupId),
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteOption(groupId?: string) {
+  return useMutation({
+    mutationFn: (id: string) => optionsApi.delete(id),
+    onSuccess: () => {
+      if (groupId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.menu.options(groupId),
+        });
+      }
+    },
   });
 }

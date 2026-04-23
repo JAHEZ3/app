@@ -2,10 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -19,6 +22,9 @@ import { Roles } from "./decorators/roles.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { CompleteDeliveryProfileDto } from "./dto/complete-profile.dto";
 import { RejectApplicationDto } from "./dto/review-application.dto";
+import { AdminListAgentsDto } from "./dto/admin-list-agents.dto";
+import { AdminUpdateAgentDto } from "./dto/admin-update-agent.dto";
+import { AdminChangeAgentStatusDto } from "./dto/admin-change-agent-status.dto";
 
 const multerOptions = {
   storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
@@ -141,5 +147,55 @@ export class DeliveryServiceController {
     @Body() dto: RejectApplicationDto,
   ) {
     return this.service.rejectApplication(requestId, managerId, dto.reason);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANAGER DASHBOARD — Delivery Agent Administration
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/delivery/manager/agents?status=&vehicleType=&city=&search=&page=&limit= */
+  @Get("manager/agents")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminListAgents(@Query() query: AdminListAgentsDto) {
+    return this.service.adminListAgents(query);
+  }
+
+  /** GET /api/delivery/manager/agents/:id */
+  @Get("manager/agents/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminGetAgent(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.adminGetAgent(id);
+  }
+
+  /** PATCH /api/delivery/manager/agents/:id */
+  @Patch("manager/agents/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminUpdateAgent(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AdminUpdateAgentDto,
+  ) {
+    return this.service.adminUpdateAgent(id, dto);
+  }
+
+  /** PATCH /api/delivery/manager/agents/:id/status */
+  @Patch("manager/agents/:id/status")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminChangeAgentStatus(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AdminChangeAgentStatusDto,
+  ) {
+    return this.service.adminChangeAgentStatus(id, dto);
+  }
+
+  /** DELETE /api/delivery/manager/agents/:id */
+  @Delete("manager/agents/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager")
+  adminDeleteAgent(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.adminDeleteAgent(id);
   }
 }

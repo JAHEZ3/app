@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
-import { useRestaurant, useUpdateRestaurant, useRestaurantHours, useUpdateHour } from "@/hooks/useRestaurant";
+import { useRestaurant, useUpdateRestaurant, useUpdateSettings, useRestaurantHours, useSetHours } from "@/hooks/useRestaurant";
+import { useSessions, useRevokeSession, useRevokeOtherSessions } from "@/hooks/useSessions";
+import type { RestaurantHour } from "@/types/restaurant.types";
+import type { SessionSummary } from "@/types/session.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/providers/ToastProvider";
+import { authApi, getApiError } from "@/lib/api";
 import { Building2, Clock, Bell, Shield, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,19 +26,45 @@ type Tab = typeof tabs[number]["id"];
 
 const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
-const defaultHours = dayNames.map((_, i) => ({
-  id: String(i),
-  restaurantId: "r1",
-  dayOfWeek: i,
-  openTime: "09:00",
-  closeTime: "23:00",
-  isClosed: i === 0, // Sunday closed by default
-}));
+// Backend stores only (dayOfWeek, openTime, closeTime). We encode "closed"
+// as openTime === closeTime === "00:00" so the round-trip is lossless.
+const CLOSED_TIME = "00:00";
+
+function buildDefaultHours(): RestaurantHour[] {
+  return dayNames.map((_, i) => ({
+    id: `default-${i}`,
+    restaurantId: "",
+    dayOfWeek: i,
+    openTime: i === 0 ? CLOSED_TIME : "09:00",
+    closeTime: i === 0 ? CLOSED_TIME : "23:00",
+    isClosed: i === 0,
+  }));
+}
+
+function normalizeHoursFromServer(rows: RestaurantHour[] | undefined): RestaurantHour[] {
+  const byDay = new Map<number, RestaurantHour>();
+  (rows ?? []).forEach((r) => byDay.set(r.dayOfWeek, r));
+  const defaults = buildDefaultHours();
+  return defaults.map((d) => {
+    const found = byDay.get(d.dayOfWeek);
+    if (!found) return d;
+    const openTime = (found.openTime ?? "").slice(0, 5);
+    const closeTime = (found.closeTime ?? "").slice(0, 5);
+    return {
+      ...found,
+      openTime: openTime || d.openTime,
+      closeTime: closeTime || d.closeTime,
+      isClosed: openTime === CLOSED_TIME && closeTime === CLOSED_TIME,
+    };
+  });
+}
 
 function RestaurantSettingsTab() {
   const { data: restaurant, isLoading } = useRestaurant();
-  const update = useUpdateRestaurant();
+  const updateProfile = useUpdateRestaurant();
+  const updateSettings = useUpdateSettings();
   const { success, error } = useToast();
+  const isSaving = updateProfile.isPending || updateSettings.isPending;
 
   const [form, setForm] = useState({
     name: "",
@@ -62,24 +92,27 @@ function RestaurantSettingsTab() {
     }
   }, [restaurant]);
 
-  const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    update.mutate(
-      {
-        name: form.name,
-        description: form.description,
-        phone: form.phone,
-        street: form.street,
-        city: form.city,
-        minOrderAmount: parseFloat(form.minOrderAmount) || 0,
-        avgDeliveryMinutes: parseInt(form.avgDeliveryMinutes) || undefined,
-        deliveryRadiusKm: parseFloat(form.deliveryRadiusKm) || undefined,
-      },
-      {
-        onSuccess: () => success("تم حفظ البيانات"),
-        onError: () => error("خطأ", "فشل حفظ البيانات"),
-      }
-    );
+    try {
+      await Promise.all([
+        updateProfile.mutateAsync({
+          name: form.name,
+          description: form.description,
+          phone: form.phone,
+          street: form.street,
+          city: form.city,
+        }),
+        updateSettings.mutateAsync({
+          minOrderAmount: parseFloat(form.minOrderAmount) || 0,
+          avgDeliveryMinutes: parseInt(form.avgDeliveryMinutes) || undefined,
+          deliveryRadiusKm: parseFloat(form.deliveryRadiusKm) || undefined,
+        }),
+      ]);
+      success("تم حفظ البيانات");
+    } catch {
+      error("خطأ", "فشل حفظ البيانات");
+    }
   };
 
   if (isLoading) {
@@ -161,7 +194,7 @@ function RestaurantSettingsTab() {
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" loading={update.isPending} className="px-8">
+        <Button type="submit" loading={isSaving} className="px-8">
           حفظ التغييرات
         </Button>
       </div>
@@ -170,19 +203,61 @@ function RestaurantSettingsTab() {
 }
 
 function WorkingHoursTab() {
-  const { data: hours } = useRestaurantHours();
-  const updateHour = useUpdateHour();
-  const { success } = useToast();
+  const { data: hours, isLoading } = useRestaurantHours();
+  const setHoursMutation = useSetHours();
+  const { success, error } = useToast();
 
-  const workingHours = hours?.length ? hours : defaultHours;
-  const [localHours, setLocalHours] = useState(workingHours);
+  const [localHours, setLocalHours] = useState<RestaurantHour[]>(() => buildDefaultHours());
 
-  useEffect(() => { setLocalHours(workingHours); }, [hours]);
+  useEffect(() => {
+    setLocalHours(normalizeHoursFromServer(hours));
+  }, [hours]);
+
+  const validate = (): string | null => {
+    for (const h of localHours) {
+      if (h.isClosed) continue;
+      if (!/^\d{2}:\d{2}$/.test(h.openTime) || !/^\d{2}:\d{2}$/.test(h.closeTime)) {
+        return `صيغة الوقت غير صحيحة ليوم ${dayNames[h.dayOfWeek]}`;
+      }
+      if (h.openTime === h.closeTime) {
+        return `وقت الفتح والإغلاق متطابقان ليوم ${dayNames[h.dayOfWeek]}`;
+      }
+    }
+    return null;
+  };
 
   const handleSave = () => {
-    localHours.forEach((h) => updateHour.mutate(h));
-    success("تم حفظ أوقات العمل");
+    const msg = validate();
+    if (msg) {
+      error("خطأ", msg);
+      return;
+    }
+    const payload = localHours.map((h) => ({
+      dayOfWeek: h.dayOfWeek,
+      openTime: h.isClosed ? CLOSED_TIME : h.openTime,
+      closeTime: h.isClosed ? CLOSED_TIME : h.closeTime,
+    }));
+    setHoursMutation.mutate(payload, {
+      onSuccess: () => success("تم حفظ أوقات العمل"),
+      onError: () => error("خطأ", "فشل حفظ أوقات العمل"),
+    });
   };
+
+  const updateRow = (idx: number, patch: Partial<RestaurantHour>) => {
+    setLocalHours((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 animate-pulse">
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => <div key={i} className="h-16 bg-muted rounded-xl" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -199,32 +274,20 @@ function WorkingHoursTab() {
               </div>
               <Switch
                 checked={!h.isClosed}
-                onCheckedChange={(v) => {
-                  const updated = [...localHours];
-                  updated[idx] = { ...h, isClosed: !v };
-                  setLocalHours(updated);
-                }}
+                onCheckedChange={(v) => updateRow(idx, { isClosed: !v })}
               />
               <div className={cn("flex items-center gap-2 flex-1", h.isClosed && "opacity-40 pointer-events-none")}>
                 <Input
                   type="time"
-                  value={h.openTime}
-                  onChange={(e) => {
-                    const updated = [...localHours];
-                    updated[idx] = { ...h, openTime: e.target.value };
-                    setLocalHours(updated);
-                  }}
+                  value={h.isClosed ? "09:00" : h.openTime}
+                  onChange={(e) => updateRow(idx, { openTime: e.target.value })}
                   className="w-32"
                 />
                 <span className="text-muted-foreground text-sm">إلى</span>
                 <Input
                   type="time"
-                  value={h.closeTime}
-                  onChange={(e) => {
-                    const updated = [...localHours];
-                    updated[idx] = { ...h, closeTime: e.target.value };
-                    setLocalHours(updated);
-                  }}
+                  value={h.isClosed ? "23:00" : h.closeTime}
+                  onChange={(e) => updateRow(idx, { closeTime: e.target.value })}
                   className="w-32"
                 />
               </div>
@@ -238,7 +301,7 @@ function WorkingHoursTab() {
         </div>
       </div>
       <div className="flex justify-end">
-        <Button onClick={handleSave} loading={updateHour.isPending} className="px-8">
+        <Button onClick={handleSave} loading={setHoursMutation.isPending} className="px-8">
           حفظ أوقات العمل
         </Button>
       </div>
@@ -289,11 +352,87 @@ function NotificationsTab() {
   );
 }
 
+// ─── Sessions helpers ──────────────────────────────────────────────────────
+
+function formatSessionDevice(ua?: string): string {
+  if (!ua) return "جهاز غير معروف";
+  const browser =
+    /Edg\//i.test(ua) ? "Edge" :
+    /Chrome\//i.test(ua) && !/Chromium/i.test(ua) ? "Chrome" :
+    /Firefox\//i.test(ua) ? "Firefox" :
+    /Safari\//i.test(ua) ? "Safari" :
+    "متصفح";
+  const os =
+    /Windows NT 10/i.test(ua) ? "Windows 10/11" :
+    /Mac OS X/i.test(ua) ? "macOS" :
+    /Android/i.test(ua) ? "Android" :
+    /iPhone|iPad|iOS/i.test(ua) ? "iOS" :
+    /Linux/i.test(ua) ? "Linux" :
+    "نظام غير معروف";
+  return `${browser} — ${os}`;
+}
+
+function formatRelativeAr(ms: number): string {
+  const diffSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (diffSec < 60) return "الآن";
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `منذ ${diffHr} ساعة`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 30) return `منذ ${diffDay} يوم`;
+  const diffMo = Math.round(diffDay / 30);
+  return `منذ ${diffMo} شهر`;
+}
+
+function SessionRow({
+  session,
+  onRevoke,
+  revoking,
+}: {
+  session: SessionSummary;
+  onRevoke: (id: string) => void;
+  revoking: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-muted/40 rounded-xl">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-foreground truncate">
+          {formatSessionDevice(session.userAgent)}
+        </p>
+        <p className="text-xs text-muted-foreground truncate">
+          {session.ip ?? "IP غير معروف"} · {formatRelativeAr(session.lastUsedAt)}
+        </p>
+      </div>
+      {session.current ? (
+        <span className="text-xs font-bold text-success bg-success-light px-2.5 py-1 rounded-full shrink-0">
+          الجلسة الحالية
+        </span>
+      ) : (
+        <Button
+          variant="danger"
+          size="sm"
+          loading={revoking}
+          onClick={() => onRevoke(session.id)}
+        >
+          إنهاء
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function SecurityTab() {
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwLoading, setPwLoading] = useState(false);
   const { success, error } = useToast();
 
-  const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
+  const { data: sessions, isLoading: sessionsLoading } = useSessions();
+  const revokeOne = useRevokeSession();
+  const revokeOthers = useRevokeOtherSessions();
+  const [pendingRevoke, setPendingRevoke] = useState<string | null>(null);
+
+  const handlePasswordSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (form.newPassword !== form.confirmPassword) {
       error("خطأ", "كلمتا المرور غير متطابقتين");
@@ -303,15 +442,44 @@ function SecurityTab() {
       error("خطأ", "كلمة المرور يجب أن تكون 8 أحرف على الأقل");
       return;
     }
-    success("تم تغيير كلمة المرور بنجاح");
-    setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    try {
+      setPwLoading(true);
+      await authApi.changePassword(form.currentPassword, form.newPassword);
+      success("تم تغيير كلمة المرور بنجاح");
+      setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      error("خطأ", getApiError(err));
+    } finally {
+      setPwLoading(false);
+    }
   };
+
+  const handleRevokeOne = (id: string) => {
+    setPendingRevoke(id);
+    revokeOne.mutate(id, {
+      onSuccess: () => success("تم إنهاء الجلسة"),
+      onError: (err) => error("خطأ", getApiError(err)),
+      onSettled: () => setPendingRevoke(null),
+    });
+  };
+
+  const handleRevokeOthers = () => {
+    revokeOthers.mutate(undefined, {
+      onSuccess: (res) => {
+        const revoked = (res.data?.data?.revoked ?? 0) as number;
+        success(revoked > 0 ? `تم إنهاء ${revoked} جلسة` : "لا توجد جلسات أخرى");
+      },
+      onError: (err) => error("خطأ", getApiError(err)),
+    });
+  };
+
+  const otherSessionsCount = sessions?.filter((s) => !s.current).length ?? 0;
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-border p-6 space-y-4">
         <h3 className="text-sm font-bold text-foreground">تغيير كلمة المرور</h3>
-        <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
+        <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
           <Input
             label="كلمة المرور الحالية"
             type="password"
@@ -333,32 +501,45 @@ function SecurityTab() {
             onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
             required
           />
-          <Button type="submit">تغيير كلمة المرور</Button>
+          <Button type="submit" loading={pwLoading}>تغيير كلمة المرور</Button>
         </form>
       </div>
 
       <div className="bg-white rounded-xl border border-border p-6">
-        <h3 className="text-sm font-bold text-foreground mb-3">جلسات الدخول</h3>
-        <div className="space-y-3">
-          {[
-            { device: "Chrome — Windows 11", location: "الرياض، المملكة العربية السعودية", current: true, time: "الآن" },
-            { device: "Safari — iPhone 15",  location: "الرياض، المملكة العربية السعودية", current: false, time: "منذ 2 يوم" },
-          ].map((session, i) => (
-            <div key={i} className="flex items-center justify-between p-3 bg-muted/40 rounded-xl">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{session.device}</p>
-                <p className="text-xs text-muted-foreground">{session.location} · {session.time}</p>
-              </div>
-              {session.current ? (
-                <span className="text-xs font-bold text-success bg-success-light px-2.5 py-1 rounded-full">
-                  الجلسة الحالية
-                </span>
-              ) : (
-                <Button variant="danger" size="sm">إنهاء</Button>
-              )}
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-foreground">جلسات الدخول</h3>
+          {otherSessionsCount > 0 && (
+            <Button
+              variant="danger"
+              size="sm"
+              loading={revokeOthers.isPending}
+              onClick={handleRevokeOthers}
+            >
+              إنهاء الجلسات الأخرى
+            </Button>
+          )}
         </div>
+
+        {sessionsLoading ? (
+          <div className="space-y-3 animate-pulse">
+            {[1, 2].map((i) => <div key={i} className="h-14 bg-muted rounded-xl" />)}
+          </div>
+        ) : !sessions || sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            لا توجد جلسات نشطة
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                onRevoke={handleRevokeOne}
+                revoking={pendingRevoke === session.id}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

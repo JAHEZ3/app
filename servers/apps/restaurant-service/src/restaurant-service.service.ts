@@ -7,9 +7,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
 import { Restaurant, RestaurantStatus } from "./entities/restaurant.entity";
+import { AdminListRestaurantsDto } from "./dto/admin-list-restaurants.dto";
+import { AdminChangeRestaurantStatusDto } from "./dto/admin-change-restaurant-status.dto";
 import { RestaurantHour } from "./entities/restaurant-hour.entity";
 import { Menu } from "./entities/menu.entity";
 import { MenuSection } from "./entities/menu-section.entity";
@@ -36,6 +38,7 @@ import { CreateOptionGroupDto } from "./dto/create-option-group.dto";
 import { UpdateOptionGroupDto } from "./dto/update-option-group.dto";
 import { CreateOptionDto } from "./dto/create-option.dto";
 import { UpdateOptionDto } from "./dto/update-option.dto";
+import { ReorderDto } from "./dto/reorder.dto";
 
 @Injectable()
 export class RestaurantServiceService {
@@ -384,6 +387,11 @@ export class RestaurantServiceService {
     return { ...restaurant, ...(logoUrl && { logoUrl }), ...(coverUrl && { coverUrl }) };
   }
 
+  private async withMealImage(meal: Meal): Promise<Meal & { imageUrl: string | null }> {
+    const imageUrl = await this.s3.resolveImageUrl(meal.imageUrl);
+    return { ...meal, imageUrl };
+  }
+
   // ─── Restaurant Profile & Settings ────────────────────────────────────────────
 
   async getProfile(ownerId: string) {
@@ -445,6 +453,7 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const hours = await this.hoursRepo.find({
       where: { restaurantId: restaurant.id },
+      order: { dayOfWeek: "ASC" },
     });
     return { data: hours, message: "تم استرجاع أوقات العمل." };
   }
@@ -452,29 +461,32 @@ export class RestaurantServiceService {
   async setHours(ownerId: string, dto: SetHoursDto) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
 
-    for (const entry of dto.hours) {
-      const existing = await this.hoursRepo.findOne({
-        where: { restaurantId: restaurant.id, dayOfWeek: entry.dayOfWeek },
-      });
-      if (existing) {
-        await this.hoursRepo.update(existing.id, {
-          openTime: entry.openTime,
-          closeTime: entry.closeTime,
-        });
-      } else {
-        await this.hoursRepo.save(
-          this.hoursRepo.create({
+    const days = dto.hours.map((h) => h.dayOfWeek).sort((a, b) => a - b);
+    const expected = [0, 1, 2, 3, 4, 5, 6];
+    if (days.some((d, i) => d !== expected[i])) {
+      throw new BadRequestException(
+        "يجب تحديد أوقات العمل لجميع أيام الأسبوع من الأحد (0) إلى السبت (6).",
+      );
+    }
+
+    await this.hoursRepo.manager.transaction(async (em) => {
+      await em.delete(RestaurantHour, { restaurantId: restaurant.id });
+      await em.save(
+        RestaurantHour,
+        dto.hours.map((entry) =>
+          em.create(RestaurantHour, {
             restaurantId: restaurant.id,
             dayOfWeek: entry.dayOfWeek,
             openTime: entry.openTime,
             closeTime: entry.closeTime,
           }),
-        );
-      }
-    }
+        ),
+      );
+    });
 
     const hours = await this.hoursRepo.find({
       where: { restaurantId: restaurant.id },
+      order: { dayOfWeek: "ASC" },
     });
     return { data: hours, message: "تم تحديث أوقات العمل." };
   }
@@ -525,7 +537,8 @@ export class RestaurantServiceService {
                     return { ...group, options };
                   }),
                 );
-                return { ...meal, optionGroups: groupsWithOptions };
+                const mealWithImage = await this.withMealImage(meal);
+                return { ...mealWithImage, optionGroups: groupsWithOptions };
               }),
             );
             return { ...section, meals: mealsWithOptions };
@@ -630,19 +643,35 @@ export class RestaurantServiceService {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.assertSectionOwner(sectionId, restaurant.id);
     const meals = await this.mealRepo.find({ where: { sectionId } });
-    return { data: meals, message: "تم استرجاع الوجبات." };
+    const data = await Promise.all(meals.map((m) => this.withMealImage(m)));
+    return { data, message: "تم استرجاع الوجبات." };
   }
 
-  async createMeal(ownerId: string, dto: CreateMealDto) {
+  async createMeal(
+    ownerId: string,
+    dto: CreateMealDto,
+    imageFile?: Express.Multer.File,
+  ) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     await this.assertSectionOwner(dto.sectionId, restaurant.id);
+
+    let imageKey: string | undefined = dto.imageUrl;
+    if (imageFile) {
+      try {
+        imageKey = await this.s3.upload(imageFile, "meals");
+      } catch (err) {
+        this.logger.error("S3 upload failed during createMeal", err);
+        throw new BadRequestException("فشل رفع صورة الوجبة.");
+      }
+    }
+
     const meal = await this.mealRepo.save(
       this.mealRepo.create({
         restaurantId: restaurant.id,
         sectionId: dto.sectionId,
         name: dto.name,
         description: dto.description,
-        imageUrl: dto.imageUrl,
+        imageUrl: imageKey,
         basePrice: dto.basePrice,
         discountPrice: dto.discountPrice,
         calories: dto.calories,
@@ -652,10 +681,15 @@ export class RestaurantServiceService {
         displayOrder: dto.displayOrder ?? 0,
       }),
     );
-    return { data: meal, message: "تم إنشاء الوجبة." };
+    return { data: await this.withMealImage(meal), message: "تم إنشاء الوجبة." };
   }
 
-  async updateMeal(ownerId: string, mealId: string, dto: UpdateMealDto) {
+  async updateMeal(
+    ownerId: string,
+    mealId: string,
+    dto: UpdateMealDto,
+    imageFile?: Express.Multer.File,
+  ) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const meal = await this.assertMealOwner(mealId, restaurant.id);
 
@@ -663,18 +697,119 @@ export class RestaurantServiceService {
       await this.assertSectionOwner(dto.sectionId, restaurant.id);
     }
 
-    await this.mealRepo.update(meal.id, { ...dto });
-    return {
-      data: await this.mealRepo.findOne({ where: { id: meal.id } }),
-      message: "تم تحديث الوجبة.",
-    };
+    let oldKeyToDelete: string | null = null;
+    const patch: Partial<Meal> = { ...dto };
+
+    if (imageFile) {
+      let newKey: string;
+      try {
+        newKey = await this.s3.upload(imageFile, "meals");
+      } catch (err) {
+        this.logger.error("S3 upload failed during updateMeal", err);
+        throw new BadRequestException("فشل رفع صورة الوجبة.");
+      }
+      patch.imageUrl = newKey;
+      // Only delete the old object if it's an S3 key, not an external URL
+      if (meal.imageUrl && !/^https?:\/\//i.test(meal.imageUrl)) {
+        oldKeyToDelete = meal.imageUrl;
+      }
+    }
+
+    await this.mealRepo.update(meal.id, patch);
+
+    if (oldKeyToDelete) {
+      // Fire-and-forget — stale S3 objects are a cleanup concern, not a correctness one
+      this.s3.delete(oldKeyToDelete).catch((err) =>
+        this.logger.warn(`Failed to delete old meal image ${oldKeyToDelete}`, err),
+      );
+    }
+
+    const updated = await this.mealRepo.findOne({ where: { id: meal.id } });
+    if (!updated) throw new NotFoundException("لم يُعثر على الوجبة بعد التحديث.");
+    return { data: await this.withMealImage(updated), message: "تم تحديث الوجبة." };
   }
 
   async deleteMeal(ownerId: string, mealId: string) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
     const meal = await this.assertMealOwner(mealId, restaurant.id);
     await this.mealRepo.delete(meal.id);
+
+    // Best-effort S3 cleanup
+    if (meal.imageUrl && !/^https?:\/\//i.test(meal.imageUrl)) {
+      this.s3.delete(meal.imageUrl).catch((err) =>
+        this.logger.warn(`Failed to delete meal image ${meal.imageUrl}`, err),
+      );
+    }
+
     return { data: null, message: "تم حذف الوجبة." };
+  }
+
+  // ─── Reorder ──────────────────────────────────────────────────────────────────
+  //
+  // Batch updates a list of `(id, displayOrder)` pairs. Each method verifies
+  // ownership of every id before any write, then applies all writes in one
+  // transaction so partial reorders can't leave the menu half-sorted.
+
+  async reorderMenus(ownerId: string, dto: ReorderDto) {
+    const restaurant = await this.getOwnedRestaurant(ownerId);
+    const ids = dto.items.map((i) => i.id);
+
+    const menus = await this.menuRepo.findBy({ id: In(ids) });
+    if (menus.length !== ids.length) {
+      throw new NotFoundException("بعض القوائم غير موجودة.");
+    }
+    if (menus.some((m) => m.restaurantId !== restaurant.id)) {
+      throw new ForbiddenException("لا تملك صلاحية إعادة ترتيب هذه القوائم.");
+    }
+
+    await this.menuRepo.manager.transaction(async (em) => {
+      for (const item of dto.items) {
+        await em.update(Menu, item.id, { displayOrder: item.displayOrder });
+      }
+    });
+    return { data: null, message: "تم تحديث ترتيب القوائم." };
+  }
+
+  async reorderSections(ownerId: string, menuId: string, dto: ReorderDto) {
+    const restaurant = await this.getOwnedRestaurant(ownerId);
+    await this.assertMenuOwner(menuId, restaurant.id);
+    const ids = dto.items.map((i) => i.id);
+
+    const sections = await this.sectionRepo.findBy({ id: In(ids) });
+    if (sections.length !== ids.length) {
+      throw new NotFoundException("بعض الأقسام غير موجودة.");
+    }
+    if (sections.some((s) => s.menuId !== menuId)) {
+      throw new BadRequestException("جميع الأقسام يجب أن تنتمي لنفس القائمة.");
+    }
+
+    await this.sectionRepo.manager.transaction(async (em) => {
+      for (const item of dto.items) {
+        await em.update(MenuSection, item.id, { displayOrder: item.displayOrder });
+      }
+    });
+    return { data: null, message: "تم تحديث ترتيب الأقسام." };
+  }
+
+  async reorderMeals(ownerId: string, sectionId: string, dto: ReorderDto) {
+    const restaurant = await this.getOwnedRestaurant(ownerId);
+    await this.assertSectionOwner(sectionId, restaurant.id);
+    const ids = dto.items.map((i) => i.id);
+
+    const meals = await this.mealRepo.findBy({ id: In(ids) });
+    if (meals.length !== ids.length) {
+      throw new NotFoundException("بعض الوجبات غير موجودة.");
+    }
+    if (meals.some((m) => m.sectionId !== sectionId || m.restaurantId !== restaurant.id)) {
+      throw new BadRequestException("جميع الوجبات يجب أن تنتمي لنفس القسم.");
+    }
+
+    await this.mealRepo.manager.transaction(async (em) => {
+      for (const item of dto.items) {
+        await em.update(Meal, item.id, { displayOrder: item.displayOrder });
+      }
+    });
+    return { data: null, message: "تم تحديث ترتيب الوجبات." };
   }
 
   async toggleMealAvailability(ownerId: string, mealId: string) {
@@ -779,5 +914,106 @@ export class RestaurantServiceService {
     await this.assertOptionGroupOwner(option.groupId, restaurant.id);
     await this.optionRepo.delete(option.id);
     return { data: null, message: "تم حذف الخيار." };
+  }
+
+  // ─── Manager Dashboard — Restaurant Administration ──────────────────────────
+  // All endpoints require manager role (enforced via guards on the controller).
+
+  async adminListRestaurants(query: AdminListRestaurantsDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const qb = this.restaurantRepo.createQueryBuilder("r");
+
+    if (query.status) qb.andWhere("r.status = :status", { status: query.status });
+    if (query.cuisineType)
+      qb.andWhere("r.cuisine_type = :ct", { ct: query.cuisineType });
+    if (query.city)
+      qb.andWhere("r.city ILIKE :city", { city: `%${query.city}%` });
+    if (query.search) {
+      qb.andWhere(
+        new Brackets((b) => {
+          b.where("r.name ILIKE :s", { s: `%${query.search}%` })
+            .orWhere("r.owner_name ILIKE :s", { s: `%${query.search}%` })
+            .orWhere("r.phone ILIKE :s", { s: `%${query.search}%` });
+        }),
+      );
+    }
+
+    qb.orderBy("r.created_at", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    return {
+      data: { items, total, page, limit, pages: Math.ceil(total / limit) },
+      message: "تم استرجاع المطاعم.",
+    };
+  }
+
+  async adminGetRestaurant(id: string) {
+    const restaurant = await this.restaurantRepo.findOne({ where: { id } });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+    return {
+      data: await this.withPresignedUrls(restaurant),
+      message: "تم استرجاع بيانات المطعم.",
+    };
+  }
+
+  async adminUpdateRestaurant(id: string, dto: UpdateProfileDto) {
+    const restaurant = await this.restaurantRepo.findOne({ where: { id } });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+    await this.restaurantRepo.update(id, { ...dto });
+    const updated = await this.restaurantRepo.findOne({ where: { id } });
+    if (!updated) throw new NotFoundException("لم يُعثر على المطعم بعد التحديث.");
+    return {
+      data: await this.withPresignedUrls(updated),
+      message: "تم تحديث بيانات المطعم.",
+    };
+  }
+
+  async adminChangeRestaurantStatus(
+    id: string,
+    dto: AdminChangeRestaurantStatusDto,
+  ) {
+    const restaurant = await this.restaurantRepo.findOne({ where: { id } });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+
+    if (restaurant.status === dto.status) {
+      return {
+        data: { id, status: restaurant.status },
+        message: "الحالة لم تتغير.",
+      };
+    }
+
+    await this.restaurantRepo.update(id, { status: dto.status });
+
+    // If suspending/closing, also force the restaurant offline.
+    if (dto.status !== RestaurantStatus.ACTIVE && restaurant.isOpen) {
+      await this.restaurantRepo.update(id, { isOpen: false });
+    }
+
+    return {
+      data: { id, status: dto.status },
+      message: "تم تحديث حالة المطعم.",
+    };
+  }
+
+  async adminDeleteRestaurant(id: string) {
+    const restaurant = await this.restaurantRepo.findOne({ where: { id } });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+
+    await this.restaurantRepo.delete(id);
+
+    try {
+      this.natsClient.emit("restaurant.deleted", {
+        restaurantId: id,
+        ownerUserId: restaurant.ownerUserId,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit restaurant.deleted failed", err);
+    }
+
+    return { data: null, message: "تم حذف المطعم." };
   }
 }

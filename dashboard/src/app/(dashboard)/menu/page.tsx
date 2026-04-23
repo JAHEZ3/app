@@ -18,20 +18,20 @@ import {
 } from "lucide-react";
 import { useToast } from "@/providers/ToastProvider";
 
-// Mock menu data
+// Mock menu data — shown only when the backend returns zero menus.
 const mockMenu: Menu[] = [
   {
     id: "m1", restaurantId: "r1", name: "القائمة الرئيسية", isActive: true, displayOrder: 1,
     sections: [
       {
-        id: "s1", menuId: "m1", name: "البرجر", description: null, displayOrder: 1, isActive: true,
+        id: "s1", menuId: "m1", name: "البرجر", displayOrder: 1,
         meals: [
           { id: "meal1", sectionId: "s1", restaurantId: "r1", name: "واجو سيجنيتشر برجر", description: "برجر واجو مميز بالجبنة والصلصة الخاصة", imageUrl: null, basePrice: 85, discountPrice: null, calories: 750, isAvailable: true, isFeatured: true, tags: ["أكثر مبيعاً"], displayOrder: 1, createdAt: "" },
           { id: "meal2", sectionId: "s1", restaurantId: "r1", name: "كلاسيك ماك باربيكيو", description: "برجر لحم كلاسيكي مع صلصة باربيكيو", imageUrl: null, basePrice: 55, discountPrice: 49, calories: 650, isAvailable: true, isFeatured: false, tags: [], displayOrder: 2, createdAt: "" },
         ],
       },
       {
-        id: "s2", menuId: "m1", name: "السلطات والصحي", description: null, displayOrder: 2, isActive: true,
+        id: "s2", menuId: "m1", name: "السلطات والصحي", displayOrder: 2,
         meals: [
           { id: "meal3", sectionId: "s2", restaurantId: "r1", name: "جاردن كينوا بول", description: "وعاء صحي بالكينوا والخضار الطازجة", imageUrl: null, basePrice: 65, discountPrice: null, calories: 420, isAvailable: true, isFeatured: true, tags: ["صحي"], displayOrder: 1, createdAt: "" },
           { id: "meal4", sectionId: "s2", restaurantId: "r1", name: "سيزر سالاد دجاج", description: "سلطة سيزر مع شرائح الدجاج المشوي", imageUrl: null, basePrice: 55, discountPrice: null, calories: 380, isAvailable: false, isFeatured: false, tags: [], displayOrder: 2, createdAt: "" },
@@ -225,10 +225,11 @@ function MealCard({ meal, sections }: { meal: Meal; sections: MenuSection[] }) {
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() =>
-              toggleAvail.mutate(
-                { id: meal.id, isAvailable: !meal.isAvailable },
-                { onSuccess: () => success(meal.isAvailable ? "تم إيقاف الوجبة" : "تم تفعيل الوجبة") }
-              )
+              toggleAvail.mutate(meal.id, {
+                onSuccess: () =>
+                  success(meal.isAvailable ? "تم إيقاف الوجبة" : "تم تفعيل الوجبة"),
+                onError: () => error("خطأ", "فشل تحديث الحالة"),
+              })
             }
             className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
             title={meal.isAvailable ? "إيقاف" : "تفعيل"}
@@ -358,9 +359,10 @@ export default function MenuPage() {
                   <Button
                     className="w-full"
                     loading={createSection.isPending}
+                    disabled={!activeMenu?.id || !newSectionName.trim()}
                     onClick={() =>
                       createSection.mutate(
-                        { menuId: activeMenu?.id ?? "", name: newSectionName },
+                        { menuId: activeMenu!.id, data: { name: newSectionName.trim() } },
                         { onSuccess: () => { success("تم إضافة القسم"); setNewSectionName(""); } }
                       )
                     }
@@ -413,7 +415,16 @@ export default function MenuPage() {
                   </DialogTrigger>
                   <DialogContent title="إضافة قسم جديد">
                     <Input label="اسم القسم" value={newSectionName} onChange={(e) => setNewSectionName(e.target.value)} />
-                    <Button className="w-full mt-4" onClick={() => createSection.mutate({ menuId: activeMenu?.id ?? "", name: newSectionName })}>
+                    <Button
+                      className="w-full mt-4"
+                      disabled={!activeMenu?.id || !newSectionName.trim()}
+                      onClick={() =>
+                        createSection.mutate({
+                          menuId: activeMenu!.id,
+                          data: { name: newSectionName.trim() },
+                        })
+                      }
+                    >
                       إضافة
                     </Button>
                   </DialogContent>

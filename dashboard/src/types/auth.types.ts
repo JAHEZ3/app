@@ -1,14 +1,21 @@
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
+// Matches backend enum exactly
+export type RestaurantStatus =
+  | "pending_approval"
+  | "active"
+  | "suspended"
+  | "closed";
+
+// Frontend-only routing state (superset of RestaurantStatus)
+export type AuthStatus = RestaurantStatus | "pending_profile";
 
 export interface AuthUser {
-  id: string;
-  email: string;
-  name: string;
+  sub: string;
+  phone: string;
   role: "restaurant_owner" | "admin";
-  restaurantId: string;
+  status: RestaurantStatus;
+  profileCompleted?: boolean;
+  iat?: number;
+  exp?: number;
 }
 
 export interface AuthTokens {
@@ -16,7 +23,16 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+export interface RegisterResponse {
+  message: string;
+}
+
+export interface OtpVerifyResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
 export interface LoginResponse {
-  user: AuthUser;
-  tokens: AuthTokens;
+  accessToken: string;
+  refreshToken: string;
 }
