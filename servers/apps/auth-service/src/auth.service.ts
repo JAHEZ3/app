@@ -10,12 +10,15 @@ import {
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Brackets, Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
 import * as bcrypt from "bcrypt";
 import { User, UserRole, UserStatus } from "./entities/user.entity";
+import { AdminListUsersDto } from "./dto/admin-list-users.dto";
+import { AdminUpdateUserDto } from "./dto/admin-update-user.dto";
+import { AdminChangeStatusDto } from "./dto/admin-change-status.dto";
 import { OtpPurpose } from "./entities/otp-code.entity";
-import { AppJwtService } from "./jwt/jwt.service";
+import { AppJwtService, SessionContext } from "./jwt/jwt.service";
 import { OtpService } from "./otp/otp.service";
 import {
   RegisterCustomerDto,
@@ -95,7 +98,7 @@ export class AuthService {
     }
   }
 
-  private async issuePair(user: User) {
+  private async issuePair(user: User, context?: SessionContext) {
     const payload = {
       sub: user.id,
       role: user.role,
@@ -105,7 +108,7 @@ export class AuthService {
     };
     return {
       accessToken: this.jwtService.signAccessToken(payload),
-      refreshToken: await this.jwtService.signRefreshToken(payload),
+      refreshToken: await this.jwtService.signRefreshToken(payload, context),
     };
   }
 
@@ -279,7 +282,7 @@ export class AuthService {
   // PENDING → SUSPENDED for all roles. Tokens are issued immediately so the
   // client can call the downstream service profile-completion endpoint.
 
-  async verifyRegistrationOtp(dto: VerifyOtpDto) {
+  async verifyRegistrationOtp(dto: VerifyOtpDto, context?: SessionContext) {
     const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.MANAGER) {
@@ -303,7 +306,7 @@ export class AuthService {
     user.status = UserStatus.SUSPENDED;
     user.profileCompleted = false;
 
-    const tokens = await this.issuePair(user);
+    const tokens = await this.issuePair(user, context);
 
     const message =
       user.role === UserRole.CUSTOMER
@@ -376,7 +379,7 @@ export class AuthService {
     };
   }
 
-  async verifyLoginOtp(dto: VerifyOtpDto) {
+  async verifyLoginOtp(dto: VerifyOtpDto, context?: SessionContext) {
     const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role !== UserRole.CUSTOMER)
@@ -393,7 +396,7 @@ export class AuthService {
     await this.otpService.verifyOtp(user.id, OtpPurpose.LOGIN, dto.otp);
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
-    const tokens = await this.issuePair(user);
+    const tokens = await this.issuePair(user, context);
 
     const message =
       user.status === UserStatus.SUSPENDED
@@ -405,7 +408,7 @@ export class AuthService {
 
   // ─── Delivery Login (phone + password) ───────────────────────────────────────
 
-  async loginDelivery(dto: LoginDeliveryDto) {
+  async loginDelivery(dto: LoginDeliveryDto, context?: SessionContext) {
     await this.checkLoginRateLimit(dto.phone);
 
     const user = await this.userRepo.findOne({
@@ -440,7 +443,7 @@ export class AuthService {
     if (user.status === UserStatus.SUSPENDED) {
       await this.userRepo.update(user.id, { lastLoginAt: new Date() });
       user.lastLoginAt = new Date();
-      const tokens = await this.issuePair(user);
+      const tokens = await this.issuePair(user, context);
       if (!user.profileCompleted) {
         // Password was set via forgot-password but profile not yet submitted.
         // Return tokens so they can reach the profile-completion endpoint.
@@ -459,13 +462,13 @@ export class AuthService {
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
-    const tokens = await this.issuePair(user);
+    const tokens = await this.issuePair(user, context);
     return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
   // ─── Restaurant Login (phone + password) ─────────────────────────────────────
 
-  async loginRestaurant(dto: LoginRestaurantDto) {
+  async loginRestaurant(dto: LoginRestaurantDto, context?: SessionContext) {
     await this.checkLoginRateLimit(dto.phone);
 
     const user = await this.userRepo.findOne({
@@ -499,7 +502,7 @@ export class AuthService {
     if (user.status === UserStatus.SUSPENDED) {
       await this.userRepo.update(user.id, { lastLoginAt: new Date() });
       user.lastLoginAt = new Date();
-      const tokens = await this.issuePair(user);
+      const tokens = await this.issuePair(user, context);
       if (!user.profileCompleted) {
         return {
           data: tokens,
@@ -515,13 +518,13 @@ export class AuthService {
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
-    const tokens = await this.issuePair(user);
+    const tokens = await this.issuePair(user, context);
     return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
   // ─── Manager Login (email + password) ────────────────────────────────────────
 
-  async loginManager(dto: LoginManagerDto) {
+  async loginManager(dto: LoginManagerDto, context?: SessionContext) {
     await this.checkLoginRateLimit(dto.email);
 
     const user = await this.userRepo.findOne({
@@ -544,7 +547,7 @@ export class AuthService {
     await this.clearLoginAttempts(dto.email);
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
     user.lastLoginAt = new Date();
-    const tokens = await this.issuePair(user);
+    const tokens = await this.issuePair(user, context);
     return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
@@ -629,7 +632,7 @@ export class AuthService {
 
   // ─── Token Management ──────────────────────────────────────────────────────────
 
-  async refresh(token: string) {
+  async refresh(token: string, context?: SessionContext) {
     const payload = await this.jwtService.verifyRefreshToken(token);
 
     const user = await this.userRepo.findOne({ where: { id: payload.sub } });
@@ -640,13 +643,46 @@ export class AuthService {
     // Revoke the old refresh token before issuing a new pair (rotation)
     await this.jwtService.revokeRefreshToken(token);
 
-    const tokens = await this.issuePair(user);
+    const tokens = await this.issuePair(user, context);
     return { data: tokens, message: "تم تجديد الرمز." };
   }
 
   async logout(_userId: string, token: string) {
     await this.jwtService.revokeRefreshToken(token);
     return { data: null, message: "تم تسجيل الخروج بنجاح." };
+  }
+
+  // ─── Sessions ─────────────────────────────────────────────────────────────────
+
+  async listSessions(userId: string, currentRefreshToken?: string) {
+    const sessions = await this.jwtService.listSessions(userId);
+    const currentJti = currentRefreshToken
+      ? this.jwtService.decodeJtiFromRefreshToken(currentRefreshToken)
+      : null;
+
+    const items = sessions.map((s) => ({
+      ...s,
+      current: currentJti !== null && s.id === currentJti,
+    }));
+
+    return { data: { items, total: items.length }, message: "تم استرجاع الجلسات." };
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    await this.jwtService.revokeSessionByJti(userId, sessionId);
+    return { data: null, message: "تم إنهاء الجلسة." };
+  }
+
+  async revokeOtherSessions(userId: string, currentRefreshToken: string) {
+    const jti = this.jwtService.decodeJtiFromRefreshToken(currentRefreshToken);
+    if (!jti) {
+      throw new UnauthorizedException("رمز التحديث غير صالح.");
+    }
+    const revoked = await this.jwtService.revokeAllUserSessionsExcept(userId, jti);
+    return {
+      data: { revoked },
+      message: "تم إنهاء الجلسات الأخرى.",
+    };
   }
 
   // ─── NATS Event Handlers — user status transitions ────────────────────────────
@@ -730,5 +766,133 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(data.password, 10);
     await this.userRepo.update({ id: data.userId }, { passwordHash });
     this.logger.log(`Password set for user ${data.userId}`);
+  }
+
+  // ─── Manager Dashboard — User Administration ─────────────────────────────────
+  // All endpoints require manager role (enforced via guards on the controller).
+
+  async adminListUsers(query: AdminListUsersDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const qb = this.userRepo.createQueryBuilder("u");
+
+    if (query.role) qb.andWhere("u.role = :role", { role: query.role });
+    if (query.status) qb.andWhere("u.status = :status", { status: query.status });
+    if (query.search) {
+      qb.andWhere(
+        new Brackets((b) => {
+          b.where("u.full_name ILIKE :s", { s: `%${query.search}%` })
+            .orWhere("u.email ILIKE :s", { s: `%${query.search}%` })
+            .orWhere("u.phone ILIKE :s", { s: `%${query.search}%` });
+        }),
+      );
+    }
+
+    qb.orderBy("u.created_at", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit)
+      .select([
+        "u.id",
+        "u.email",
+        "u.phone",
+        "u.fullName",
+        "u.role",
+        "u.status",
+        "u.profileCompleted",
+        "u.phoneVerifiedAt",
+        "u.emailVerifiedAt",
+        "u.lastLoginAt",
+        "u.createdAt",
+      ]);
+
+    const [items, total] = await qb.getManyAndCount();
+    return {
+      data: { items, total, page, limit, pages: Math.ceil(total / limit) },
+      message: "تم استرجاع المستخدمين.",
+    };
+  }
+
+  async adminGetUser(id: string) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
+    const { passwordHash: _omit, ...safe } = user;
+    return { data: safe, message: "تم استرجاع المستخدم." };
+  }
+
+  async adminUpdateUser(id: string, dto: AdminUpdateUserDto) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
+
+    if (dto.email && dto.email !== user.email) {
+      const exists = await this.userRepo.findOne({ where: { email: dto.email } });
+      if (exists && exists.id !== id) {
+        throw new ConflictException("البريد الإلكتروني مستخدم بالفعل.");
+      }
+    }
+    if (dto.phone && dto.phone !== user.phone) {
+      const exists = await this.userRepo.findOne({ where: { phone: dto.phone } });
+      if (exists && exists.id !== id) {
+        throw new ConflictException("رقم الهاتف مستخدم بالفعل.");
+      }
+    }
+
+    await this.userRepo.update(id, { ...dto });
+    const updated = await this.userRepo.findOne({ where: { id } });
+    if (!updated) throw new NotFoundException("لم يُعثر على المستخدم بعد التحديث.");
+    const { passwordHash: _omit, ...safe } = updated;
+    return { data: safe, message: "تم تحديث بيانات المستخدم." };
+  }
+
+  async adminChangeStatus(id: string, dto: AdminChangeStatusDto) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
+
+    if (user.status === dto.status) {
+      return { data: { id, status: user.status }, message: "الحالة لم تتغير." };
+    }
+
+    await this.userRepo.update(id, { status: dto.status });
+
+    // If banning/suspending, revoke all refresh tokens so the user is logged out.
+    if (
+      dto.status === UserStatus.BANNED ||
+      dto.status === UserStatus.SUSPENDED
+    ) {
+      await this.jwtService.revokeAllUserTokens(id);
+    }
+
+    // Notify other services so they can mirror the status (best-effort).
+    try {
+      this.natsClient.emit("user.status.changed", {
+        userId: id,
+        role: user.role,
+        status: dto.status,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit user.status.changed failed", err);
+    }
+
+    return {
+      data: { id, status: dto.status },
+      message: "تم تحديث حالة المستخدم.",
+    };
+  }
+
+  async adminDeleteUser(id: string) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException("المستخدم غير موجود.");
+
+    await this.jwtService.revokeAllUserTokens(id);
+    await this.userRepo.delete(id);
+
+    // Tell downstream services to clean up their copies of this user.
+    try {
+      this.natsClient.emit("user.deleted", { userId: id, role: user.role });
+    } catch (err) {
+      this.logger.error("NATS emit user.deleted failed", err);
+    }
+
+    return { data: null, message: "تم حذف المستخدم." };
   }
 }

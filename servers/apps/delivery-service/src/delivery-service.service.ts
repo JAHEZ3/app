@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import { S3Service } from "./s3.service";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
 import {
   AgentStatus,
@@ -15,6 +15,9 @@ import {
   DeliveryAgent,
   VehicleType,
 } from "./entities/delivery-agent.entity";
+import { AdminListAgentsDto } from "./dto/admin-list-agents.dto";
+import { AdminUpdateAgentDto } from "./dto/admin-update-agent.dto";
+import { AdminChangeAgentStatusDto } from "./dto/admin-change-agent-status.dto";
 import { parseAndValidatePaymentInfo } from "./common/payment-info";
 import {
   DeliveryRequest,
@@ -339,5 +342,98 @@ export class DeliveryServiceService {
     );
 
     return { data: { requestId }, message: "تم رفض الطلب." };
+  }
+
+  // ─── Manager Dashboard — Delivery Agent Administration ──────────────────────
+  // All endpoints require manager role (enforced via guards on the controller).
+
+  async adminListAgents(query: AdminListAgentsDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const qb = this.agentRepo.createQueryBuilder("a");
+
+    if (query.status) qb.andWhere("a.status = :status", { status: query.status });
+    if (query.vehicleType)
+      qb.andWhere("a.vehicle_type = :vt", { vt: query.vehicleType });
+    if (query.city)
+      qb.andWhere("a.city ILIKE :city", { city: `%${query.city}%` });
+    if (query.search) {
+      qb.andWhere(
+        new Brackets((b) => {
+          b.where("a.full_name ILIKE :s", { s: `%${query.search}%` })
+            .orWhere("a.phone ILIKE :s", { s: `%${query.search}%` })
+            .orWhere("a.id_number ILIKE :s", { s: `%${query.search}%` });
+        }),
+      );
+    }
+
+    qb.orderBy("a.created_at", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    return {
+      data: { items, total, page, limit, pages: Math.ceil(total / limit) },
+      message: "تم استرجاع المندوبين.",
+    };
+  }
+
+  async adminGetAgent(id: string) {
+    const agent = await this.agentRepo.findOne({ where: { id } });
+    if (!agent) throw new NotFoundException("المندوب غير موجود.");
+    return { data: agent, message: "تم استرجاع بيانات المندوب." };
+  }
+
+  async adminUpdateAgent(id: string, dto: AdminUpdateAgentDto) {
+    const agent = await this.agentRepo.findOne({ where: { id } });
+    if (!agent) throw new NotFoundException("المندوب غير موجود.");
+
+    const patch: Partial<DeliveryAgent> = { ...dto };
+    if (dto.firstName || dto.lastName) {
+      patch.fullName = `${dto.firstName ?? agent.firstName} ${dto.lastName ?? agent.lastName}`;
+    }
+
+    await this.agentRepo.update(id, patch);
+    const updated = await this.agentRepo.findOne({ where: { id } });
+    if (!updated) throw new NotFoundException("لم يُعثر على المندوب بعد التحديث.");
+    return { data: updated, message: "تم تحديث بيانات المندوب." };
+  }
+
+  async adminChangeAgentStatus(id: string, dto: AdminChangeAgentStatusDto) {
+    const agent = await this.agentRepo.findOne({ where: { id } });
+    if (!agent) throw new NotFoundException("المندوب غير موجود.");
+
+    if (agent.status === dto.status) {
+      return {
+        data: { id, status: agent.status },
+        message: "الحالة لم تتغير.",
+      };
+    }
+
+    await this.agentRepo.update(id, { status: dto.status });
+
+    return {
+      data: { id, status: dto.status },
+      message: "تم تحديث حالة المندوب.",
+    };
+  }
+
+  async adminDeleteAgent(id: string) {
+    const agent = await this.agentRepo.findOne({ where: { id } });
+    if (!agent) throw new NotFoundException("المندوب غير موجود.");
+
+    await this.agentRepo.delete(id);
+
+    try {
+      this.natsClient.emit("delivery.agent.deleted", {
+        agentId: id,
+        userId: agent.userId,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit delivery.agent.deleted failed", err);
+    }
+
+    return { data: null, message: "تم حذف المندوب." };
   }
 }
