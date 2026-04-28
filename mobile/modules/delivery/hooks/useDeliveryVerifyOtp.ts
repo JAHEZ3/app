@@ -6,15 +6,18 @@ import { useDeliveryStore } from '@/store/useDeliveryStore';
 
 export const useDeliveryVerifyOtp = () => {
     const { verifyOtp } = useDelivery();
-    const { setTokens } = useDeliveryStore();
+    const { setTokens, setLastKnownStatus } = useDeliveryStore();
 
     return useMutation({
         mutationKey: ['delivery/verifyOtp'],
         mutationFn: verifyOtp,
         onSuccess: async (data) => {
             await SecureStore.setItemAsync('deliveryRefreshToken', data.refreshToken);
+            // New OTP = fresh session; clear stale status so the guard routes by
+            // real profile data instead of a previous session's cached state
+            await SecureStore.deleteItemAsync('deliveryAgentStatus');
+            setLastKnownStatus(null);
             setTokens(data.accessToken);
-            // After OTP verification status is SUSPENDED → go to entry which routes to application
             router.replace('/delivery' as never);
         },
     });

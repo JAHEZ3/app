@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
-import { useGetDeliveryProfile } from '../hooks/useGetDeliveryProfile';
+import { useDeliveryProfile } from '../hooks/useDeliveryProfile';
 import { DeliveryAgentStatus } from '../types';
 
 const ROUTE_MAP: Record<DeliveryAgentStatus, string> = {
@@ -12,42 +13,170 @@ const ROUTE_MAP: Record<DeliveryAgentStatus, string> = {
     REJECTED: '/delivery/rejected',
 };
 
+// If auth+profile haven't resolved after this long something is truly stuck.
+const GUARD_TIMEOUT_MS = 12_000;
+
+// Normalize any status string to the uppercase form expected by ROUTE_MAP.
+// Guards against old SecureStore cache entries written before the adapter fix.
+function resolveRoute(status: string | null | undefined): string | null {
+    if (!status) return null;
+    return ROUTE_MAP[status.toUpperCase() as DeliveryAgentStatus] ?? null;
+}
+
 export function DeliveryGuard() {
-    const { accessToken, authStatus } = useDeliveryStore();
-    const { data: profile, isLoading, isError } = useGetDeliveryProfile();
+    const { accessToken, authStatus, lastKnownStatus, clearTokens } = useDeliveryStore();
 
-    const isResolving = authStatus === 'idle' || authStatus === 'loading' || isLoading;
+    // isLoading = isPending && isFetching — false when query is disabled (no token)
+    // or when a result has arrived. Using this (not isPending) avoids waiting on a
+    // query that is intentionally disabled and will never fire.
+    const { data: profile, isLoading, isError, error, refetch } = useDeliveryProfile();
 
+    const [timedOut, setTimedOut] = useState(false);
+    const hasNavigated = useRef(false);
+
+    const isAuthReady = authStatus !== 'idle' && authStatus !== 'loading';
+
+    // ── Fast-path: instant redirect when SecureStore clearly has no token ─────
+    // This runs in parallel with useDeliveryInit (which lives in _layout.tsx).
+    // When the refresh token is absent we skip the 8 s init timeout entirely and
+    // send the user to the login screen right away.
     useEffect(() => {
-        if (isResolving) return;
+        SecureStore.getItemAsync('deliveryRefreshToken').then((stored) => {
+            if (!stored) {
+                console.log('[DeliveryGuard] Fast-path: no refresh token — going to login');
+                navigate('/delivery/register');
+            }
+        });
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-        // No token → go to register/login
+    // ── Safety timeout ────────────────────────────────────────────────────────
+    // Resets whenever authStatus changes so a legitimately slow network gets the
+    // full window from the moment auth state settles.
+    useEffect(() => {
+        if (timedOut) return;
+        const id = setTimeout(() => {
+            if (!hasNavigated.current) {
+                console.warn('[DeliveryGuard] Timed out — auth/profile never resolved');
+                setTimedOut(true);
+            }
+        }, GUARD_TIMEOUT_MS);
+        return () => clearTimeout(id);
+    }, [authStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── Navigation logic ──────────────────────────────────────────────────────
+    useEffect(() => {
+        console.log('[DeliveryGuard]', {
+            authStatus,
+            isAuthReady,
+            hasToken: !!accessToken,
+            profileStatus: profile?.status ?? null,
+            isLoading,
+            isError,
+            lastKnownStatus,
+        });
+
+        if (!isAuthReady) return;
+
+        // ── No valid session → go to login ──
         if (!accessToken) {
-            router.replace('/delivery/register' as never);
+            navigate('/delivery/register');
             return;
         }
 
-        // Profile fetch failed (e.g. 404 for freshly-verified SUSPENDED agent
-        // who has no profile record yet) → send to application form
-        if (isError) {
-            router.replace('/delivery/application' as never);
-            return;
-        }
-
-        // Profile loaded with a valid status → route accordingly
+        // ── Live profile loaded → most accurate routing ──
         if (profile?.status) {
-            const route = ROUTE_MAP[profile.status];
-            if (route) router.replace(route as never);
+            const route = resolveRoute(profile.status);
+            if (route) navigate(route);
             return;
         }
 
-        // Profile loaded but status missing → assume SUSPENDED (just verified)
-        if (profile !== undefined) {
-            router.replace('/delivery/application' as never);
+        // ── Profile fetch failed ──
+        if (isError) {
+            const httpStatus = (error as any)?.response?.status;
+            if (httpStatus === 401 || httpStatus === 403) {
+                // The stored token is not valid for delivery (e.g. a customer token
+                // was saved as the delivery token). Wipe it so the next app open
+                // skips the refresh attempt entirely and goes straight to login.
+                console.warn('[DeliveryGuard] Auth error on profile fetch — clearing delivery session');
+                clearTokens();
+                SecureStore.deleteItemAsync('deliveryRefreshToken');
+                SecureStore.deleteItemAsync('deliveryAgentStatus');
+                navigate('/delivery/register');
+                return;
+            }
+            // Non-auth error: fall back on cached status; if none, open the form.
+            const route = resolveRoute(lastKnownStatus) ?? '/delivery/application';
+            console.warn('[DeliveryGuard] Profile error, using fallback route:', route);
+            navigate(route);
+            return;
         }
-    }, [isResolving, accessToken, profile?.status, isError]);
 
-    // Always show a spinner — never render blank children on this entry screen
+        // ── Cached status → route immediately ──
+        // The destination screen runs its own useDeliveryProfile and will correct
+        // the route if the live status has changed.
+        if (lastKnownStatus) {
+            const route = resolveRoute(lastKnownStatus);
+            if (route) {
+                console.log('[DeliveryGuard] Routing via cached status:', lastKnownStatus);
+                navigate(route);
+            } else {
+                // Unrecognised status value — go to application form as safe default.
+                console.warn('[DeliveryGuard] Unknown cached status:', lastKnownStatus);
+                navigate('/delivery/application');
+            }
+            return;
+        }
+
+        // ── No cache, no data, and not actively fetching → go to form ──
+        // (isLoading is false when the query is disabled OR when it has already
+        //  settled; using isPending here would block forever on a disabled query.)
+        if (!isLoading) {
+            console.log('[DeliveryGuard] No data and not loading — defaulting to application form');
+            navigate('/delivery/application');
+        }
+    }, [isAuthReady, accessToken, profile?.status, isError, isLoading, lastKnownStatus, error]);
+
+    function navigate(route: string) {
+        if (hasNavigated.current) return;
+        hasNavigated.current = true;
+        router.replace(route as never);
+    }
+
+    // ── Timeout fallback UI ───────────────────────────────────────────────────
+    if (timedOut) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 32 }}>
+                <Text style={{ fontSize: 16, color: '#1E1E1E', textAlign: 'center', marginBottom: 8, fontFamily: 'Cairo_700Bold' }}>
+                    Connection Problem
+                </Text>
+                <Text style={{ fontSize: 14, color: '#767777', textAlign: 'center', lineHeight: 22, marginBottom: 28, fontFamily: 'Tajawal_400Regular' }}>
+                    Unable to load your account data. Please check your connection and try again.
+                </Text>
+                <TouchableOpacity
+                    onPress={() => {
+                        hasNavigated.current = false;
+                        setTimedOut(false);
+                        refetch();
+                    }}
+                    style={{ backgroundColor: '#F55905', paddingHorizontal: 32, paddingVertical: 13, borderRadius: 24, marginBottom: 12 }}
+                >
+                    <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Cairo_600SemiBold' }}>
+                        Try Again
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => navigate('/delivery/register')}
+                    style={{ padding: 8 }}
+                >
+                    <Text style={{ color: '#767777', fontSize: 13, fontFamily: 'Tajawal_400Regular', textDecorationLine: 'underline' }}>
+                        Go to Login
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // ── Default: spinner while resolving ─────────────────────────────────────
     return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
             <ActivityIndicator size="large" color="#F55905" />

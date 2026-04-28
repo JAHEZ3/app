@@ -29,6 +29,43 @@ const ease = Easing.out(Easing.cubic);
 
 type Tab = 'register' | 'login';
 
+// Normalise an API error into a readable message string.
+function extractMessage(err: unknown): string {
+    const axErr = err as any;
+    return (
+        axErr?.response?.data?.message ??
+        axErr?.response?.data?.error ??
+        (err instanceof Error ? err.message : null) ??
+        'Something went wrong'
+    );
+}
+
+// Check whether an error indicates the phone is unknown to the delivery system.
+function isNotFoundError(err: unknown): boolean {
+    const axErr = err as any;
+    const status: number = axErr?.response?.status ?? 0;
+    const msg: string = extractMessage(err).toLowerCase();
+    return (
+        status === 404 ||
+        msg.includes('not found') ||
+        msg.includes('no user') ||
+        msg.includes('does not exist')
+    );
+}
+
+// Check whether an error indicates the phone is already registered.
+function isAlreadyExistsError(err: unknown): boolean {
+    const axErr = err as any;
+    const status: number = axErr?.response?.status ?? 0;
+    const msg: string = extractMessage(err).toLowerCase();
+    return (
+        status === 409 ||
+        msg.includes('already') ||
+        msg.includes('exists') ||
+        msg.includes('registered')
+    );
+}
+
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
     const opacity = useSharedValue(0);
     const y = useSharedValue(12);
@@ -44,7 +81,10 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 }
 
 export default function DeliveryRegisterScreen() {
-    const [tab, setTab] = useState<Tab>('register');
+    // Always start on the login tab — returning users are the common case.
+    // First-time users land here too; if login says "not found" we switch them
+    // to the register tab automatically (see handleSubmit below).
+    const [tab, setTab] = useState<Tab>('login');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -81,8 +121,22 @@ export default function DeliveryRegisterScreen() {
                 await login({ phone, password });
             }
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Something went wrong';
-            showToast(msg, 'error');
+            if (tab === 'login' && isNotFoundError(err)) {
+                // Phone has no delivery-agent account yet → guide user to register.
+                setTab('register');
+                setPassword('');
+                showToast('No account found. Please create a new one.', 'info');
+                return;
+            }
+
+            if (tab === 'register' && isAlreadyExistsError(err)) {
+                // Phone is already registered → guide user to sign in.
+                setTab('login');
+                showToast('Account already exists. Please sign in.', 'info');
+                return;
+            }
+
+            showToast(extractMessage(err), 'error');
         }
     }, [tab, phone, password, register, login, showToast]);
 
@@ -170,12 +224,12 @@ export default function DeliveryRegisterScreen() {
 
                         <Row delay={200}>
                             <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 22, color: '#1E1E1E', marginBottom: 4 }}>
-                                {tab === 'register' ? 'Create Account' : 'Welcome Back'}
+                                {tab === 'register' ? 'New Delivery Agent' : 'Welcome Back'}
                             </Text>
                             <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', lineHeight: 22, marginBottom: 24 }}>
                                 {tab === 'register'
-                                    ? 'Enter your phone number to get started with OTP verification.'
-                                    : 'Sign in to your delivery agent account.'}
+                                    ? 'First time here? Enter your phone to receive an OTP and create your account.'
+                                    : 'Sign in with your phone number and password.'}
                             </Text>
                         </Row>
 

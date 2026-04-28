@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StatusBar } from 'react-native';
+import { AppState, View, Text, TouchableOpacity, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -12,11 +13,13 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDeliveryLogout } from '../hooks/useDeliveryLogout';
+import { useGetDeliveryProfile } from '../hooks/useGetDeliveryProfile';
 
 const ease = Easing.out(Easing.cubic);
 
 export default function DeliveryPendingScreen() {
     const { mutate: logout, isPending } = useDeliveryLogout();
+    const { data: profile, refetch, isRefetching } = useGetDeliveryProfile();
     const queryClient = useQueryClient();
 
     const iconOpacity = useSharedValue(0);
@@ -35,6 +38,35 @@ export default function DeliveryPendingScreen() {
         contentY.value = withDelay(400, withTiming(0, { duration: 500, easing: ease }));
     }, [iconOpacity, iconScale, ring1, ring2, contentOpacity, contentY]);
 
+    useEffect(() => {
+        if (!profile?.status) return;
+
+        if (profile.status === 'ACTIVE') {
+            router.replace('/delivery/dashboard' as never);
+            return;
+        }
+
+        if (profile.status === 'REJECTED') {
+            router.replace('/delivery/rejected' as never);
+            return;
+        }
+
+        if (profile.status === 'SUSPENDED') {
+            router.replace('/delivery/application' as never);
+        }
+    }, [profile?.status]);
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (state) => {
+            if (state === 'active') {
+                queryClient.invalidateQueries({ queryKey: ['deliveryProfile'] });
+                refetch();
+            }
+        });
+
+        return () => subscription.remove();
+    }, [queryClient, refetch]);
+
     const iconStyle = useAnimatedStyle(() => ({ opacity: iconOpacity.value, transform: [{ scale: iconScale.value }] }));
     const ring1Style = useAnimatedStyle(() => ({ opacity: ring1.value }));
     const ring2Style = useAnimatedStyle(() => ({ opacity: ring2.value }));
@@ -42,6 +74,7 @@ export default function DeliveryPendingScreen() {
 
     const handleRefresh = () => {
         queryClient.invalidateQueries({ queryKey: ['deliveryProfile'] });
+        refetch();
     };
 
     return (
@@ -49,7 +82,6 @@ export default function DeliveryPendingScreen() {
             <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-                {/* Animated rings + icon */}
                 <View style={{ alignItems: 'center', justifyContent: 'center', width: 160, height: 160, marginBottom: 40 }}>
                     <Animated.View style={[ring2Style, {
                         position: 'absolute', width: 160, height: 160, borderRadius: 80,
@@ -77,7 +109,6 @@ export default function DeliveryPendingScreen() {
                         Your application is currently under review. Our team will verify your information and get back to you soon.
                     </Text>
 
-                    {/* Status pill */}
                     <View style={{
                         flexDirection: 'row', alignItems: 'center', gap: 8,
                         backgroundColor: '#FFF5F0', borderRadius: 20,
@@ -86,11 +117,10 @@ export default function DeliveryPendingScreen() {
                     }}>
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F55905' }} />
                         <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: '#F55905' }}>
-                            Pending Approval
+                            {isRefetching ? 'Checking Status...' : 'Pending Approval'}
                         </Text>
                     </View>
 
-                    {/* Info cards */}
                     {[
                         { icon: 'checkmark-circle-outline' as const, text: 'Documents verified successfully' },
                         { icon: 'shield-checkmark-outline' as const, text: 'Background check in progress' },
