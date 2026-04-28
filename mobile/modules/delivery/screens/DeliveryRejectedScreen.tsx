@@ -11,14 +11,19 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import AppButton from '@/components/ui/AppButton';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
+import { useRTL } from '@/hooks/useRTL';
 import { useDeliveryLogout } from '../hooks/useDeliveryLogout';
 import { useGetDeliveryProfile } from '../hooks/useGetDeliveryProfile';
 
 const ease = Easing.out(Easing.cubic);
 
 export default function DeliveryRejectedScreen() {
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
     const { data: profile } = useGetDeliveryProfile();
     const { mutate: logout, isPending } = useDeliveryLogout();
+    const textAlign = isRTL ? 'right' : 'left';
 
     const iconOpacity = useSharedValue(0);
     const iconScale = useSharedValue(0.6);
@@ -53,10 +58,10 @@ export default function DeliveryRejectedScreen() {
 
                 <Animated.View style={[contentStyle, { alignItems: 'center', width: '100%' }]}>
                     <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 24, color: '#1E1E1E', textAlign: 'center', marginBottom: 10 }}>
-                        Application Rejected
+                        {t('rejected.title')}
                     </Text>
                     <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
-                        Unfortunately, your application did not meet our current requirements. You may re-apply after reviewing the reason below.
+                        {t('rejected.subtitle')}
                     </Text>
 
                     {/* Rejection reason card */}
@@ -68,10 +73,10 @@ export default function DeliveryRejectedScreen() {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                                 <Ionicons name="information-circle-outline" size={18} color="#b02500" />
                                 <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#b02500' }}>
-                                    Rejection Reason
+                                    {t('rejected.reasonTitle')}
                                 </Text>
                             </View>
-                            <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#1E1E1E', lineHeight: 22 }}>
+                            <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#1E1E1E', lineHeight: 22, textAlign }}>
                                 {profile.rejectionReason}
                             </Text>
                         </View>
@@ -80,16 +85,16 @@ export default function DeliveryRejectedScreen() {
                     {/* What to do */}
                     <View style={{ width: '100%', backgroundColor: '#F7F7F7', borderRadius: 16, padding: 16, marginBottom: 28, gap: 10 }}>
                         <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 14, color: '#1E1E1E', marginBottom: 4 }}>
-                            What to do next:
+                            {t('rejected.nextTitle')}
                         </Text>
                         {[
-                            'Review the rejection reason carefully',
-                            'Ensure all documents are valid and clear',
-                            'Contact support if you have questions',
+                            t('rejected.tips.reviewReason'),
+                            t('rejected.tips.documents'),
+                            t('rejected.tips.support'),
                         ].map((tip, i) => (
                             <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F55905', marginTop: 6 }} />
-                                <Text style={{ flex: 1, fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777', lineHeight: 20 }}>
+                                <Text style={{ flex: 1, fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777', lineHeight: 20, textAlign }}>
                                     {tip}
                                 </Text>
                             </View>
@@ -97,14 +102,14 @@ export default function DeliveryRejectedScreen() {
                     </View>
 
                     <AppButton
-                        label="Re-Apply Now"
+                        label={t('rejected.reapply')}
                         onPress={() => router.replace('/delivery/application' as never)}
                         icon={<Ionicons name="refresh-circle-outline" size={22} color="#fff" />}
                         iconPosition="right"
                     />
 
                     <AppButton
-                        label={isPending ? 'Logging out...' : 'Logout'}
+                        label={isPending ? t('rejected.loggingOut') : t('rejected.logout')}
                         variant="ghost"
                         onPress={() => logout()}
                         disabled={isPending}

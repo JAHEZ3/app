@@ -13,11 +13,16 @@ import {
     Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, {
+    DateTimePickerAndroid,
+    DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AppButton from '@/components/ui/AppButton';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
+import { useRTL } from '@/hooks/useRTL';
 import { useSubmitDeliveryProfile } from '../hooks/useSubmitDeliveryProfile';
 import { useGetDeliveryQuestions } from '../hooks/useGetDeliveryQuestions';
 import { Toast, useToast } from '../components/Toast';
@@ -30,15 +35,17 @@ function SectionHeader({ icon, title, subtitle }: {
     title: string;
     subtitle?: string;
 }) {
+    const isRTL = useRTL();
+    const textAlign = isRTL ? 'right' : 'left';
     return (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, marginTop: 8 }}>
+        <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 12, marginBottom: 16, marginTop: 8 }}>
             <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFF5F0', alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name={icon} size={20} color="#F55905" />
             </View>
             <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 16, color: '#1E1E1E' }}>{title}</Text>
+                <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 16, color: '#1E1E1E', textAlign }}>{title}</Text>
                 {subtitle && (
-                    <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 12, color: '#767777', lineHeight: 18 }}>
+                    <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 12, color: '#767777', lineHeight: 18, textAlign }}>
                         {subtitle}
                     </Text>
                 )}
@@ -49,8 +56,15 @@ function SectionHeader({ icon, title, subtitle }: {
 
 // ─── Date Picker ─────────────────────────────────────────────────────────────
 
-const MAX_DOB = new Date();
-MAX_DOB.setFullYear(MAX_DOB.getFullYear() - 18); // must be 18+
+// Computed once — represents "exactly 18 years ago today" at midnight.
+function makeMaxDOB(): Date {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+const MAX_DOB = makeMaxDOB();
+const MIN_DOB = new Date(1940, 0, 1);
 
 function toISODate(d: Date): string {
     const y = d.getFullYear();
@@ -59,37 +73,83 @@ function toISODate(d: Date): string {
     return `${y}-${m}-${day}`;
 }
 
+function fromISODate(iso: string): Date {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d);
+}
+
 function toDisplayDate(iso: string): string {
     if (!iso) return '';
-    const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    return fromISODate(iso).toLocaleDateString('en-US', {
         year: 'numeric', month: 'long', day: 'numeric',
     });
 }
 
 function DatePickerField({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
     const [open, setOpen] = useState(false);
 
-    // The live date used by the picker control (defaults to max allowed age)
-    const pickerDate = value
-        ? (() => { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d); })()
-        : MAX_DOB;
+    // `pendingDate` tracks what is currently shown in the spinner/picker.
+    // It is separate from `value` (the committed form value) so that:
+    //   • On iOS the user can scroll freely and only commit on "Done".
+    //   • Pressing "Cancel" / the backdrop discards the scroll position.
+    //   • Pressing "Done" without scrolling still commits a sensible date.
+    const [pendingDate, setPendingDate] = useState<Date>(MAX_DOB);
 
     const handleChange = useCallback((_: DateTimePickerEvent, selected?: Date) => {
-        if (Platform.OS === 'android') setOpen(false);
-        if (selected) onChange(toISODate(selected));
+        if (!selected) {
+            return;
+        }
+        setPendingDate(selected);
+        if (Platform.OS === 'android') {
+            // Android native dialog: commit immediately.
+            onChange(toISODate(selected));
+        }
+        // iOS spinner: keep the modal open; commit happens on "Done".
     }, [onChange]);
 
-    const displayLabel = value ? toDisplayDate(value) : 'Select your date of birth';
+    const handleOpen = useCallback(() => {
+        const nextDate = value ? fromISODate(value) : MAX_DOB;
+
+        // Android's native dialog is more reliable when opened imperatively.
+        if (Platform.OS === 'android') {
+            setPendingDate(nextDate);
+            DateTimePickerAndroid.open({
+                value: nextDate,
+                mode: 'date',
+                display: 'calendar',
+                maximumDate: MAX_DOB,
+                minimumDate: MIN_DOB,
+                onChange: handleChange,
+            });
+            return;
+        }
+
+        // iOS uses the bottom-sheet modal below.
+        setPendingDate(nextDate);
+        setOpen(true);
+    }, [value, handleChange]);
+
+    // iOS "Done" — commit whatever the spinner is currently showing.
+    const handleDone = useCallback(() => {
+        onChange(toISODate(pendingDate));
+        setOpen(false);
+    }, [pendingDate, onChange]);
+
+    // iOS "Cancel" / backdrop tap — discard scroll, leave form value unchanged.
+    const handleCancel = useCallback(() => setOpen(false), []);
+
+    const displayLabel = value ? toDisplayDate(value) : t('application.selectDateOfBirth');
 
     return (
         <View style={{ marginBottom: 14 }}>
             <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 6 }}>
-                Date of Birth <Text style={{ color: '#F55905' }}>*</Text>
+                {t('application.dateOfBirth')} <Text style={{ color: '#F55905' }}>*</Text>
             </Text>
 
             <TouchableOpacity
-                onPress={() => setOpen(true)}
+                onPress={handleOpen}
                 style={{
                     flexDirection: 'row', alignItems: 'center',
                     borderWidth: 1.5,
@@ -106,71 +166,82 @@ function DatePickerField({ value, onChange }: { value: string; onChange: (iso: s
                     fontFamily: value ? 'Tajawal_500Medium' : 'Tajawal_400Regular',
                     fontSize: 14,
                     color: value ? '#1E1E1E' : '#c0c0c0',
+                    textAlign: isRTL ? 'right' : 'left',
                 }}>
                     {displayLabel}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#c0c0c0" />
+                <Ionicons name={isRTL ? 'chevron-back' : 'chevron-down'} size={16} color="#c0c0c0" />
             </TouchableOpacity>
 
-            {/* Android: picker renders as native dialog — just mount it when open */}
-            {Platform.OS === 'android' && open && (
-                <DateTimePicker
-                    value={pickerDate}
-                    mode="date"
-                    display="default"
-                    maximumDate={MAX_DOB}
-                    minimumDate={new Date(1940, 0, 1)}
-                    onChange={handleChange}
-                />
-            )}
-
-            {/* iOS: wrap in a bottom-sheet modal for consistent UX */}
+            {/* ── iOS: bottom-sheet modal with spinner ─────────────────────── */}
             {Platform.OS === 'ios' && (
-                <Modal visible={open} transparent animationType="slide">
-                    <TouchableOpacity
-                        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}
-                        activeOpacity={1}
-                        onPress={() => setOpen(false)}
-                    />
-                    <View style={{
-                        backgroundColor: '#fff',
-                        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-                        paddingBottom: 32,
-                    }}>
-                        {/* Handle + header */}
-                        <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#e5e5e5' }} />
-                        </View>
-                        <View style={{
-                            flexDirection: 'row', alignItems: 'center',
-                            justifyContent: 'space-between',
-                            paddingHorizontal: 20, paddingVertical: 12,
-                            borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
-                        }}>
-                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 16, color: '#1E1E1E' }}>
-                                Date of Birth
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => setOpen(false)}
-                                style={{
-                                    backgroundColor: '#F55905', borderRadius: 20,
-                                    paddingHorizontal: 18, paddingVertical: 8,
-                                }}
-                            >
-                                <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: '#fff' }}>
-                                    Done
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                        <DateTimePicker
-                            value={pickerDate}
-                            mode="date"
-                            display="spinner"
-                            maximumDate={MAX_DOB}
-                            minimumDate={new Date(1940, 0, 1)}
-                            onChange={handleChange}
-                            style={{ height: 200 }}
+                <Modal visible={open} transparent animationType="slide" statusBarTranslucent>
+                    {/* Outer flex container is required for the backdrop + sheet
+                        to lay out correctly inside a transparent Modal. */}
+                    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                        {/* Semi-transparent backdrop — tap to cancel */}
+                        <TouchableOpacity
+                            style={{
+                                position: 'absolute',
+                                top: 0, left: 0, right: 0, bottom: 0,
+                                backgroundColor: 'rgba(0,0,0,0.45)',
+                            }}
+                            activeOpacity={1}
+                            onPress={handleCancel}
                         />
+
+                        {/* Bottom sheet */}
+                        <View style={{
+                            backgroundColor: '#fff',
+                            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+                            paddingBottom: 36,
+                        }}>
+                            {/* Drag handle */}
+                            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#e0e0e0' }} />
+                            </View>
+
+                            {/* Header: Cancel  |  Title  |  Done */}
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                justifyContent: 'space-between',
+                                paddingHorizontal: 20, paddingVertical: 12,
+                                borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+                            }}>
+                                <TouchableOpacity
+                                    onPress={handleCancel}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                    <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 15, color: '#767777' }}>
+                                        {t('application.cancel')}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 16, color: '#1E1E1E' }}>
+                                    {t('application.dateOfBirth')}
+                                </Text>
+
+                                <TouchableOpacity
+                                    onPress={handleDone}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                    <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 15, color: '#F55905' }}>
+                                        {t('application.done')}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Spinner */}
+                            <DateTimePicker
+                                value={pendingDate}
+                                mode="date"
+                                display="spinner"
+                                maximumDate={MAX_DOB}
+                                minimumDate={MIN_DOB}
+                                onChange={handleChange}
+                                style={{ height: 216 }}
+                            />
+                        </View>
                     </View>
                 </Modal>
             )}
@@ -198,6 +269,7 @@ function Field({
     keyboardType = 'default', secureTextEntry, multiline,
     required, icon, rightSlot,
 }: FieldProps) {
+    const isRTL = useRTL();
     const [focused, setFocused] = useState(false);
     return (
         <View style={{ marginBottom: 14 }}>
@@ -205,7 +277,7 @@ function Field({
                 {label}{required && <Text style={{ color: '#F55905' }}> *</Text>}
             </Text>
             <View style={{
-                flexDirection: 'row',
+                flexDirection: isRTL ? 'row-reverse' : 'row',
                 alignItems: multiline ? 'flex-start' : 'center',
                 borderWidth: 1.5,
                 borderColor: focused ? '#F55905' : '#e5e5e5',
@@ -219,7 +291,7 @@ function Field({
                     <Ionicons
                         name={icon} size={18}
                         color={focused ? '#F55905' : '#c0c0c0'}
-                        style={{ marginRight: 10, marginTop: multiline ? 2 : 0 }}
+                        style={{ marginRight: isRTL ? 0 : 10, marginLeft: isRTL ? 10 : 0, marginTop: multiline ? 2 : 0 }}
                     />
                 )}
                 <TextInput
@@ -239,6 +311,7 @@ function Field({
                         fontSize: 14,
                         color: '#1E1E1E',
                         textAlignVertical: multiline ? 'top' : 'center',
+                        textAlign: isRTL ? 'right' : 'left',
                     }}
                 />
                 {rightSlot}
@@ -247,21 +320,21 @@ function Field({
     );
 }
 
-const VEHICLE_OPTIONS: { value: VehicleType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-    { value: 'motorcycle', label: 'Motorcycle', icon: 'bicycle' },
-    { value: 'bicycle', label: 'Bicycle', icon: 'bicycle' },
-    { value: 'car', label: 'Car', icon: 'car' },
-    { value: 'on_foot', label: 'On Foot', icon: 'walk' },
-];
-
 function VehicleSelector({ value, onChange }: { value: VehicleType | ''; onChange: (v: VehicleType) => void }) {
+    const { t } = useDeliveryT();
+    const options: { value: VehicleType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+        { value: 'motorcycle', label: t('application.vehicles.motorcycle'), icon: 'bicycle' },
+        { value: 'bicycle', label: t('application.vehicles.bicycle'), icon: 'bicycle' },
+        { value: 'car', label: t('application.vehicles.car'), icon: 'car' },
+        { value: 'on_foot', label: t('application.vehicles.onFoot'), icon: 'walk' },
+    ];
     return (
         <View style={{ marginBottom: 14 }}>
             <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8 }}>
-                Vehicle Type <Text style={{ color: '#F55905' }}>*</Text>
+                {t('application.fields.vehicleType')} <Text style={{ color: '#F55905' }}>*</Text>
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                {VEHICLE_OPTIONS.map((opt) => {
+                {options.map((opt) => {
                     const selected = value === opt.value;
                     return (
                         <TouchableOpacity
@@ -287,11 +360,6 @@ function VehicleSelector({ value, onChange }: { value: VehicleType | ''; onChang
     );
 }
 
-const PAYMENT_OPTIONS: { value: PaymentType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-    { value: 'bank_account', label: 'Bank Account', icon: 'business-outline' },
-    { value: 'wallet', label: 'Wallet', icon: 'wallet-outline' },
-];
-
 function PaymentSelector({
     payment,
     onChange,
@@ -299,13 +367,18 @@ function PaymentSelector({
     payment: PaymentFormData;
     onChange: <K extends keyof PaymentFormData>(key: K, val: PaymentFormData[K]) => void;
 }) {
+    const { t } = useDeliveryT();
+    const options: { value: PaymentType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+        { value: 'bank_account', label: t('application.paymentOptions.bankAccount'), icon: 'business-outline' },
+        { value: 'wallet', label: t('application.paymentOptions.wallet'), icon: 'wallet-outline' },
+    ];
     return (
         <View style={{ marginBottom: 14 }}>
             <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8 }}>
-                Payment Method <Text style={{ color: '#F55905' }}>*</Text>
+                {t('application.fields.paymentMethod')} <Text style={{ color: '#F55905' }}>*</Text>
             </Text>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
-                {PAYMENT_OPTIONS.map((opt) => {
+                {options.map((opt) => {
                     const selected = payment.type === opt.value;
                     return (
                         <TouchableOpacity
@@ -332,24 +405,24 @@ function PaymentSelector({
             {payment.type === 'bank_account' && (
                 <>
                     <Field
-                        label="Bank Name" required
+                        label={t('application.fields.bankName')} required
                         value={payment.bankName}
                         onChangeText={(v) => onChange('bankName', v)}
-                        placeholder="e.g. Al Rajhi Bank"
+                        placeholder={t('application.placeholders.bankName')}
                         icon="business-outline"
                     />
                     <Field
-                        label="IBAN" required
+                        label={t('application.fields.iban')} required
                         value={payment.iban}
                         onChangeText={(v) => onChange('iban', v)}
-                        placeholder="SA00 0000 0000 0000 0000 0000"
+                        placeholder={t('application.placeholders.iban')}
                         icon="card-outline"
                     />
                     <Field
-                        label="Account Number"
+                        label={t('application.fields.accountNumber')}
                         value={payment.accountNumber}
                         onChangeText={(v) => onChange('accountNumber', v)}
-                        placeholder="Optional"
+                        placeholder={t('application.placeholders.accountNumber')}
                         keyboardType="numeric"
                         icon="document-text-outline"
                     />
@@ -358,10 +431,10 @@ function PaymentSelector({
 
             {payment.type === 'wallet' && (
                 <Field
-                    label="Wallet Number" required
+                    label={t('application.fields.walletNumber')} required
                     value={payment.walletNumber}
                     onChangeText={(v) => onChange('walletNumber', v)}
-                    placeholder="+966 5X XXX XXXX"
+                    placeholder={t('application.placeholders.walletNumber')}
                     keyboardType="phone-pad"
                     icon="phone-portrait-outline"
                 />
@@ -378,12 +451,13 @@ function ImagePickerField({
     onPick: (asset: ImageAsset) => void;
     required?: boolean;
 }) {
+    const { t } = useDeliveryT();
     const [loading, setLoading] = useState(false);
 
     const pick = useCallback(async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission Required', 'Please allow access to your photo library.');
+            Alert.alert(t('application.picker.permissionRequiredTitle'), t('application.picker.permissionRequiredMessage'));
             return;
         }
         setLoading(true);
@@ -443,7 +517,7 @@ function ImagePickerField({
                             backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 6, alignItems: 'center',
                         }}>
                             <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 12, color: '#fff' }}>
-                                Tap to change
+                                {t('application.picker.changePhoto')}
                             </Text>
                         </View>
                     </>
@@ -453,10 +527,10 @@ function ImagePickerField({
                             <Ionicons name="camera-outline" size={22} color="#F55905" />
                         </View>
                         <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 13, color: '#767777' }}>
-                            Tap to upload
+                            {t('application.picker.tapToUpload')}
                         </Text>
                         <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 11, color: '#c0c0c0' }}>
-                            Max 5 MB · JPG, PNG
+                            {t('application.picker.maxSizeHint')}
                         </Text>
                     </View>
                 )}
@@ -467,11 +541,18 @@ function ImagePickerField({
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-const STEPS = ['Personal Info', 'Vehicle & Contact', 'Documents'];
+function getSteps(t: ReturnType<typeof useDeliveryT>['t']) {
+    return [
+        t('application.steps.personal'),
+        t('application.steps.vehicleContact'),
+        t('application.steps.documents'),
+    ];
+}
 
 function StepIndicator({ step, total }: { step: number; total: number }) {
+    const isRTL = useRTL();
     return (
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
+        <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 }}>
             {Array.from({ length: total }).map((_, i) => {
                 const done = i < step;
                 const active = i === step;
@@ -532,6 +613,8 @@ const EMPTY_FORM: DeliveryApplicationFormData = {
 };
 
 export default function DeliveryApplicationScreen() {
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
     const [step, setStep] = useState(0);
     const [form, setForm] = useState<DeliveryApplicationFormData>(EMPTY_FORM);
     const [showPassword, setShowPassword] = useState(false);
@@ -539,6 +622,7 @@ export default function DeliveryApplicationScreen() {
 
     const { mutateAsync: submit, isPending } = useSubmitDeliveryProfile();
     const { data: questions = [], isLoading: questionsLoading, isError: questionsError } = useGetDeliveryQuestions();
+    const steps = useMemo(() => getSteps(t), [t]);
 
     const update = useCallback(<K extends keyof DeliveryApplicationFormData>(
         key: K,
@@ -572,65 +656,65 @@ export default function DeliveryApplicationScreen() {
     const validateStep = useCallback((): boolean => {
         if (step === 0) {
             if (!form.firstName.trim() || !form.lastName.trim()) {
-                showToast('First and last name are required.', 'error'); return false;
+                showToast(t('application.validation.nameRequired'), 'error'); return false;
             }
             if (!form.dateOfBirth) {
-                showToast('Please select your date of birth.', 'error'); return false;
+                showToast(t('application.validation.dateOfBirthRequired'), 'error'); return false;
             }
             if (!form.nationalIdNumber.trim()) {
-                showToast('National ID number is required.', 'error'); return false;
+                showToast(t('application.validation.nationalIdRequired'), 'error'); return false;
             }
             if (!form.city.trim()) {
-                showToast('City is required.', 'error'); return false;
+                showToast(t('application.validation.cityRequired'), 'error'); return false;
             }
         }
         if (step === 1) {
             if (!form.vehicleType) {
-                showToast('Please select a vehicle type.', 'error'); return false;
+                showToast(t('application.validation.vehicleTypeRequired'), 'error'); return false;
             }
             if (form.vehicleType === 'car' && !form.vehicleLicenseNumber?.trim()) {
-                showToast('License number is required for car.', 'error'); return false;
+                showToast(t('application.validation.licenseRequired'), 'error'); return false;
             }
             if (!form.emergencyContactName.trim() || !form.emergencyContactPhone.trim()) {
-                showToast('Emergency contact name and phone are required.', 'error'); return false;
+                showToast(t('application.validation.emergencyRequired'), 'error'); return false;
             }
             if (!form.payment.type) {
-                showToast('Please select a payment method.', 'error'); return false;
+                showToast(t('application.validation.paymentMethodRequired'), 'error'); return false;
             }
             if (form.payment.type === 'bank_account') {
                 if (!form.payment.bankName.trim() || !form.payment.iban.trim()) {
-                    showToast('Bank name and IBAN are required.', 'error'); return false;
+                    showToast(t('application.validation.bankAndIbanRequired'), 'error'); return false;
                 }
             } else if (form.payment.type === 'wallet') {
                 if (!form.payment.walletNumber.trim()) {
-                    showToast('Wallet number is required.', 'error'); return false;
+                    showToast(t('application.validation.walletRequired'), 'error'); return false;
                 }
             }
         }
         if (step === 2) {
             if (!form.profilePicture) {
-                showToast('Please upload your profile photo.', 'error'); return false;
+                showToast(t('application.validation.profilePhotoRequired'), 'error'); return false;
             }
             if (!form.idPicture) {
-                showToast('Please upload your national ID photo.', 'error'); return false;
+                showToast(t('application.validation.nationalIdPhotoRequired'), 'error'); return false;
             }
             if (!form.password || form.password.length < 8) {
-                showToast('Password must be at least 8 characters.', 'error'); return false;
+                showToast(t('application.validation.passwordRequired'), 'error'); return false;
             }
             if (!form.termsAccepted) {
-                showToast('Please accept the terms and conditions.', 'error'); return false;
+                showToast(t('application.validation.termsRequired'), 'error'); return false;
             }
             // Guard: questions must have loaded and all 3 must be answered
             if (questionsError || questions.length === 0) {
-                showToast('Questions failed to load. Please go back and try again.', 'error'); return false;
+                showToast(t('application.validation.questionsLoadFailed'), 'error'); return false;
             }
             const hasUnanswered = answers.some((a) => !a.answer.trim());
             if (hasUnanswered) {
-                showToast('Please answer all application questions.', 'error'); return false;
+                showToast(t('application.validation.questionsRequired'), 'error'); return false;
             }
         }
         return true;
-    }, [step, form, questions, answers, questionsError, showToast]);
+    }, [step, form, questions, answers, questionsError, showToast, t]);
 
     // Single handler — no stale-closure risk
     const handleNext = useCallback(async () => {
@@ -647,10 +731,10 @@ export default function DeliveryApplicationScreen() {
         } catch (err: unknown) {
             const axiosMsg =
                 (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-            const msg = axiosMsg ?? (err instanceof Error ? err.message : 'Submission failed. Please try again.');
+            const msg = axiosMsg ?? (err instanceof Error ? err.message : t('application.submissionFailed'));
             showToast(msg, 'error');
         }
-    }, [step, validateStep, form, answers, submit, showToast]);
+    }, [step, validateStep, form, answers, submit, showToast, t]);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F7' }} edges={['top', 'bottom']}>
@@ -659,7 +743,7 @@ export default function DeliveryApplicationScreen() {
 
             {/* Top bar */}
             <View style={{
-                flexDirection: 'row', alignItems: 'center',
+                flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center',
                 paddingHorizontal: 20, paddingVertical: 14,
                 backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
             }}>
@@ -668,7 +752,7 @@ export default function DeliveryApplicationScreen() {
                         onPress={() => setStep((s) => s - 1)}
                         style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#F7F7F7', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <Ionicons name="arrow-back" size={20} color="#1E1E1E" />
+                        <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={20} color="#1E1E1E" />
                     </TouchableOpacity>
                 ) : (
                     <TouchableOpacity
@@ -678,17 +762,17 @@ export default function DeliveryApplicationScreen() {
                         <Ionicons name="close" size={20} color="#1E1E1E" />
                     </TouchableOpacity>
                 )}
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: isRTL ? 0 : 12, marginRight: isRTL ? 12 : 0 }}>
                     <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 16, color: '#1E1E1E' }}>
-                        {STEPS[step]}
+                        {steps[step]}
                     </Text>
                     <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 12, color: '#767777' }}>
-                        Step {step + 1} of {STEPS.length}
+                        {t('application.steps.stepLabel', { current: step + 1, total: steps.length })}
                     </Text>
                 </View>
             </View>
 
-            <StepIndicator step={step} total={STEPS.length} />
+            <StepIndicator step={step} total={steps.length} />
 
             <ScrollView
                 style={{ flex: 1 }}
@@ -699,23 +783,23 @@ export default function DeliveryApplicationScreen() {
                 {/* ── Step 0: Personal Info ── */}
                 {step === 0 && (
                     <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
-                        <SectionHeader icon="person-outline" title="Personal Information" subtitle="Fill in your personal details" />
+                        <SectionHeader icon="person-outline" title={t('application.sections.personalTitle')} subtitle={t('application.sections.personalSubtitle')} />
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                             <View style={{ flex: 1 }}>
                                 <Field
-                                    label="First Name" required
+                                    label={t('application.fields.firstName')} required
                                     value={form.firstName}
                                     onChangeText={(v) => update('firstName', v)}
-                                    placeholder="Ahmad"
+                                    placeholder={t('application.placeholders.firstName')}
                                     icon="person-outline"
                                 />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Field
-                                    label="Last Name" required
+                                    label={t('application.fields.lastName')} required
                                     value={form.lastName}
                                     onChangeText={(v) => update('lastName', v)}
-                                    placeholder="Al-Rashidi"
+                                    placeholder={t('application.placeholders.lastName')}
                                 />
                             </View>
                         </View>
@@ -724,18 +808,18 @@ export default function DeliveryApplicationScreen() {
                             onChange={(iso) => update('dateOfBirth', iso)}
                         />
                         <Field
-                            label="National ID Number" required
+                            label={t('application.fields.nationalIdNumber')} required
                             value={form.nationalIdNumber}
                             onChangeText={(v) => update('nationalIdNumber', v)}
-                            placeholder="1XXXXXXXXX"
+                            placeholder={t('application.placeholders.nationalIdNumber')}
                             keyboardType="numeric"
                             icon="card-outline"
                         />
                         <Field
-                            label="City" required
+                            label={t('application.fields.city')} required
                             value={form.city}
                             onChangeText={(v) => update('city', v)}
-                            placeholder="Riyadh"
+                            placeholder={t('application.placeholders.city')}
                             icon="location-outline"
                         />
                     </View>
@@ -745,17 +829,17 @@ export default function DeliveryApplicationScreen() {
                 {step === 1 && (
                     <View style={{ gap: 16 }}>
                         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
-                            <SectionHeader icon="car-outline" title="Vehicle Details" />
+                            <SectionHeader icon="car-outline" title={t('application.sections.vehicleTitle')} />
                             <VehicleSelector
                                 value={form.vehicleType}
                                 onChange={(v) => update('vehicleType', v)}
                             />
                             {form.vehicleType === 'car' && (
                                 <Field
-                                    label="Vehicle License Number" required
+                                    label={t('application.fields.vehicleLicenseNumber')} required
                                     value={form.vehicleLicenseNumber ?? ''}
                                     onChangeText={(v) => update('vehicleLicenseNumber', v)}
-                                    placeholder="ABC-1234"
+                                    placeholder={t('application.placeholders.vehicleLicenseNumber')}
                                     icon="document-text-outline"
                                 />
                             )}
@@ -764,21 +848,21 @@ export default function DeliveryApplicationScreen() {
                         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
                             <SectionHeader
                                 icon="call-outline"
-                                title="Emergency Contact"
-                                subtitle="Someone we can reach in case of emergency"
+                                title={t('application.sections.emergencyTitle')}
+                                subtitle={t('application.sections.emergencySubtitle')}
                             />
                             <Field
-                                label="Contact Name" required
+                                label={t('application.fields.contactName')} required
                                 value={form.emergencyContactName}
                                 onChangeText={(v) => update('emergencyContactName', v)}
-                                placeholder="Full name"
+                                placeholder={t('application.placeholders.contactName')}
                                 icon="person-outline"
                             />
                             <Field
-                                label="Contact Phone" required
+                                label={t('application.fields.contactPhone')} required
                                 value={form.emergencyContactPhone}
                                 onChangeText={(v) => update('emergencyContactPhone', v)}
-                                placeholder="+966 5X XXX XXXX"
+                                placeholder={t('application.placeholders.contactPhone')}
                                 keyboardType="phone-pad"
                                 icon="phone-portrait-outline"
                             />
@@ -787,8 +871,8 @@ export default function DeliveryApplicationScreen() {
                         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
                             <SectionHeader
                                 icon="wallet-outline"
-                                title="Payment Info"
-                                subtitle="How would you like to receive your earnings?"
+                                title={t('application.sections.paymentTitle')}
+                                subtitle={t('application.sections.paymentSubtitle')}
                             />
                             <PaymentSelector payment={form.payment} onChange={updatePayment} />
                         </View>
@@ -801,16 +885,16 @@ export default function DeliveryApplicationScreen() {
                         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
                             <SectionHeader
                                 icon="images-outline"
-                                title="Photos & Documents"
+                                title={t('application.sections.photosTitle')}
                                 subtitle="Upload clear photos — max 5 MB each"
                             />
                             <ImagePickerField
-                                label="Profile Photo" required
+                                label={t('application.fields.profilePhoto')} required
                                 value={form.profilePicture}
                                 onPick={(a) => update('profilePicture', a)}
                             />
                             <ImagePickerField
-                                label="National ID Photo" required
+                                label={t('application.fields.nationalIdPhoto')} required
                                 value={form.idPicture}
                                 onPick={(a) => update('idPicture', a)}
                             />
@@ -819,7 +903,7 @@ export default function DeliveryApplicationScreen() {
                         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
                             <SectionHeader
                                 icon="help-circle-outline"
-                                title="Application Questions"
+                                title={t('application.sections.questionsTitle')}
                                 subtitle="Answer honestly — these help us know you better"
                             />
                             {questionsLoading ? (
@@ -828,7 +912,7 @@ export default function DeliveryApplicationScreen() {
                                 <View style={{ alignItems: 'center', paddingVertical: 16, gap: 8 }}>
                                     <Ionicons name="alert-circle-outline" size={28} color="#b02500" />
                                     <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#b02500', textAlign: 'center' }}>
-                                        Failed to load questions. Please go back and try again.
+                                        {t('application.questionsFailed')}
                                     </Text>
                                 </View>
                             ) : (
@@ -841,14 +925,14 @@ export default function DeliveryApplicationScreen() {
                                         <TextInput
                                             value={qa.answer}
                                             onChangeText={(v) => setAnswer(qa.question, v)}
-                                            placeholder="Your answer..."
+                                            placeholder={t('application.placeholders.answer')}
                                             multiline
                                             numberOfLines={3}
                                             style={{
                                                 borderWidth: 1.5, borderColor: '#e5e5e5', borderRadius: 14,
                                                 padding: 12, fontFamily: 'Tajawal_400Regular', fontSize: 13,
                                                 color: '#1E1E1E', backgroundColor: '#fafafa',
-                                                textAlignVertical: 'top', minHeight: 80,
+                                                textAlignVertical: 'top', minHeight: 80, textAlign: isRTL ? 'right' : 'left',
                                             }}
                                         />
                                     </View>
@@ -860,14 +944,14 @@ export default function DeliveryApplicationScreen() {
                         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
                             <SectionHeader
                                 icon="lock-closed-outline"
-                                title="Set Password"
-                                subtitle="Create a password for future logins"
+                                title={t('application.sections.passwordTitle')}
+                                subtitle={t('application.sections.passwordSubtitle')}
                             />
                             <Field
-                                label="Password" required
+                                label={t('application.fields.password')} required
                                 value={form.password}
                                 onChangeText={(v) => update('password', v)}
-                                placeholder="Minimum 8 characters"
+                                placeholder={t('application.placeholders.password')}
                                 secureTextEntry={!showPassword}
                                 icon="lock-closed-outline"
                                 rightSlot={
@@ -885,7 +969,7 @@ export default function DeliveryApplicationScreen() {
                         <TouchableOpacity
                             onPress={() => update('termsAccepted', !form.termsAccepted)}
                             style={{
-                                flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+                                flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: 12,
                                 backgroundColor: '#fff', borderRadius: 16, padding: 16,
                             }}
                         >
@@ -897,12 +981,12 @@ export default function DeliveryApplicationScreen() {
                             }}>
                                 {form.termsAccepted && <Ionicons name="checkmark" size={14} color="#fff" />}
                             </View>
-                            <Text style={{ flex: 1, fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777', lineHeight: 20 }}>
-                                I agree to the{' '}
+                            <Text style={{ flex: 1, fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777', lineHeight: 20, textAlign: isRTL ? 'right' : 'left' }}>
+                                {t('application.termsPrefix')}{' '}
                                 <Text style={{ color: '#F55905', fontFamily: 'Tajawal_500Medium' }}>
-                                    Terms and Conditions
+                                    {t('application.termsLink')}
                                 </Text>
-                                {' '}and confirm all provided information is accurate.
+                                {' '}{t('application.termsSuffix')}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -918,7 +1002,7 @@ export default function DeliveryApplicationScreen() {
                 shadowOpacity: 0.06, shadowRadius: 12, elevation: 10,
             }}>
                 <AppButton
-                    label={step < 2 ? 'Continue' : 'Submit Application'}
+                    label={step < 2 ? t('application.continue') : t('application.submitApplication')}
                     onPress={handleNext}
                     loading={isPending}
                     disabled={isPending}

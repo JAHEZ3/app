@@ -1,6 +1,6 @@
 import { DeliveryAgentDTO } from '../dto/DeliveryAgent';
 import { DeliveryAgent } from '../entities/DeliveryAgent';
-import { DeliveryAgentStatus, VehicleType } from '../types';
+import { DeliveryAgentStatus, PaymentType, VehicleType } from '../types';
 
 export const toDeliveryAdapter = (dto: DeliveryAgentDTO): DeliveryAgent => ({
     id: dto.id,
@@ -16,7 +16,13 @@ export const toDeliveryAdapter = (dto: DeliveryAgentDTO): DeliveryAgent => ({
     vehicleLicenseNumber: dto.vehicleLicenseNumber,
     emergencyContactName: dto.emergencyContactName,
     emergencyContactPhone: dto.emergencyContactPhone,
-    paymentInfo: dto.paymentInfo,
+    paymentInfo: {
+        type: dto.paymentInfo.type as PaymentType,
+        bankName: dto.paymentInfo.bankName,
+        accountNumber: dto.paymentInfo.accountNumber,
+        iban: dto.paymentInfo.iban,
+        walletNumber: dto.paymentInfo.walletNumber,
+    },
     status: (dto.status as string).toUpperCase() as DeliveryAgentStatus,
     rating: dto.rating ?? 0,
     totalDeliveries: dto.totalDeliveries ?? 0,

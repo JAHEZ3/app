@@ -12,15 +12,18 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDeliveryLogout } from '../hooks/useDeliveryLogout';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
+import { useRTL } from '@/hooks/useRTL';
 import { useGetDeliveryProfile } from '../hooks/useGetDeliveryProfile';
 
 const ease = Easing.out(Easing.cubic);
 
 export default function DeliveryPendingScreen() {
-    const { mutate: logout, isPending } = useDeliveryLogout();
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
     const { data: profile, refetch, isRefetching } = useGetDeliveryProfile();
     const queryClient = useQueryClient();
+    const textAlign = isRTL ? 'right' : 'left';
 
     const iconOpacity = useSharedValue(0);
     const iconScale = useSharedValue(0.7);
@@ -80,7 +83,9 @@ export default function DeliveryPendingScreen() {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
             <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 20, }}>
+                <Ionicons name="arrow-back" size={24} color="black" />
+            </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
                 <View style={{ alignItems: 'center', justifyContent: 'center', width: 160, height: 160, marginBottom: 40 }}>
                     <Animated.View style={[ring2Style, {
@@ -103,10 +108,10 @@ export default function DeliveryPendingScreen() {
 
                 <Animated.View style={[contentStyle, { alignItems: 'center', width: '100%' }]}>
                     <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 26, color: '#1E1E1E', textAlign: 'center', marginBottom: 12 }}>
-                        Application Submitted!
+                        {t('pending.title')}
                     </Text>
                     <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 15, color: '#767777', textAlign: 'center', lineHeight: 24, marginBottom: 32 }}>
-                        Your application is currently under review. Our team will verify your information and get back to you soon.
+                        {t('pending.subtitle')}
                     </Text>
 
                     <View style={{
@@ -117,14 +122,14 @@ export default function DeliveryPendingScreen() {
                     }}>
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F55905' }} />
                         <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: '#F55905' }}>
-                            {isRefetching ? 'Checking Status...' : 'Pending Approval'}
+                            {isRefetching ? t('pending.checkingStatus') : t('pending.pendingApproval')}
                         </Text>
                     </View>
 
                     {[
-                        { icon: 'checkmark-circle-outline' as const, text: 'Documents verified successfully' },
-                        { icon: 'shield-checkmark-outline' as const, text: 'Background check in progress' },
-                        { icon: 'notifications-outline' as const, text: 'You will be notified when approved' },
+                        { icon: 'checkmark-circle-outline' as const, text: t('pending.items.documentsVerified') },
+                        { icon: 'shield-checkmark-outline' as const, text: t('pending.items.backgroundCheck') },
+                        { icon: 'notifications-outline' as const, text: t('pending.items.notifyApproved') },
                     ].map((item, i) => (
                         <View key={i} style={{
                             flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -132,7 +137,7 @@ export default function DeliveryPendingScreen() {
                             padding: 14, marginBottom: 10,
                         }}>
                             <Ionicons name={item.icon} size={20} color="#F55905" />
-                            <Text style={{ flex: 1, fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777' }}>
+                            <Text style={{ flex: 1, fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', textAlign }}>
                                 {item.text}
                             </Text>
                         </View>
@@ -148,13 +153,7 @@ export default function DeliveryPendingScreen() {
                     >
                         <Ionicons name="refresh-outline" size={16} color="#767777" />
                         <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: '#767777' }}>
-                            Refresh Status
-                        </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={() => logout()} disabled={isPending} style={{ marginTop: 16 }}>
-                        <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#c0c0c0', textDecorationLine: 'underline' }}>
-                            {isPending ? 'Logging out...' : 'Logout'}
+                            {t('pending.refreshStatus')}
                         </Text>
                     </TouchableOpacity>
                 </Animated.View>

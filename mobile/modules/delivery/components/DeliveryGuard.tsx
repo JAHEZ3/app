@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
 import { useDeliveryStore } from '@/store/useDeliveryStore';
 import { useDeliveryProfile } from '../hooks/useDeliveryProfile';
 import { DeliveryAgentStatus } from '../types';
@@ -24,6 +25,7 @@ function resolveRoute(status: string | null | undefined): string | null {
 }
 
 export function DeliveryGuard() {
+    const { t } = useDeliveryT();
     const { accessToken, authStatus, lastKnownStatus, clearTokens } = useDeliveryStore();
 
     // isLoading = isPending && isFetching — false when query is disabled (no token)
@@ -147,10 +149,10 @@ export function DeliveryGuard() {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 32 }}>
                 <Text style={{ fontSize: 16, color: '#1E1E1E', textAlign: 'center', marginBottom: 8, fontFamily: 'Cairo_700Bold' }}>
-                    Connection Problem
+                    {t('guard.connectionProblemTitle')}
                 </Text>
                 <Text style={{ fontSize: 14, color: '#767777', textAlign: 'center', lineHeight: 22, marginBottom: 28, fontFamily: 'Tajawal_400Regular' }}>
-                    Unable to load your account data. Please check your connection and try again.
+                    {t('guard.connectionProblemSubtitle')}
                 </Text>
                 <TouchableOpacity
                     onPress={() => {
@@ -161,7 +163,7 @@ export function DeliveryGuard() {
                     style={{ backgroundColor: '#F55905', paddingHorizontal: 32, paddingVertical: 13, borderRadius: 24, marginBottom: 12 }}
                 >
                     <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Cairo_600SemiBold' }}>
-                        Try Again
+                        {t('guard.tryAgain')}
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -169,7 +171,7 @@ export function DeliveryGuard() {
                     style={{ padding: 8 }}
                 >
                     <Text style={{ color: '#767777', fontSize: 13, fontFamily: 'Tajawal_400Regular', textDecorationLine: 'underline' }}>
-                        Go to Login
+                        {t('guard.goToLogin')}
                     </Text>
                 </TouchableOpacity>
             </View>

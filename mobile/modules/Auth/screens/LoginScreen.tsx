@@ -358,7 +358,7 @@ export default function LoginScreen() {
                 >
                   <Ionicons name="bicycle" size={20} color="#F55905" />
                   <Text style={{ fontFamily: "Tajawal_500Medium", fontSize: 15, color: "#F55905" }}>
-                    Become a Delivery Agent
+                    {t("phone.becomeDeliveryAgent")}
                   </Text>
                 </TouchableOpacity>
               </View>

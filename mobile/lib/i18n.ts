@@ -30,6 +30,7 @@ const localeMap: Record<string, Record<string, () => Promise<unknown>>> = {
     home: () => import('../locales/en/home.json'),
     profile: () => import('../locales/en/profile.json'),
     orders: () => import('../locales/en/orders.json'),
+    delivery: () => import('../locales/en/delivery.json'),
   },
   ar: {
     common: () => import('../locales/ar/common.json'),
@@ -37,6 +38,7 @@ const localeMap: Record<string, Record<string, () => Promise<unknown>>> = {
     home: () => import('../locales/ar/home.json'),
     profile: () => import('../locales/ar/profile.json'),
     orders: () => import('../locales/ar/orders.json'),
+    delivery: () => import('../locales/ar/delivery.json'),
   },
 };
 
@@ -53,7 +55,7 @@ i18n
     fallbackLng: 'en',
     supportedLngs: SUPPORTED_LANGUAGES,
     defaultNS: 'common',
-    ns: ['common', 'auth', 'home', 'profile', 'orders'],
+    ns: ['common', 'auth', 'home', 'profile', 'orders', 'delivery'],
     interpolation: {
       escapeValue: false,
     },

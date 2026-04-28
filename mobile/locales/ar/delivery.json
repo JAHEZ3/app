@@ -1,0 +1,201 @@
+{
+  "guard": {
+    "connectionProblemTitle": "مشكلة في الاتصال",
+    "connectionProblemSubtitle": "تعذر تحميل بيانات حسابك. يرجى التحقق من الاتصال والمحاولة مرة أخرى.",
+    "tryAgain": "حاول مرة أخرى",
+    "goToLogin": "الذهاب لتسجيل الدخول"
+  },
+  "register": {
+    "heroTitle": "مندوب توصيل",
+    "heroSubtitle": "انضم إلى الفريق",
+    "tabs": {
+      "register": "مندوب جديد",
+      "login": "تسجيل الدخول"
+    },
+    "title": {
+      "register": "مندوب توصيل جديد",
+      "login": "مرحبًا بعودتك"
+    },
+    "subtitle": {
+      "register": "أول مرة هنا؟ أدخل رقم هاتفك لاستلام رمز التحقق وإنشاء حسابك.",
+      "login": "سجل الدخول باستخدام رقم الهاتف وكلمة المرور."
+    },
+    "phoneLabel": "رقم الهاتف",
+    "phonePlaceholder": "+966 5X XXX XXXX",
+    "passwordLabel": "كلمة المرور",
+    "passwordPlaceholder": "أدخل كلمة المرور",
+    "sendOtp": "إرسال الرمز",
+    "signIn": "تسجيل الدخول",
+    "backToHome": "العودة للرئيسية",
+    "errors": {
+      "generic": "حدث خطأ ما",
+      "incorrectCredentials": "رقم الهاتف أو كلمة المرور غير صحيحة.",
+      "noAccount": "لا يوجد حساب لهذا الرقم. يرجى إنشاء حساب جديد.",
+      "accountExists": "الحساب موجود بالفعل. يرجى تسجيل الدخول."
+    }
+  },
+  "otp": {
+    "title": "تأكيد الرمز",
+    "heading": "أدخل رمز التحقق",
+    "subtitle": "أرسلنا رمزًا مكونًا من 6 أرقام إلى",
+    "resendIn": "إعادة الإرسال خلال",
+    "resendOtp": "إعادة إرسال الرمز",
+    "verifyContinue": "تأكيد والمتابعة",
+    "newOtpSent": "تم إرسال رمز جديد إلى {{phone}}",
+    "invalidOtp": "رمز التحقق غير صحيح. حاول مرة أخرى."
+  },
+  "application": {
+    "steps": {
+      "personal": "المعلومات الشخصية",
+      "vehicleContact": "المركبة والتواصل",
+      "documents": "المستندات",
+      "stepLabel": "الخطوة {{current}} من {{total}}"
+    },
+    "dateOfBirth": "تاريخ الميلاد",
+    "selectDateOfBirth": "اختر تاريخ الميلاد",
+    "cancel": "إلغاء",
+    "done": "تم",
+    "sections": {
+      "personalTitle": "المعلومات الشخصية",
+      "personalSubtitle": "أدخل بياناتك الشخصية",
+      "vehicleTitle": "تفاصيل المركبة",
+      "emergencyTitle": "جهة اتصال للطوارئ",
+      "emergencySubtitle": "شخص يمكننا التواصل معه في حالات الطوارئ",
+      "paymentTitle": "معلومات الدفع",
+      "paymentSubtitle": "كيف تفضل استلام أرباحك؟",
+      "photosTitle": "الصور والمستندات",
+      "photosSubtitle": "ارفع صورًا واضحة - بحد أقصى 5 ميجابايت لكل صورة",
+      "questionsTitle": "أسئلة الطلب",
+      "questionsSubtitle": "أجب بصراحة - هذه الأسئلة تساعدنا على التعرف عليك أكثر",
+      "passwordTitle": "تعيين كلمة المرور",
+      "passwordSubtitle": "أنشئ كلمة مرور لعمليات تسجيل الدخول القادمة"
+    },
+    "fields": {
+      "firstName": "الاسم الأول",
+      "lastName": "اسم العائلة",
+      "nationalIdNumber": "رقم الهوية الوطنية",
+      "city": "المدينة",
+      "vehicleType": "نوع المركبة",
+      "vehicleLicenseNumber": "رقم رخصة المركبة",
+      "contactName": "اسم جهة الاتصال",
+      "contactPhone": "رقم جهة الاتصال",
+      "paymentMethod": "طريقة الدفع",
+      "bankName": "اسم البنك",
+      "iban": "الآيبان",
+      "accountNumber": "رقم الحساب",
+      "walletNumber": "رقم المحفظة",
+      "profilePhoto": "الصورة الشخصية",
+      "nationalIdPhoto": "صورة الهوية الوطنية",
+      "password": "كلمة المرور"
+    },
+    "placeholders": {
+      "firstName": "أحمد",
+      "lastName": "الراشدي",
+      "nationalIdNumber": "1XXXXXXXXX",
+      "city": "الرياض",
+      "vehicleLicenseNumber": "ABC-1234",
+      "contactName": "الاسم الكامل",
+      "contactPhone": "+966 5X XXX XXXX",
+      "bankName": "مثال: مصرف الراجحي",
+      "iban": "SA00 0000 0000 0000 0000 0000",
+      "accountNumber": "اختياري",
+      "walletNumber": "مثال: 05XXXXXXXX",
+      "answer": "اكتب إجابتك...",
+      "password": "8 أحرف على الأقل"
+    },
+    "vehicles": {
+      "motorcycle": "دراجة نارية",
+      "bicycle": "دراجة هوائية",
+      "car": "سيارة",
+      "onFoot": "سيرًا على الأقدام"
+    },
+    "paymentOptions": {
+      "bankAccount": "حساب بنكي",
+      "wallet": "محفظة"
+    },
+    "picker": {
+      "permissionRequiredTitle": "الإذن مطلوب",
+      "permissionRequiredMessage": "يرجى السماح بالوصول إلى معرض الصور.",
+      "tapToUpload": "اضغط للرفع",
+      "changePhoto": "تغيير الصورة",
+      "maxSizeHint": "JPG أو PNG حتى 5 ميجابايت"
+    },
+    "questionsFailed": "فشل تحميل الأسئلة. يرجى الرجوع والمحاولة مرة أخرى.",
+    "termsPrefix": "أوافق على",
+    "termsLink": "الشروط والأحكام",
+    "termsSuffix": "وأؤكد أن جميع المعلومات المقدمة صحيحة.",
+    "continue": "متابعة",
+    "submitApplication": "إرسال الطلب",
+    "submissionFailed": "فشل إرسال الطلب. يرجى المحاولة مرة أخرى.",
+    "validation": {
+      "nameRequired": "الاسم الأول واسم العائلة مطلوبان.",
+      "dateOfBirthRequired": "يرجى اختيار تاريخ الميلاد.",
+      "nationalIdRequired": "رقم الهوية الوطنية مطلوب.",
+      "cityRequired": "المدينة مطلوبة.",
+      "vehicleTypeRequired": "يرجى اختيار نوع المركبة.",
+      "licenseRequired": "رقم الرخصة مطلوب للسيارة.",
+      "emergencyRequired": "اسم ورقم جهة اتصال الطوارئ مطلوبان.",
+      "paymentMethodRequired": "يرجى اختيار طريقة الدفع.",
+      "bankAndIbanRequired": "اسم البنك والآيبان مطلوبان.",
+      "walletRequired": "رقم المحفظة مطلوب.",
+      "profilePhotoRequired": "يرجى رفع الصورة الشخصية.",
+      "nationalIdPhotoRequired": "يرجى رفع صورة الهوية الوطنية.",
+      "passwordRequired": "يجب أن تكون كلمة المرور 8 أحرف على الأقل.",
+      "termsRequired": "يرجى الموافقة على الشروط والأحكام.",
+      "questionsLoadFailed": "فشل تحميل الأسئلة. يرجى الرجوع والمحاولة مرة أخرى.",
+      "questionsRequired": "يرجى الإجابة عن جميع أسئلة الطلب."
+    }
+  },
+  "pending": {
+    "title": "تم إرسال الطلب!",
+    "subtitle": "طلبك قيد المراجعة حاليًا. سيتحقق فريقنا من معلوماتك وسيتواصل معك قريبًا.",
+    "checkingStatus": "جارٍ التحقق من الحالة...",
+    "pendingApproval": "بانتظار الموافقة",
+    "items": {
+      "documentsVerified": "تم التحقق من المستندات بنجاح",
+      "backgroundCheck": "فحص الخلفية قيد التنفيذ",
+      "notifyApproved": "سيصلك إشعار عند الموافقة"
+    },
+    "refreshStatus": "تحديث الحالة"
+  },
+  "rejected": {
+    "title": "تم رفض الطلب",
+    "subtitle": "للأسف، لم يستوف طلبك متطلباتنا الحالية. يمكنك إعادة التقديم بعد مراجعة السبب أدناه.",
+    "reasonTitle": "سبب الرفض",
+    "nextTitle": "ما الذي يمكنك فعله الآن:",
+    "tips": {
+      "reviewReason": "راجع سبب الرفض بعناية",
+      "documents": "تأكد من أن جميع المستندات صالحة وواضحة",
+      "support": "تواصل مع الدعم إذا كانت لديك أسئلة"
+    },
+    "reapply": "إعادة التقديم الآن",
+    "loggingOut": "جارٍ تسجيل الخروج...",
+    "logout": "تسجيل الخروج"
+  },
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "loggingOut": "جارٍ تسجيل الخروج...",
+    "logout": "تسجيل الخروج",
+    "activeAgent": "مندوب نشط",
+    "stats": {
+      "deliveries": "عمليات التوصيل",
+      "balance": "الرصيد",
+      "rating": "التقييم"
+    },
+    "profileDetails": "تفاصيل الملف الشخصي",
+    "fields": {
+      "phone": "الهاتف",
+      "city": "المدينة",
+      "vehicle": "المركبة",
+      "nationalId": "الهوية الوطنية",
+      "emergencyContact": "جهة اتصال الطوارئ",
+      "empty": "-"
+    },
+    "quickActions": "إجراءات سريعة",
+    "actions": {
+      "viewDeliveries": "عرض الطلبات",
+      "walletPayouts": "المحفظة والمدفوعات",
+      "contactSupport": "التواصل مع الدعم"
+    }
+  }
+}

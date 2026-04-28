@@ -21,6 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import AppButton from '@/components/ui/AppButton';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
+import { useRTL } from '@/hooks/useRTL';
 import { useDeliveryRegister } from '../hooks/useDeliveryRegister';
 import { useDeliveryLogin } from '../hooks/useDeliveryLogin';
 import { Toast, useToast } from '../components/Toast';
@@ -30,40 +32,30 @@ const ease = Easing.out(Easing.cubic);
 type Tab = 'register' | 'login';
 
 // Normalise an API error into a readable message string.
-function extractMessage(err: unknown): string {
+function extractMessage(err: unknown, fallback: string): string {
     const axErr = err as any;
     return (
         axErr?.response?.data?.message ??
         axErr?.response?.data?.error ??
         (err instanceof Error ? err.message : null) ??
-        'Something went wrong'
+        fallback
     );
 }
 
-// Check whether an error indicates the phone is unknown to the delivery system.
+function httpStatus(err: unknown): number {
+    return (err as any)?.response?.status ?? 0;
+}
+
+// Phone truly doesn't exist in the delivery system → guide user to register.
+// Restricted to HTTP 404 only. Message-string matching was too broad and
+// falsely triggered on "Invalid credentials" responses from the login endpoint.
 function isNotFoundError(err: unknown): boolean {
-    const axErr = err as any;
-    const status: number = axErr?.response?.status ?? 0;
-    const msg: string = extractMessage(err).toLowerCase();
-    return (
-        status === 404 ||
-        msg.includes('not found') ||
-        msg.includes('no user') ||
-        msg.includes('does not exist')
-    );
+    return httpStatus(err) === 404;
 }
 
-// Check whether an error indicates the phone is already registered.
+// Phone is already registered → guide user to sign in.
 function isAlreadyExistsError(err: unknown): boolean {
-    const axErr = err as any;
-    const status: number = axErr?.response?.status ?? 0;
-    const msg: string = extractMessage(err).toLowerCase();
-    return (
-        status === 409 ||
-        msg.includes('already') ||
-        msg.includes('exists') ||
-        msg.includes('registered')
-    );
+    return httpStatus(err) === 409;
 }
 
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
@@ -81,6 +73,8 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 }
 
 export default function DeliveryRegisterScreen() {
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
     // Always start on the login tab — returning users are the common case.
     // First-time users land here too; if login says "not found" we switch them
     // to the register tab automatically (see handleSubmit below).
@@ -88,6 +82,10 @@ export default function DeliveryRegisterScreen() {
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    // Set to true when the register endpoint returns 409 (account already exists).
+    // Used to break the register-409 ↔ login-404 loop: if we know the account
+    // exists we must NOT switch back to register on a 404 login failure.
+    const [accountExists, setAccountExists] = useState(false);
     const { toast, show: showToast, hide: hideToast } = useToast();
 
     const { mutateAsync: register, isPending: isRegistering } = useDeliveryRegister();
@@ -96,6 +94,14 @@ export default function DeliveryRegisterScreen() {
     const isPending = tab === 'register' ? isRegistering : isLoggingIn;
     const isPhoneValid = phone.length >= 9;
     const canSubmit = isPhoneValid && (tab === 'register' || password.length >= 6);
+    const textAlign = isRTL ? 'right' : 'left';
+
+    // If the user types a new phone number, evidence from a previous API round-trip
+    // no longer applies — reset the conflict flag so routing logic is fresh.
+    const handlePhoneChange = useCallback((value: string) => {
+        setPhone(value);
+        if (accountExists) setAccountExists(false);
+    }, [accountExists]);
 
     const heroOpacity = useSharedValue(0);
     const cardY = useSharedValue(30);
@@ -121,24 +127,44 @@ export default function DeliveryRegisterScreen() {
                 await login({ phone, password });
             }
         } catch (err: unknown) {
-            if (tab === 'login' && isNotFoundError(err)) {
-                // Phone has no delivery-agent account yet → guide user to register.
-                setTab('register');
-                setPassword('');
-                showToast('No account found. Please create a new one.', 'info');
-                return;
+            if (tab === 'login') {
+                const code = httpStatus(err);
+
+                if (isNotFoundError(err)) {
+                    if (accountExists) {
+                        // register returned 409 earlier → account IS in the system.
+                        // A 404 from login here means wrong credentials, not a
+                        // missing account. Never switch back to register in this state
+                        // or we create an infinite register-404 ↔ login-409 loop.
+                        showToast(t('register.errors.incorrectCredentials'), 'error');
+                    } else {
+                        // Genuinely new user — no prior 409 seen.
+                        setTab('register');
+                        setPassword('');
+                        showToast(t('register.errors.noAccount'), 'info');
+                    }
+                    return;
+                }
+
+                if (code === 401 || code === 403) {
+                    showToast(t('register.errors.incorrectCredentials'), 'error');
+                    return;
+                }
             }
 
             if (tab === 'register' && isAlreadyExistsError(err)) {
-                // Phone is already registered → guide user to sign in.
+                // HTTP 409 — phone is already registered.
+                // Remember this so a subsequent login-404 is treated as wrong
+                // credentials, not a missing account.
+                setAccountExists(true);
                 setTab('login');
-                showToast('Account already exists. Please sign in.', 'info');
+                showToast(t('register.errors.accountExists'), 'info');
                 return;
             }
 
-            showToast(extractMessage(err), 'error');
+            showToast(extractMessage(err, t('register.errors.generic')), 'error');
         }
-    }, [tab, phone, password, register, login, showToast]);
+    }, [tab, phone, password, register, login, showToast, accountExists, t]);
 
     return (
         <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
@@ -161,10 +187,10 @@ export default function DeliveryRegisterScreen() {
                         <Ionicons name="bicycle" size={36} color="#fff" />
                     </View>
                     <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 26, color: '#fff', marginBottom: 4 }}>
-                        Delivery Agent
+                        {t('register.heroTitle')}
                     </Text>
                     <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.65)', letterSpacing: 3, textTransform: 'uppercase' }}>
-                        JOIN THE TEAM
+                        {t('register.heroSubtitle')}
                     </Text>
                 </LinearGradient>
             </Animated.View>
@@ -192,12 +218,12 @@ export default function DeliveryRegisterScreen() {
                                 flexDirection: 'row', backgroundColor: '#F5F5F5',
                                 borderRadius: 16, padding: 4, marginTop: 14, marginBottom: 22,
                             }}>
-                                {(['register', 'login'] as Tab[]).map((t) => {
-                                    const active = tab === t;
+                                {(['register', 'login'] as Tab[]).map((tabOption) => {
+                                    const active = tab === tabOption;
                                     return (
                                         <TouchableOpacity
-                                            key={t}
-                                            onPress={() => setTab(t)}
+                                            key={tabOption}
+                                            onPress={() => setTab(tabOption)}
                                             style={{
                                                 flex: 1, paddingVertical: 10, borderRadius: 13,
                                                 alignItems: 'center',
@@ -214,7 +240,7 @@ export default function DeliveryRegisterScreen() {
                                                 fontSize: 14,
                                                 color: active ? '#F55905' : '#767777',
                                             }}>
-                                                {t === 'register' ? 'New Agent' : 'Sign In'}
+                                                {tabOption === 'register' ? t('register.tabs.register') : t('register.tabs.login')}
                                             </Text>
                                         </TouchableOpacity>
                                     );
@@ -223,20 +249,20 @@ export default function DeliveryRegisterScreen() {
                         </Row>
 
                         <Row delay={200}>
-                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 22, color: '#1E1E1E', marginBottom: 4 }}>
-                                {tab === 'register' ? 'New Delivery Agent' : 'Welcome Back'}
+                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 22, color: '#1E1E1E', marginBottom: 4, textAlign }}>
+                                {tab === 'register' ? t('register.title.register') : t('register.title.login')}
                             </Text>
-                            <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', lineHeight: 22, marginBottom: 24 }}>
+                            <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', lineHeight: 22, marginBottom: 24, textAlign }}>
                                 {tab === 'register'
-                                    ? 'First time here? Enter your phone to receive an OTP and create your account.'
-                                    : 'Sign in with your phone number and password.'}
+                                    ? t('register.subtitle.register')
+                                    : t('register.subtitle.login')}
                             </Text>
                         </Row>
 
                         {/* Phone */}
                         <Row delay={260}>
                             <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8 }}>
-                                Phone Number
+                                {t('register.phoneLabel')}
                             </Text>
                             <View style={{
                                 flexDirection: 'row', alignItems: 'center',
@@ -246,13 +272,13 @@ export default function DeliveryRegisterScreen() {
                                 <Ionicons name="phone-portrait-outline" size={18} color="#F55905" />
                                 <TextInput
                                     value={phone}
-                                    onChangeText={setPhone}
-                                    placeholder="+966 5X XXX XXXX"
+                                    onChangeText={handlePhoneChange}
+                                    placeholder={t('register.phonePlaceholder')}
                                     keyboardType="phone-pad"
                                     style={{
                                         flex: 1, marginLeft: 10,
                                         fontFamily: 'Tajawal_400Regular',
-                                        fontSize: 15, color: '#1E1E1E',
+                                        fontSize: 15, color: '#1E1E1E', textAlign,
                                     }}
                                     placeholderTextColor="#c0c0c0"
                                 />
@@ -263,7 +289,7 @@ export default function DeliveryRegisterScreen() {
                         {tab === 'login' && (
                             <Row delay={300}>
                                 <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8, marginTop: 16 }}>
-                                    Password
+                                    {t('register.passwordLabel')}
                                 </Text>
                                 <View style={{
                                     flexDirection: 'row', alignItems: 'center',
@@ -274,12 +300,12 @@ export default function DeliveryRegisterScreen() {
                                     <TextInput
                                         value={password}
                                         onChangeText={setPassword}
-                                        placeholder="Enter your password"
+                                        placeholder={t('register.passwordPlaceholder')}
                                         secureTextEntry={!showPassword}
                                         style={{
                                             flex: 1, marginLeft: 10,
                                             fontFamily: 'Tajawal_400Regular',
-                                            fontSize: 15, color: '#1E1E1E',
+                                            fontSize: 15, color: '#1E1E1E', textAlign,
                                         }}
                                         placeholderTextColor="#c0c0c0"
                                     />
@@ -294,7 +320,7 @@ export default function DeliveryRegisterScreen() {
                         <Row delay={360}>
                             <View style={{ marginTop: 28 }}>
                                 <AppButton
-                                    label={tab === 'register' ? 'Send OTP' : 'Sign In'}
+                                    label={tab === 'register' ? t('register.sendOtp') : t('register.signIn')}
                                     onPress={handleSubmit}
                                     disabled={!canSubmit || isPending}
                                     loading={isPending}
@@ -310,9 +336,9 @@ export default function DeliveryRegisterScreen() {
                                 onPress={() => router.back()}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20 }}
                             >
-                                <Ionicons name="arrow-back-outline" size={16} color="#767777" />
+                                <Ionicons name={isRTL ? 'arrow-forward-outline' : 'arrow-back-outline'} size={16} color="#767777" />
                                 <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777' }}>
-                                    Back to Home
+                                    {t('register.backToHome')}
                                 </Text>
                             </TouchableOpacity>
                         </Row>

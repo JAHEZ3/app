@@ -20,6 +20,8 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import AppButton from '@/components/ui/AppButton';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
+import { useRTL } from '@/hooks/useRTL';
 import { useDeliveryVerifyOtp } from '../hooks/useDeliveryVerifyOtp';
 import { useDeliveryPhoneStore } from '@/store/useDeliveryPhoneStore';
 import { Toast, useToast } from '../components/Toast';
@@ -86,6 +88,7 @@ function OTPBoxes({
 }
 
 function Countdown({ seconds, onExpire }: { seconds: number; onExpire: () => void }) {
+    const { t } = useDeliveryT();
     const [left, setLeft] = useState(seconds);
     useEffect(() => {
         if (left <= 0) { onExpire(); return; }
@@ -101,7 +104,7 @@ function Countdown({ seconds, onExpire }: { seconds: number; onExpire: () => voi
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <Ionicons name="time-outline" size={14} color="#767777" />
             <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777' }}>
-                Resend in{' '}
+                {t('otp.resendIn')}{' '}
                 <Text style={{ fontFamily: 'Cairo_700Bold', color: '#F55905' }}>
                     {m}:{String(s).padStart(2, '0')}
                 </Text>
@@ -111,6 +114,8 @@ function Countdown({ seconds, onExpire }: { seconds: number; onExpire: () => voi
 }
 
 export default function DeliveryOTPScreen() {
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
     const [otp, setOtp] = useState('');
     const [canResend, setCanResend] = useState(false);
     const [resendKey, setResendKey] = useState(0);
@@ -123,17 +128,17 @@ export default function DeliveryOTPScreen() {
         try {
             await verifyOtp({ phone: phoneNumber, otp: code ?? otp });
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Invalid OTP. Please try again.';
+            const msg = err instanceof Error ? err.message : t('otp.invalidOtp');
             showToast(msg, 'error');
         }
-    }, [otp, phoneNumber, verifyOtp, showToast]);
+    }, [otp, phoneNumber, verifyOtp, showToast, t]);
 
     const handleResend = useCallback(() => {
         setOtp('');
         setCanResend(false);
         setResendKey((k) => k + 1);
-        showToast('New OTP sent to ' + phoneNumber, 'success');
-    }, [phoneNumber, showToast]);
+        showToast(t('otp.newOtpSent', { phone: phoneNumber }), 'success');
+    }, [phoneNumber, showToast, t]);
 
     useEffect(() => {
         if (otp.length === 6) handleVerify(otp);
@@ -163,10 +168,10 @@ export default function DeliveryOTPScreen() {
                         onPress={() => router.back()}
                         style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F7F7F7', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <Ionicons name="arrow-back" size={20} color="#1E1E1E" />
+                        <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={20} color="#1E1E1E" />
                     </TouchableOpacity>
                     <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 17, color: '#1E1E1E', marginLeft: 12 }}>
-                        Verify OTP
+                        {t('otp.title')}
                     </Text>
                 </View>
 
@@ -194,14 +199,14 @@ export default function DeliveryOTPScreen() {
 
                     <Row delay={150}>
                         <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 22, color: '#1E1E1E', textAlign: 'center', marginBottom: 6 }}>
-                            Enter Verification Code
+                            {t('otp.heading')}
                         </Text>
                     </Row>
 
                     <Row delay={210}>
                         <View style={{ alignItems: 'center', marginBottom: 32 }}>
                             <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', textAlign: 'center', lineHeight: 22 }}>
-                                We sent a 6-digit code to
+                                {t('otp.subtitle')}
                             </Text>
                             <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 15, color: '#1E1E1E', marginTop: 2 }}>
                                 {phoneNumber}
@@ -227,7 +232,7 @@ export default function DeliveryOTPScreen() {
                                 >
                                     <Ionicons name="refresh" size={14} color="#F55905" />
                                     <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: '#F55905' }}>
-                                        Resend OTP
+                                        {t('otp.resendOtp')}
                                     </Text>
                                 </TouchableOpacity>
                             ) : (
@@ -239,7 +244,7 @@ export default function DeliveryOTPScreen() {
                     <Row delay={420}>
                         <View style={{ marginTop: 28 }}>
                             <AppButton
-                                label="Verify & Continue"
+                                label={t('otp.verifyContinue')}
                                 onPress={() => handleVerify()}
                                 disabled={otp.length < 6 || isPending}
                                 loading={isPending}
