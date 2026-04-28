@@ -211,6 +211,9 @@ export const menuApi = {
   deleteMenu: (menuId: string) =>
     restaurantInstance.delete(`/api/restaurant/menus/${menuId}`),
 
+  reorderMenus: (orderedIds: string[]) =>
+    restaurantInstance.patch(`/api/restaurant/menus/reorder`, { orderedIds }),
+
   // Sections (list/create are menu-scoped; update/delete are flat)
   listSections: (menuId: string) =>
     restaurantInstance.get(`/api/restaurant/menus/${menuId}/sections`),
@@ -220,6 +223,11 @@ export const menuApi = {
     restaurantInstance.patch(`/api/restaurant/sections/${sectionId}`, data),
   deleteSection: (sectionId: string) =>
     restaurantInstance.delete(`/api/restaurant/sections/${sectionId}`),
+  reorderSections: (menuId: string, orderedIds: string[]) =>
+    restaurantInstance.patch(
+      `/api/restaurant/menus/${menuId}/sections/reorder`,
+      { orderedIds },
+    ),
 };
 
 export const mealsApi = {
@@ -236,6 +244,11 @@ export const mealsApi = {
     restaurantInstance.patch(
       `/api/restaurant/meals/${mealId}/toggle-availability`,
     ),
+  reorder: (sectionId: string, orderedIds: string[]) =>
+    restaurantInstance.patch(
+      `/api/restaurant/sections/${sectionId}/meals/reorder`,
+      { orderedIds },
+    ),
 };
 
 export const optionGroupsApi = {
@@ -250,6 +263,26 @@ export const optionGroupsApi = {
     restaurantInstance.patch(`/api/restaurant/option-groups/${groupId}`, data),
   delete: (groupId: string) =>
     restaurantInstance.delete(`/api/restaurant/option-groups/${groupId}`),
+};
+
+// ── AI — Smart Menu Import ───────────────────────────────────────────────────
+export const aiMenuImportApi = {
+  /** Multipart, field name `image`. Returns { data: MenuExtraction }. */
+  analyze: (image: File) => {
+    const fd = new FormData();
+    fd.append("image", image);
+    return restaurantInstance.post(
+      "/api/restaurant/ai/menu-import/analyze",
+      fd,
+    );
+  },
+  /** Persists the (optionally edited) extraction. */
+  apply: (data: {
+    targetMenuId?: string;
+    menuName?: string;
+    extraction: unknown;
+  }) =>
+    restaurantInstance.post("/api/restaurant/ai/menu-import/apply", data),
 };
 
 export const optionsApi = {

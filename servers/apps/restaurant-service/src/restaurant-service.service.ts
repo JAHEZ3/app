@@ -504,6 +504,16 @@ export class RestaurantServiceService {
     return { data: restaurants, message: "تم استرجاع المطاعم." };
   }
 
+  async getPublicRestaurantByName(name: string) {
+    const restaurant = await this.restaurantRepo
+      .createQueryBuilder("r")
+      .where("r.status = :status", { status: RestaurantStatus.ACTIVE })
+      .andWhere("LOWER(r.name) = LOWER(:name)", { name: name.trim() })
+      .getOne();
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+    return this.getPublicRestaurantWithMenu(restaurant.id);
+  }
+
   async getPublicRestaurantWithMenu(restaurantId: string) {
     const restaurant = await this.restaurantRepo.findOne({
       where: { id: restaurantId, status: RestaurantStatus.ACTIVE },
