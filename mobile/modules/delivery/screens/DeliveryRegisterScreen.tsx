@@ -1,0 +1,350 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StatusBar,
+    TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withTiming,
+    withDelay,
+    Easing,
+} from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import AppButton from '@/components/ui/AppButton';
+import { useDeliveryT } from '@/hooks/useAppTranslation';
+import { useRTL } from '@/hooks/useRTL';
+import { useDeliveryRegister } from '../hooks/useDeliveryRegister';
+import { useDeliveryLogin } from '../hooks/useDeliveryLogin';
+import { Toast, useToast } from '../components/Toast';
+
+const ease = Easing.out(Easing.cubic);
+
+type Tab = 'register' | 'login';
+
+// Normalise an API error into a readable message string.
+function extractMessage(err: unknown, fallback: string): string {
+    const axErr = err as any;
+    return (
+        axErr?.response?.data?.message ??
+        axErr?.response?.data?.error ??
+        (err instanceof Error ? err.message : null) ??
+        fallback
+    );
+}
+
+function httpStatus(err: unknown): number {
+    return (err as any)?.response?.status ?? 0;
+}
+
+// Phone truly doesn't exist in the delivery system → guide user to register.
+// Restricted to HTTP 404 only. Message-string matching was too broad and
+// falsely triggered on "Invalid credentials" responses from the login endpoint.
+function isNotFoundError(err: unknown): boolean {
+    return httpStatus(err) === 404;
+}
+
+// Phone is already registered → guide user to sign in.
+function isAlreadyExistsError(err: unknown): boolean {
+    return httpStatus(err) === 409;
+}
+
+function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
+    const opacity = useSharedValue(0);
+    const y = useSharedValue(12);
+    useEffect(() => {
+        opacity.value = withDelay(delay, withTiming(1, { duration: 360, easing: ease }));
+        y.value = withDelay(delay, withTiming(0, { duration: 360, easing: ease }));
+    }, [opacity, y, delay]);
+    const style = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+        transform: [{ translateY: y.value }],
+    }));
+    return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+export default function DeliveryRegisterScreen() {
+    const { t } = useDeliveryT();
+    const isRTL = useRTL();
+    // Always start on the login tab — returning users are the common case.
+    // First-time users land here too; if login says "not found" we switch them
+    // to the register tab automatically (see handleSubmit below).
+    const [tab, setTab] = useState<Tab>('login');
+    const [phone, setPhone] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    // Set to true when the register endpoint returns 409 (account already exists).
+    // Used to break the register-409 ↔ login-404 loop: if we know the account
+    // exists we must NOT switch back to register on a 404 login failure.
+    const [accountExists, setAccountExists] = useState(false);
+    const { toast, show: showToast, hide: hideToast } = useToast();
+
+    const { mutateAsync: register, isPending: isRegistering } = useDeliveryRegister();
+    const { mutateAsync: login, isPending: isLoggingIn } = useDeliveryLogin();
+
+    const isPending = tab === 'register' ? isRegistering : isLoggingIn;
+    const isPhoneValid = phone.length >= 9;
+    const canSubmit = isPhoneValid && (tab === 'register' || password.length >= 6);
+    const textAlign = isRTL ? 'right' : 'left';
+
+    // If the user types a new phone number, evidence from a previous API round-trip
+    // no longer applies — reset the conflict flag so routing logic is fresh.
+    const handlePhoneChange = useCallback((value: string) => {
+        setPhone(value);
+        if (accountExists) setAccountExists(false);
+    }, [accountExists]);
+
+    const heroOpacity = useSharedValue(0);
+    const cardY = useSharedValue(30);
+    const cardOpacity = useSharedValue(0);
+
+    useEffect(() => {
+        heroOpacity.value = withTiming(1, { duration: 500, easing: ease });
+        cardOpacity.value = withDelay(160, withTiming(1, { duration: 380, easing: ease }));
+        cardY.value = withDelay(160, withTiming(0, { duration: 380, easing: ease }));
+    }, [heroOpacity, cardOpacity, cardY]);
+
+    const heroStyle = useAnimatedStyle(() => ({ opacity: heroOpacity.value }));
+    const cardStyle = useAnimatedStyle(() => ({
+        opacity: cardOpacity.value,
+        transform: [{ translateY: cardY.value }],
+    }));
+
+    const handleSubmit = useCallback(async () => {
+        try {
+            if (tab === 'register') {
+                await register(phone);
+            } else {
+                await login({ phone, password });
+            }
+        } catch (err: unknown) {
+            if (tab === 'login') {
+                const code = httpStatus(err);
+
+                if (isNotFoundError(err)) {
+                    if (accountExists) {
+                        // register returned 409 earlier → account IS in the system.
+                        // A 404 from login here means wrong credentials, not a
+                        // missing account. Never switch back to register in this state
+                        // or we create an infinite register-404 ↔ login-409 loop.
+                        showToast(t('register.errors.incorrectCredentials'), 'error');
+                    } else {
+                        // Genuinely new user — no prior 409 seen.
+                        setTab('register');
+                        setPassword('');
+                        showToast(t('register.errors.noAccount'), 'info');
+                    }
+                    return;
+                }
+
+                if (code === 401 || code === 403) {
+                    showToast(t('register.errors.incorrectCredentials'), 'error');
+                    return;
+                }
+            }
+
+            if (tab === 'register' && isAlreadyExistsError(err)) {
+                // HTTP 409 — phone is already registered.
+                // Remember this so a subsequent login-404 is treated as wrong
+                // credentials, not a missing account.
+                setAccountExists(true);
+                setTab('login');
+                showToast(t('register.errors.accountExists'), 'info');
+                return;
+            }
+
+            showToast(extractMessage(err, t('register.errors.generic')), 'error');
+        }
+    }, [tab, phone, password, register, login, showToast, accountExists, t]);
+
+    return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
+            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+            <Toast {...toast} onHide={hideToast} />
+
+            {/* Hero */}
+            <Animated.View style={[heroStyle, { height: 240, overflow: 'hidden' }]}>
+                <LinearGradient
+                    colors={['#F55905', '#c94400', '#0a0a0a']}
+                    locations={[0, 0.55, 1]}
+                    style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 32 }}
+                >
+                    <View style={{
+                        width: 72, height: 72, borderRadius: 36,
+                        backgroundColor: 'rgba(255,255,255,0.15)',
+                        alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+                        borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)',
+                    }}>
+                        <Ionicons name="bicycle" size={36} color="#fff" />
+                    </View>
+                    <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 26, color: '#fff', marginBottom: 4 }}>
+                        {t('register.heroTitle')}
+                    </Text>
+                    <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.65)', letterSpacing: 3, textTransform: 'uppercase' }}>
+                        {t('register.heroSubtitle')}
+                    </Text>
+                </LinearGradient>
+            </Animated.View>
+
+            {/* Card */}
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+                <Animated.View style={[cardStyle, {
+                    flex: 1, backgroundColor: '#fff',
+                    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+                    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+                    shadowOpacity: 0.08, shadowRadius: 20, elevation: 16,
+                }]}>
+                    <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
+                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#e5e5e5' }} />
+                    </View>
+
+                    <ScrollView
+                        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {/* Tabs */}
+                        <Row delay={120}>
+                            <View style={{
+                                flexDirection: 'row', backgroundColor: '#F5F5F5',
+                                borderRadius: 16, padding: 4, marginTop: 14, marginBottom: 22,
+                            }}>
+                                {(['register', 'login'] as Tab[]).map((tabOption) => {
+                                    const active = tab === tabOption;
+                                    return (
+                                        <TouchableOpacity
+                                            key={tabOption}
+                                            onPress={() => setTab(tabOption)}
+                                            style={{
+                                                flex: 1, paddingVertical: 10, borderRadius: 13,
+                                                alignItems: 'center',
+                                                backgroundColor: active ? '#fff' : 'transparent',
+                                                shadowColor: active ? '#000' : 'transparent',
+                                                shadowOffset: { width: 0, height: 1 },
+                                                shadowOpacity: active ? 0.06 : 0,
+                                                shadowRadius: 4,
+                                                elevation: active ? 2 : 0,
+                                            }}
+                                        >
+                                            <Text style={{
+                                                fontFamily: active ? 'Cairo_700Bold' : 'Tajawal_400Regular',
+                                                fontSize: 14,
+                                                color: active ? '#F55905' : '#767777',
+                                            }}>
+                                                {tabOption === 'register' ? t('register.tabs.register') : t('register.tabs.login')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </Row>
+
+                        <Row delay={200}>
+                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 22, color: '#1E1E1E', marginBottom: 4, textAlign }}>
+                                {tab === 'register' ? t('register.title.register') : t('register.title.login')}
+                            </Text>
+                            <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', lineHeight: 22, marginBottom: 24, textAlign }}>
+                                {tab === 'register'
+                                    ? t('register.subtitle.register')
+                                    : t('register.subtitle.login')}
+                            </Text>
+                        </Row>
+
+                        {/* Phone */}
+                        <Row delay={260}>
+                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8 }}>
+                                {t('register.phoneLabel')}
+                            </Text>
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                borderWidth: 1.5, borderColor: '#e5e5e5', borderRadius: 14,
+                                backgroundColor: '#fafafa', paddingHorizontal: 14, height: 52,
+                            }}>
+                                <Ionicons name="phone-portrait-outline" size={18} color="#F55905" />
+                                <TextInput
+                                    value={phone}
+                                    onChangeText={handlePhoneChange}
+                                    placeholder={t('register.phonePlaceholder')}
+                                    keyboardType="phone-pad"
+                                    style={{
+                                        flex: 1, marginLeft: 10,
+                                        fontFamily: 'Tajawal_400Regular',
+                                        fontSize: 15, color: '#1E1E1E', textAlign,
+                                    }}
+                                    placeholderTextColor="#c0c0c0"
+                                />
+                            </View>
+                        </Row>
+
+                        {/* Password (login only) */}
+                        {tab === 'login' && (
+                            <Row delay={300}>
+                                <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8, marginTop: 16 }}>
+                                    {t('register.passwordLabel')}
+                                </Text>
+                                <View style={{
+                                    flexDirection: 'row', alignItems: 'center',
+                                    borderWidth: 1.5, borderColor: '#e5e5e5', borderRadius: 14,
+                                    backgroundColor: '#fafafa', paddingHorizontal: 14, height: 52,
+                                }}>
+                                    <Ionicons name="lock-closed-outline" size={18} color="#F55905" />
+                                    <TextInput
+                                        value={password}
+                                        onChangeText={setPassword}
+                                        placeholder={t('register.passwordPlaceholder')}
+                                        secureTextEntry={!showPassword}
+                                        style={{
+                                            flex: 1, marginLeft: 10,
+                                            fontFamily: 'Tajawal_400Regular',
+                                            fontSize: 15, color: '#1E1E1E', textAlign,
+                                        }}
+                                        placeholderTextColor="#c0c0c0"
+                                    />
+                                    <TouchableOpacity onPress={() => setShowPassword((p) => !p)}>
+                                        <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#767777" />
+                                    </TouchableOpacity>
+                                </View>
+                            </Row>
+                        )}
+
+                        {/* CTA */}
+                        <Row delay={360}>
+                            <View style={{ marginTop: 28 }}>
+                                <AppButton
+                                    label={tab === 'register' ? t('register.sendOtp') : t('register.signIn')}
+                                    onPress={handleSubmit}
+                                    disabled={!canSubmit || isPending}
+                                    loading={isPending}
+                                    icon={<Ionicons name={tab === 'register' ? 'arrow-forward-circle-outline' : 'log-in-outline'} size={22} color="#fff" />}
+                                    iconPosition="right"
+                                />
+                            </View>
+                        </Row>
+
+                        {/* Back */}
+                        <Row delay={420}>
+                            <TouchableOpacity
+                                onPress={() => router.back()}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20 }}
+                            >
+                                <Ionicons name={isRTL ? 'arrow-forward-outline' : 'arrow-back-outline'} size={16} color="#767777" />
+                                <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#767777' }}>
+                                    {t('register.backToHome')}
+                                </Text>
+                            </TouchableOpacity>
+                        </Row>
+                    </ScrollView>
+                </Animated.View>
+            </KeyboardAvoidingView>
+        </View>
+    );
+}

@@ -46,7 +46,8 @@
           "locationAlwaysAndWhenInUsePermission": "نحتاج موقعك لتحديد أقرب خدمة إليك.",
           "locationWhenInUsePermission": "نحتاج موقعك لتحديد أقرب خدمة إليك."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
