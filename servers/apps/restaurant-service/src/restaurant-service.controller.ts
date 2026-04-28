@@ -9,14 +9,17 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
-import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { EventPattern, Payload } from "@nestjs/microservices";
 import { RestaurantServiceService } from "./restaurant-service.service";
+import { AiMenuImportService } from "./ai-menu-import.service";
+import { ApplyMenuImportDto } from "./dto/ai-menu-import.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RolesGuard } from "./guards/roles.guard";
 import { Roles } from "./decorators/roles.decorator";
@@ -57,7 +60,10 @@ const multerOptions = {
 
 @Controller()
 export class RestaurantServiceController {
-  constructor(private readonly service: RestaurantServiceService) {}
+  constructor(
+    private readonly service: RestaurantServiceService,
+    private readonly aiMenuImport: AiMenuImportService,
+  ) {}
 
   // ─── NATS: create profile stub on registration ────────────────────────────────
 
@@ -526,6 +532,45 @@ export class RestaurantServiceController {
   @Roles("manager")
   adminDeleteRestaurant(@Param("id", ParseUUIDPipe) id: string) {
     return this.service.adminDeleteRestaurant(id);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AI — Smart Menu Import
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/restaurant/ai/menu-import/analyze
+   * Multipart/form-data. Field: `image` (required).
+   * Returns the structured JSON extracted from the image — does NOT persist.
+   */
+  @Post("ai/menu-import/analyze")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  @UseInterceptors(FileInterceptor("image", multerOptions))
+  async analyzeMenuImage(@UploadedFile() image: Express.Multer.File) {
+    const { extraction } = await this.aiMenuImport.analyzeMenu(image);
+    return { data: extraction, message: "تم تحليل القائمة بنجاح." };
+  }
+
+  /**
+   * POST /api/restaurant/ai/menu-import/apply
+   * Persists an (optionally edited) extraction into the owner's restaurant.
+   */
+  @Post("ai/menu-import/apply")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  async applyMenuImport(
+    @CurrentUser("sub") userId: string,
+    @Body() dto: ApplyMenuImportDto,
+  ) {
+    const result = await this.aiMenuImport.applyMenuImport(userId, dto);
+    return { data: result, message: "تم استيراد القائمة بنجاح." };
+  }
+
+  /** GET /api/restaurant/by-name/:name — public full menu tree, looked up by name */
+  @Get("by-name/:name")
+  getRestaurantByName(@Param("name") name: string) {
+    return this.service.getPublicRestaurantByName(name);
   }
 
   // ─── Must be last: wildcard catches any GET /:id not matched above ────────────
