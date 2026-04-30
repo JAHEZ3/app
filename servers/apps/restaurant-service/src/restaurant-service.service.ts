@@ -23,7 +23,7 @@ import {
   RestaurantRequestStatus,
 } from "./entities/restaurant-request.entity";
 import { CompleteRestaurantProfileDto } from "./dto/complete-profile.dto";
-import { parseAndValidatePaymentInfo } from "./common/payment-info";
+import { parseAndValidatePaymentInfo, validatePaymentInfo } from "./common/payment-info";
 import { S3Service } from "./s3.service";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
@@ -380,11 +380,53 @@ export class RestaurantServiceService {
   // ─── Helpers — presigned URLs ─────────────────────────────────────────────────
 
   private async withPresignedUrls(restaurant: Restaurant): Promise<Restaurant & { logoUrl?: string; coverUrl?: string }> {
-    const [logoUrl, coverUrl] = await Promise.all([
+    const [logoUrl, coverUrl, paymentInfo] = await Promise.all([
       restaurant.logoUrl ? this.s3.presignedUrl(restaurant.logoUrl) : undefined,
       restaurant.coverUrl ? this.s3.presignedUrl(restaurant.coverUrl) : undefined,
+      this.resolvePaymentQr(restaurant.paymentInfo),
     ]);
-    return { ...restaurant, ...(logoUrl && { logoUrl }), ...(coverUrl && { coverUrl }) };
+    return {
+      ...restaurant,
+      ...(logoUrl && { logoUrl }),
+      ...(coverUrl && { coverUrl }),
+      ...(paymentInfo !== undefined && { paymentInfo }),
+    };
+  }
+
+  private async resolvePaymentQr(paymentInfo: Restaurant["paymentInfo"]) {
+    if (!paymentInfo) return undefined;
+    if (!paymentInfo.qrImageUrl) return paymentInfo;
+    const qrImageUrl = await this.s3.resolveImageUrl(paymentInfo.qrImageUrl);
+    return { ...paymentInfo, qrImageUrl: qrImageUrl ?? undefined };
+  }
+
+  async uploadPaymentQr(userId: string, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException("لم يتم رفع أي ملف.");
+    }
+    const restaurant = await this.getOwnedRestaurant(userId);
+    let key: string;
+    try {
+      key = await this.s3.upload(file, "payment-qr");
+    } catch (err) {
+      this.logger.error("S3 upload failed during uploadPaymentQr", err);
+      throw new BadRequestException("فشل رفع رمز QR.");
+    }
+
+    const url = await this.s3.presignedUrl(key);
+
+    // If paymentInfo exists, attach the new key and clean up the old QR.
+    const existing = restaurant.paymentInfo;
+    if (existing) {
+      const oldKey = existing.qrImageUrl;
+      const next = { ...existing, qrImageUrl: key };
+      await this.restaurantRepo.update(restaurant.id, { paymentInfo: next });
+      if (oldKey && !/^https?:\/\//i.test(oldKey) && oldKey !== key) {
+        await this.s3.delete(oldKey).catch(() => undefined);
+      }
+    }
+
+    return { data: { key, url }, message: "تم رفع رمز QR بنجاح." };
   }
 
   private async withMealImage(meal: Meal): Promise<Meal & { imageUrl: string | null }> {
@@ -430,7 +472,19 @@ export class RestaurantServiceService {
 
   async updateSettings(ownerId: string, dto: UpdateSettingsDto) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
-    await this.restaurantRepo.update(restaurant.id, { ...dto });
+
+    const { paymentInfo: rawPaymentInfo, ...rest } = dto;
+    const patch: Record<string, unknown> = { ...rest };
+
+    if (rawPaymentInfo !== undefined) {
+      try {
+        patch.paymentInfo = validatePaymentInfo(rawPaymentInfo);
+      } catch (err: any) {
+        throw new BadRequestException(err.message);
+      }
+    }
+
+    await this.restaurantRepo.update(restaurant.id, patch);
     return {
       data: await this.restaurantRepo.findOne({ where: { id: restaurant.id } }),
       message: "تم تحديث الإعدادات.",
@@ -493,15 +547,47 @@ export class RestaurantServiceService {
 
   // ─── Public Listing ───────────────────────────────────────────────────────────
 
-  async listPublicRestaurants(city?: string) {
+  async listPublicRestaurants(opts: { city?: string; page?: number; limit?: number } = {}) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 10));
+    const skip = (page - 1) * limit;
+
     const qb = this.restaurantRepo
       .createQueryBuilder("r")
       .where("r.status = :status", { status: RestaurantStatus.ACTIVE });
 
-    if (city) qb.andWhere("r.city ILIKE :city", { city: `%${city}%` });
+    if (opts.city) qb.andWhere("r.city ILIKE :city", { city: `%${opts.city}%` });
 
-    const restaurants = await qb.orderBy("r.rating", "DESC").getMany();
-    return { data: restaurants, message: "تم استرجاع المطاعم." };
+    const [restaurants, total] = await qb
+      .orderBy("r.rating", "DESC")
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return {
+      data: restaurants,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+      message: "تم استرجاع المطاعم.",
+    };
+  }
+
+  async getPublicRestaurantByName(name: string) {
+    const restaurant = await this.restaurantRepo
+      .createQueryBuilder("r")
+      .where("r.status = :status", { status: RestaurantStatus.ACTIVE })
+      .andWhere("LOWER(r.name) = LOWER(:name)", { name: name.trim() })
+      .getOne();
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+    return this.getPublicRestaurantWithMenu(restaurant.id);
   }
 
   async getPublicRestaurantWithMenu(restaurantId: string) {

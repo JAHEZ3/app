@@ -1,3 +1,5 @@
+import type { PaymentInfo } from "./payment.types";
+
 export enum RestaurantStatus {
   PENDING_APPROVAL = "pending_approval",
   ACTIVE = "active",
@@ -24,6 +26,7 @@ export interface Restaurant {
   totalRatings: number;
   status: RestaurantStatus;
   isOpen: boolean;
+  paymentInfo: PaymentInfo | null;
   createdAt: string;
 }
 

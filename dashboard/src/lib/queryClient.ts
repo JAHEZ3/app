@@ -36,4 +36,15 @@ export const queryKeys = {
     optionGroups: (mealId: string) => ["menu", "option-groups", mealId] as const,
     options: (groupId: string) => ["menu", "options", groupId] as const,
   },
+  analytics: {
+    overview: ["analytics", "overview"] as const,
+    orders: ["analytics", "orders"] as const,
+    revenue: ["analytics", "revenue"] as const,
+    topMeals: ["analytics", "top-meals"] as const,
+    customers: ["analytics", "customers"] as const,
+    ratings: ["analytics", "ratings"] as const,
+    delivery: ["analytics", "delivery"] as const,
+    payments: ["analytics", "payments"] as const,
+    report: (period: string) => ["analytics", "report", period] as const,
+  },
 };

@@ -9,12 +9,15 @@ export interface UpdateRestaurantDto {
   cuisineType?: string;
 }
 
+import type { PaymentInfo } from "@/types/payment.types";
+
 export interface UpdateSettingsDto {
   lat?: number;
   lng?: number;
   deliveryRadiusKm?: number;
   minOrderAmount?: number;
   avgDeliveryMinutes?: number;
+  paymentInfo?: PaymentInfo;
 }
 
 export interface UpdateStoreStatusDto {

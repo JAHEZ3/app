@@ -9,7 +9,30 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+
+// Same multipart-coercion helpers as CreateMealDto. Inlined to avoid a shared
+// helpers file for a two-DTO pair.
+const toBool = ({ value }: { value: unknown }) => {
+  if (typeof value === 'string') {
+    if (value === 'true' || value === '1') return true;
+    if (value === 'false' || value === '0') return false;
+  }
+  return value;
+};
+
+const toStringArray = ({ value }: { value: unknown }) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [value];
+    } catch {
+      return value === '' ? [] : [value];
+    }
+  }
+  return value;
+};
 
 export class UpdateMealDto {
   @IsOptional()
@@ -48,14 +71,17 @@ export class UpdateMealDto {
   calories?: number;
 
   @IsOptional()
+  @Transform(toBool)
   @IsBoolean({ message: 'حالة التوفر يجب أن تكون صح أو خطأ.' })
   isAvailable?: boolean;
 
   @IsOptional()
+  @Transform(toBool)
   @IsBoolean({ message: 'حالة التميز يجب أن تكون صح أو خطأ.' })
   isFeatured?: boolean;
 
   @IsOptional()
+  @Transform(toStringArray)
   @IsArray({ message: 'الوسوم يجب أن تكون مصفوفة.' })
   @IsString({ each: true, message: 'كل وسم يجب أن يكون نصاً.' })
   tags?: string[];
