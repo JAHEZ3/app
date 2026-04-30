@@ -45,6 +45,7 @@ import { AdminChangeRestaurantStatusDto } from "./dto/admin-change-restaurant-st
 import { ReorderDto } from "./dto/reorder.dto";
 import { AnalyticsReportDto, ReportPeriod } from "./dto/analytics-report.dto";
 import { ListRestaurantsDto } from "./dto/list-restaurants.dto";
+import { MobileListRestaurantsDto } from "./dto/mobile-list-restaurants.dto";
 
 const multerOptions = {
   storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
@@ -661,6 +662,44 @@ export class RestaurantServiceController {
   @Get("by-name/:name")
   getRestaurantByName(@Param("name") name: string) {
     return this.service.getPublicRestaurantByName(name);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MOBILE — customer app endpoints (lightweight, paginated, public)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/restaurant/mobile/restaurants
+   *   Query: ?page=1&limit=10&city=Riyadh&search=...&cuisineType=pizza
+   *   Returns a lightweight, paginated list of active restaurants (open first, then by rating).
+   */
+  @Get("mobile/restaurants")
+  mobileListRestaurants(@Query() query: MobileListRestaurantsDto) {
+    return this.service.mobileListRestaurants({
+      city: query.city,
+      search: query.search,
+      cuisineType: query.cuisineType,
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  /** GET /api/restaurant/mobile/restaurants/:id — restaurant header + operating hours (no menus) */
+  @Get("mobile/restaurants/:id")
+  mobileGetRestaurant(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.mobileGetRestaurant(id);
+  }
+
+  /** GET /api/restaurant/mobile/restaurants/:id/menus — menu list for a restaurant */
+  @Get("mobile/restaurants/:id/menus")
+  mobileListMenus(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.mobileListMenus(id);
+  }
+
+  /** GET /api/restaurant/mobile/menus/:menuId — single menu with sections, meals, and option groups */
+  @Get("mobile/menus/:menuId")
+  mobileGetMenu(@Param("menuId", ParseUUIDPipe) menuId: string) {
+    return this.service.mobileGetMenu(menuId);
   }
 
   // ─── Must be last: wildcard catches any GET /:id not matched above ────────────
