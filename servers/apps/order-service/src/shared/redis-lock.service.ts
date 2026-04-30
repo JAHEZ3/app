@@ -33,7 +33,7 @@ export class RedisLockService {
    */
   async acquire(key: string): Promise<string | null> {
     const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const result = await this.client.set(key, token, 'NX', 'PX', LOCK_TTL_MS);
+    const result = await this.client.set(key, token, 'PX', LOCK_TTL_MS, 'NX');
     return result === 'OK' ? token : null;
   }
 
