@@ -15,7 +15,7 @@ import {
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { Roles } from '../../../libs/shared/src/roles.decorator';
+import { Roles } from './decorators/roles.decorator';
 import { CartService } from './cart/cart.service';
 import { AddToCartDto, UpdateCartItemDto } from './cart/cart.dto';
 import { OrderService } from './order/order.service';
@@ -181,16 +181,6 @@ export class OrderServiceController {
     if (!order.receiptKey) return { data: null, message: 'الإيصال لم يُنشأ بعد' };
     const url = await this.receiptService.getPresignedUrl(order.receiptKey);
     return { data: { url }, message: null };
-  }
-
-  // ─────────────────────────────────────────────
-  // DELIVERY AGENTS
-  // ─────────────────────────────────────────────
-
-  @Get('delivery/available')
-  @UseGuards(JwtAuthGuard)
-  async getAvailableAgents(@Req() req: any) {
-    return this.orderService.getAvailableAgents(req.user.sub, req.user.role);
   }
 
   // ─────────────────────────────────────────────
