@@ -27,6 +27,16 @@ import type {
   RejectAgentApplicationPayload,
   UpdateAgentPayload,
 } from "@/types/delivery.types";
+import type {
+  CustomersAnalytics,
+  DeliveryAnalytics,
+  OrdersAnalytics,
+  OverviewAnalytics,
+  PaymentsAnalytics,
+  PublicStats,
+  RestaurantsAnalytics,
+  RevenueAnalytics,
+} from "@/types/analytics.types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -202,6 +212,29 @@ export const settingsApi = {
   get: () => api.get("/admin/settings"),
   update: (data: object) => api.patch("/admin/settings", data),
 };
+
+// ─── Analytics (manager-service) ─────────────────────────────────────────────
+export const analyticsApi = {
+  /** Public landing-page stats — no auth required. */
+  publicStats: () =>
+    api.get<ApiResponse<PublicStats>>("/manager/public/stats"),
+  overview: () =>
+    api.get<ApiResponse<OverviewAnalytics>>("/manager/analytics"),
+  orders: () =>
+    api.get<ApiResponse<OrdersAnalytics>>("/manager/analytics/orders"),
+  revenue: () =>
+    api.get<ApiResponse<RevenueAnalytics>>("/manager/analytics/revenue"),
+  restaurants: () =>
+    api.get<ApiResponse<RestaurantsAnalytics>>("/manager/analytics/restaurants"),
+  customers: () =>
+    api.get<ApiResponse<CustomersAnalytics>>("/manager/analytics/customers"),
+  delivery: () =>
+    api.get<ApiResponse<DeliveryAnalytics>>("/manager/analytics/delivery"),
+  payments: () =>
+    api.get<ApiResponse<PaymentsAnalytics>>("/manager/analytics/payments"),
+};
+
+/** @deprecated use `analyticsApi.overview` */
 export const statsApi = {
-  overview: () => api.get("/admin/stats/overview"),
+  overview: () => analyticsApi.overview(),
 };

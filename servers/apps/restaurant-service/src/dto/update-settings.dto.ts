@@ -1,4 +1,4 @@
-import { IsOptional, IsNumber, IsPositive, Min } from 'class-validator';
+import { IsOptional, IsNumber, IsPositive, Min, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateSettingsDto {
@@ -31,4 +31,9 @@ export class UpdateSettingsDto {
   @Min(1, { message: 'وقت التوصيل يجب أن يكون دقيقة واحدة على الأقل.' })
   @Type(() => Number)
   avgDeliveryMinutes?: number;
+
+  // Validated structurally in the service via validatePaymentInfo()
+  @IsOptional()
+  @IsObject({ message: 'بيانات الدفع غير صحيحة.' })
+  paymentInfo?: Record<string, unknown>;
 }

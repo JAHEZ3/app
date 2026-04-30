@@ -191,6 +191,22 @@ export const restaurantApi = {
   getTopMeals: () => restaurantInstance.get("/api/restaurant/me/top-meals"),
 };
 
+// ── Analytics (restaurant-service, owner-scoped) ─────────────────────────────
+export const analyticsApi = {
+  overview: () => restaurantInstance.get("/api/restaurant/analytics"),
+  orders: () => restaurantInstance.get("/api/restaurant/analytics/orders"),
+  revenue: () => restaurantInstance.get("/api/restaurant/analytics/revenue"),
+  topMeals: () => restaurantInstance.get("/api/restaurant/analytics/top-meals"),
+  customers: () => restaurantInstance.get("/api/restaurant/analytics/customers"),
+  ratings: () => restaurantInstance.get("/api/restaurant/analytics/ratings"),
+  delivery: () => restaurantInstance.get("/api/restaurant/analytics/delivery"),
+  payments: () => restaurantInstance.get("/api/restaurant/analytics/payments"),
+  report: (period: "daily" | "weekly" | "monthly") =>
+    restaurantInstance.get("/api/restaurant/analytics/report", {
+      params: { period },
+    }),
+};
+
 // ── Orders ────────────────────────────────────────────────────────────────────
 export const ordersApi = {
   getAll: (params?: object) => api.get("/api/orders", { params }),
