@@ -23,7 +23,7 @@ import {
   RestaurantRequestStatus,
 } from "./entities/restaurant-request.entity";
 import { CompleteRestaurantProfileDto } from "./dto/complete-profile.dto";
-import { parseAndValidatePaymentInfo } from "./common/payment-info";
+import { parseAndValidatePaymentInfo, validatePaymentInfo } from "./common/payment-info";
 import { S3Service } from "./s3.service";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
@@ -380,11 +380,53 @@ export class RestaurantServiceService {
   // ─── Helpers — presigned URLs ─────────────────────────────────────────────────
 
   private async withPresignedUrls(restaurant: Restaurant): Promise<Restaurant & { logoUrl?: string; coverUrl?: string }> {
-    const [logoUrl, coverUrl] = await Promise.all([
+    const [logoUrl, coverUrl, paymentInfo] = await Promise.all([
       restaurant.logoUrl ? this.s3.presignedUrl(restaurant.logoUrl) : undefined,
       restaurant.coverUrl ? this.s3.presignedUrl(restaurant.coverUrl) : undefined,
+      this.resolvePaymentQr(restaurant.paymentInfo),
     ]);
-    return { ...restaurant, ...(logoUrl && { logoUrl }), ...(coverUrl && { coverUrl }) };
+    return {
+      ...restaurant,
+      ...(logoUrl && { logoUrl }),
+      ...(coverUrl && { coverUrl }),
+      ...(paymentInfo !== undefined && { paymentInfo }),
+    };
+  }
+
+  private async resolvePaymentQr(paymentInfo: Restaurant["paymentInfo"]) {
+    if (!paymentInfo) return undefined;
+    if (!paymentInfo.qrImageUrl) return paymentInfo;
+    const qrImageUrl = await this.s3.resolveImageUrl(paymentInfo.qrImageUrl);
+    return { ...paymentInfo, qrImageUrl: qrImageUrl ?? undefined };
+  }
+
+  async uploadPaymentQr(userId: string, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException("لم يتم رفع أي ملف.");
+    }
+    const restaurant = await this.getOwnedRestaurant(userId);
+    let key: string;
+    try {
+      key = await this.s3.upload(file, "payment-qr");
+    } catch (err) {
+      this.logger.error("S3 upload failed during uploadPaymentQr", err);
+      throw new BadRequestException("فشل رفع رمز QR.");
+    }
+
+    const url = await this.s3.presignedUrl(key);
+
+    // If paymentInfo exists, attach the new key and clean up the old QR.
+    const existing = restaurant.paymentInfo;
+    if (existing) {
+      const oldKey = existing.qrImageUrl;
+      const next = { ...existing, qrImageUrl: key };
+      await this.restaurantRepo.update(restaurant.id, { paymentInfo: next });
+      if (oldKey && !/^https?:\/\//i.test(oldKey) && oldKey !== key) {
+        await this.s3.delete(oldKey).catch(() => undefined);
+      }
+    }
+
+    return { data: { key, url }, message: "تم رفع رمز QR بنجاح." };
   }
 
   private async withMealImage(meal: Meal): Promise<Meal & { imageUrl: string | null }> {
@@ -430,7 +472,19 @@ export class RestaurantServiceService {
 
   async updateSettings(ownerId: string, dto: UpdateSettingsDto) {
     const restaurant = await this.getOwnedRestaurant(ownerId);
-    await this.restaurantRepo.update(restaurant.id, { ...dto });
+
+    const { paymentInfo: rawPaymentInfo, ...rest } = dto;
+    const patch: Record<string, unknown> = { ...rest };
+
+    if (rawPaymentInfo !== undefined) {
+      try {
+        patch.paymentInfo = validatePaymentInfo(rawPaymentInfo);
+      } catch (err: any) {
+        throw new BadRequestException(err.message);
+      }
+    }
+
+    await this.restaurantRepo.update(restaurant.id, patch);
     return {
       data: await this.restaurantRepo.findOne({ where: { id: restaurant.id } }),
       message: "تم تحديث الإعدادات.",
@@ -493,15 +547,37 @@ export class RestaurantServiceService {
 
   // ─── Public Listing ───────────────────────────────────────────────────────────
 
-  async listPublicRestaurants(city?: string) {
+  async listPublicRestaurants(opts: { city?: string; page?: number; limit?: number } = {}) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 10));
+    const skip = (page - 1) * limit;
+
     const qb = this.restaurantRepo
       .createQueryBuilder("r")
       .where("r.status = :status", { status: RestaurantStatus.ACTIVE });
 
-    if (city) qb.andWhere("r.city ILIKE :city", { city: `%${city}%` });
+    if (opts.city) qb.andWhere("r.city ILIKE :city", { city: `%${opts.city}%` });
 
-    const restaurants = await qb.orderBy("r.rating", "DESC").getMany();
-    return { data: restaurants, message: "تم استرجاع المطاعم." };
+    const [restaurants, total] = await qb
+      .orderBy("r.rating", "DESC")
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return {
+      data: restaurants,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+      message: "تم استرجاع المطاعم.",
+    };
   }
 
   async getPublicRestaurantByName(name: string) {
@@ -561,6 +637,242 @@ export class RestaurantServiceService {
     return {
       data: { ...restaurant, menus: menusWithSections },
       message: "Restaurant retrieved",
+    };
+  }
+
+  // ─── Mobile (lightweight, paginated, customer-app endpoints) ──────────────────
+
+  async mobileListRestaurants(opts: {
+    city?: string;
+    search?: string;
+    cuisineType?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(50, Math.max(1, opts.limit ?? 10));
+    const skip = (page - 1) * limit;
+
+    const qb = this.restaurantRepo
+      .createQueryBuilder("r")
+      .where("r.status = :status", { status: RestaurantStatus.ACTIVE });
+
+    if (opts.city) qb.andWhere("r.city ILIKE :city", { city: `%${opts.city}%` });
+    if (opts.cuisineType) qb.andWhere("r.cuisine_type = :ct", { ct: opts.cuisineType });
+    if (opts.search) qb.andWhere("r.name ILIKE :q", { q: `%${opts.search}%` });
+
+    const [restaurants, total] = await qb
+      .orderBy("r.is_open", "DESC")
+      .addOrderBy("r.rating", "DESC")
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    const items = await Promise.all(
+      restaurants.map(async (r) => ({
+        id: r.id,
+        name: r.name,
+        logoUrl: await this.s3.resolveImageUrl(r.logoUrl),
+        coverUrl: await this.s3.resolveImageUrl(r.coverUrl),
+        city: r.city,
+        cuisineType: r.cuisineType,
+        rating: Number(r.rating),
+        totalRatings: r.totalRatings,
+        minOrderAmount: Number(r.minOrderAmount),
+        isOpen: r.isOpen,
+      })),
+    );
+
+    const totalPages = Math.ceil(total / limit) || 1;
+    return {
+      data: items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+      message: "تم استرجاع المطاعم.",
+    };
+  }
+
+  async mobileGetRestaurant(restaurantId: string) {
+    const restaurant = await this.restaurantRepo.findOne({
+      where: { id: restaurantId, status: RestaurantStatus.ACTIVE },
+    });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+
+    const hours = await this.hoursRepo.find({
+      where: { restaurantId: restaurant.id },
+      order: { dayOfWeek: "ASC" },
+    });
+
+    const [logoUrl, coverUrl] = await Promise.all([
+      this.s3.resolveImageUrl(restaurant.logoUrl),
+      this.s3.resolveImageUrl(restaurant.coverUrl),
+    ]);
+
+    return {
+      data: {
+        id: restaurant.id,
+        name: restaurant.name,
+        description: restaurant.description,
+        logoUrl,
+        coverUrl,
+        phone: restaurant.phone,
+        cuisineType: restaurant.cuisineType,
+        street: restaurant.street,
+        city: restaurant.city,
+        lat: restaurant.lat,
+        lng: restaurant.lng,
+        minOrderAmount: Number(restaurant.minOrderAmount),
+        rating: Number(restaurant.rating),
+        totalRatings: restaurant.totalRatings,
+        isOpen: restaurant.isOpen,
+        hours,
+      },
+      message: "تم استرجاع المطعم.",
+    };
+  }
+
+  async mobileListMenus(restaurantId: string) {
+    const restaurant = await this.restaurantRepo.findOne({
+      where: { id: restaurantId, status: RestaurantStatus.ACTIVE },
+      select: ["id"],
+    });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+
+    const menus = await this.menuRepo.find({
+      where: { restaurantId: restaurant.id, isActive: true },
+      order: { displayOrder: "ASC" },
+    });
+
+    if (menus.length === 0) {
+      return { data: [], message: "تم استرجاع القوائم." };
+    }
+
+    const menuIds = menus.map((m) => m.id);
+    const sections = await this.sectionRepo.find({
+      where: { menuId: In(menuIds) },
+    });
+
+    const sectionsByMenu = new Map<string, string[]>();
+    for (const s of sections) {
+      const list = sectionsByMenu.get(s.menuId) ?? [];
+      list.push(s.id);
+      sectionsByMenu.set(s.menuId, list);
+    }
+
+    const sectionIds = sections.map((s) => s.id);
+    const mealCountRows = sectionIds.length
+      ? await this.mealRepo
+          .createQueryBuilder("m")
+          .select("m.section_id", "sectionId")
+          .addSelect("COUNT(*)", "count")
+          .where("m.section_id IN (:...ids)", { ids: sectionIds })
+          .andWhere("m.is_available = true")
+          .groupBy("m.section_id")
+          .getRawMany<{ sectionId: string; count: string }>()
+      : [];
+    const mealsBySection = new Map<string, number>();
+    for (const r of mealCountRows) mealsBySection.set(r.sectionId, Number(r.count));
+
+    const data = menus.map((menu) => {
+      const ownSections = sectionsByMenu.get(menu.id) ?? [];
+      const mealCount = ownSections.reduce(
+        (acc, sid) => acc + (mealsBySection.get(sid) ?? 0),
+        0,
+      );
+      return {
+        id: menu.id,
+        name: menu.name,
+        displayOrder: menu.displayOrder,
+        sectionCount: ownSections.length,
+        mealCount,
+      };
+    });
+
+    return { data, message: "تم استرجاع القوائم." };
+  }
+
+  async mobileGetMenu(menuId: string) {
+    const menu = await this.menuRepo.findOne({
+      where: { id: menuId, isActive: true },
+    });
+    if (!menu) throw new NotFoundException("القائمة غير موجودة.");
+
+    const restaurant = await this.restaurantRepo.findOne({
+      where: { id: menu.restaurantId, status: RestaurantStatus.ACTIVE },
+      select: ["id"],
+    });
+    if (!restaurant) throw new NotFoundException("المطعم غير متاح.");
+
+    const sections = await this.sectionRepo.find({
+      where: { menuId: menu.id },
+      order: { displayOrder: "ASC" },
+    });
+    if (sections.length === 0) {
+      return {
+        data: { ...menu, sections: [] },
+        message: "تم استرجاع القائمة.",
+      };
+    }
+
+    const sectionIds = sections.map((s) => s.id);
+    const meals = await this.mealRepo.find({
+      where: { sectionId: In(sectionIds), isAvailable: true },
+      order: { displayOrder: "ASC" },
+    });
+
+    const mealIds = meals.map((m) => m.id);
+    const optionGroups = mealIds.length
+      ? await this.optionGroupRepo.find({ where: { mealId: In(mealIds) } })
+      : [];
+    const groupIds = optionGroups.map((g) => g.id);
+    const options = groupIds.length
+      ? await this.optionRepo.find({
+          where: { groupId: In(groupIds), isAvailable: true },
+        })
+      : [];
+
+    const optionsByGroup = new Map<string, typeof options>();
+    for (const o of options) {
+      const list = optionsByGroup.get(o.groupId) ?? [];
+      list.push(o);
+      optionsByGroup.set(o.groupId, list);
+    }
+
+    const groupsByMeal = new Map<string, any[]>();
+    for (const g of optionGroups) {
+      const list = groupsByMeal.get(g.mealId) ?? [];
+      list.push({ ...g, options: optionsByGroup.get(g.id) ?? [] });
+      groupsByMeal.set(g.mealId, list);
+    }
+
+    const mealsWithImages = await Promise.all(
+      meals.map(async (m) => ({
+        ...(await this.withMealImage(m)),
+        optionGroups: groupsByMeal.get(m.id) ?? [],
+      })),
+    );
+
+    const mealsBySection = new Map<string, typeof mealsWithImages>();
+    for (const m of mealsWithImages) {
+      const list = mealsBySection.get(m.sectionId) ?? [];
+      list.push(m);
+      mealsBySection.set(m.sectionId, list);
+    }
+
+    const sectionsWithMeals = sections.map((s) => ({
+      ...s,
+      meals: mealsBySection.get(s.id) ?? [],
+    }));
+
+    return {
+      data: { ...menu, sections: sectionsWithMeals },
+      message: "تم استرجاع القائمة.",
     };
   }
 

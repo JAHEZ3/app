@@ -19,6 +19,7 @@ import { memoryStorage } from "multer";
 import { EventPattern, Payload } from "@nestjs/microservices";
 import { RestaurantServiceService } from "./restaurant-service.service";
 import { AiMenuImportService } from "./ai-menu-import.service";
+import { RestaurantAnalyticsService } from "./analytics/analytics.service";
 import { ApplyMenuImportDto } from "./dto/ai-menu-import.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RolesGuard } from "./guards/roles.guard";
@@ -42,6 +43,9 @@ import { UpdateOptionDto } from "./dto/update-option.dto";
 import { AdminListRestaurantsDto } from "./dto/admin-list-restaurants.dto";
 import { AdminChangeRestaurantStatusDto } from "./dto/admin-change-restaurant-status.dto";
 import { ReorderDto } from "./dto/reorder.dto";
+import { AnalyticsReportDto, ReportPeriod } from "./dto/analytics-report.dto";
+import { ListRestaurantsDto } from "./dto/list-restaurants.dto";
+import { MobileListRestaurantsDto } from "./dto/mobile-list-restaurants.dto";
 
 const multerOptions = {
   storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
@@ -63,6 +67,7 @@ export class RestaurantServiceController {
   constructor(
     private readonly service: RestaurantServiceService,
     private readonly aiMenuImport: AiMenuImportService,
+    private readonly analytics: RestaurantAnalyticsService,
   ) {}
 
   // ─── NATS: create profile stub on registration ────────────────────────────────
@@ -76,10 +81,14 @@ export class RestaurantServiceController {
   // Public endpoints
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** GET /api/restaurant?city=Riyadh */
+  /** GET /api/restaurant?city=Riyadh&page=1&limit=10 */
   @Get()
-  listRestaurants(@Query("city") city?: string) {
-    return this.service.listPublicRestaurants(city);
+  listRestaurants(@Query() query: ListRestaurantsDto) {
+    return this.service.listPublicRestaurants({
+      city: query.city,
+      page: query.page,
+      limit: query.limit,
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -535,6 +544,88 @@ export class RestaurantServiceController {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // Analytics — owner dashboard (scoped to the owner's restaurant)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/restaurant/analytics — top-level dashboard overview */
+  @Get("analytics")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsOverview(@CurrentUser("sub") userId: string) {
+    return this.analytics.getOverview(userId);
+  }
+
+  /**
+   * GET /api/restaurant/analytics/report?period=daily|weekly|monthly
+   * Statistics & Reports — performance for the selected period with growth vs. previous period.
+   */
+  @Get("analytics/report")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsReport(
+    @CurrentUser("sub") userId: string,
+    @Query() query: AnalyticsReportDto,
+  ) {
+    return this.analytics.getPerformanceReport(userId, query.period ?? ReportPeriod.DAILY);
+  }
+
+  /** GET /api/restaurant/analytics/orders */
+  @Get("analytics/orders")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsOrders(@CurrentUser("sub") userId: string) {
+    return this.analytics.getOrdersAnalytics(userId);
+  }
+
+  /** GET /api/restaurant/analytics/revenue */
+  @Get("analytics/revenue")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsRevenue(@CurrentUser("sub") userId: string) {
+    return this.analytics.getRevenueAnalytics(userId);
+  }
+
+  /** GET /api/restaurant/analytics/top-meals */
+  @Get("analytics/top-meals")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsTopMeals(@CurrentUser("sub") userId: string) {
+    return this.analytics.getTopMealsAnalytics(userId);
+  }
+
+  /** GET /api/restaurant/analytics/customers */
+  @Get("analytics/customers")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsCustomers(@CurrentUser("sub") userId: string) {
+    return this.analytics.getCustomersAnalytics(userId);
+  }
+
+  /** GET /api/restaurant/analytics/ratings */
+  @Get("analytics/ratings")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsRatings(@CurrentUser("sub") userId: string) {
+    return this.analytics.getRatingsAnalytics(userId);
+  }
+
+  /** GET /api/restaurant/analytics/delivery */
+  @Get("analytics/delivery")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsDelivery(@CurrentUser("sub") userId: string) {
+    return this.analytics.getDeliveryAnalytics(userId);
+  }
+
+  /** GET /api/restaurant/analytics/payments */
+  @Get("analytics/payments")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getAnalyticsPayments(@CurrentUser("sub") userId: string) {
+    return this.analytics.getPaymentsAnalytics(userId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // AI — Smart Menu Import
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -571,6 +662,44 @@ export class RestaurantServiceController {
   @Get("by-name/:name")
   getRestaurantByName(@Param("name") name: string) {
     return this.service.getPublicRestaurantByName(name);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MOBILE — customer app endpoints (lightweight, paginated, public)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/restaurant/mobile/restaurants
+   *   Query: ?page=1&limit=10&city=Riyadh&search=...&cuisineType=pizza
+   *   Returns a lightweight, paginated list of active restaurants (open first, then by rating).
+   */
+  @Get("mobile/restaurants")
+  mobileListRestaurants(@Query() query: MobileListRestaurantsDto) {
+    return this.service.mobileListRestaurants({
+      city: query.city,
+      search: query.search,
+      cuisineType: query.cuisineType,
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  /** GET /api/restaurant/mobile/restaurants/:id — restaurant header + operating hours (no menus) */
+  @Get("mobile/restaurants/:id")
+  mobileGetRestaurant(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.mobileGetRestaurant(id);
+  }
+
+  /** GET /api/restaurant/mobile/restaurants/:id/menus — menu list for a restaurant */
+  @Get("mobile/restaurants/:id/menus")
+  mobileListMenus(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.mobileListMenus(id);
+  }
+
+  /** GET /api/restaurant/mobile/menus/:menuId — single menu with sections, meals, and option groups */
+  @Get("mobile/menus/:menuId")
+  mobileGetMenu(@Param("menuId", ParseUUIDPipe) menuId: string) {
+    return this.service.mobileGetMenu(menuId);
   }
 
   // ─── Must be last: wildcard catches any GET /:id not matched above ────────────

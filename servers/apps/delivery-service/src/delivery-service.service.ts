@@ -9,6 +9,9 @@ import { S3Service } from "./s3.service";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, In, Repository } from "typeorm";
 import { ClientProxy } from "@nestjs/microservices";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cache } from "cache-manager";
+import { DeliveryLocationLog } from "./entities/delivery-location-log.entity";
 import {
   AgentStatus,
   ApplicationAnswer,
@@ -44,8 +47,12 @@ export class DeliveryServiceService {
     private readonly agentRepo: Repository<DeliveryAgent>,
     @InjectRepository(DeliveryRequest)
     private readonly requestRepo: Repository<DeliveryRequest>,
+    @InjectRepository(DeliveryLocationLog)
+    private readonly locationRepo: Repository<DeliveryLocationLog>,
     @Inject("NATS_SERVICE")
     private readonly natsClient: ClientProxy,
+    @Inject(CACHE_MANAGER)
+    private readonly cache: Cache,
     private readonly s3: S3Service,
   ) {}
 
@@ -435,5 +442,56 @@ export class DeliveryServiceService {
     }
 
     return { data: null, message: "تم حذف المندوب." };
+  }
+
+  // ─── Live Location ─────────────────────────────────────────────────────────
+
+  async logLocation(agentId: string, lat: number, lng: number) {
+    // Persist GPS log entry
+    await this.locationRepo.save(
+      this.locationRepo.create({ deliveryId: agentId, lat, lng }),
+    );
+
+    // Cache current location (5-min TTL for quick lookup)
+    await this.cache.set(
+      `loc:${agentId}`,
+      { agentId, lat, lng, timestamp: Date.now() },
+      300_000,
+    );
+
+    return { data: { agentId, lat, lng }, message: null };
+  }
+
+  async getLocation(agentId: string) {
+    const cached = await this.cache.get<{ agentId: string; lat: number; lng: number; timestamp: number }>(
+      `loc:${agentId}`,
+    );
+    if (cached) return { data: cached, message: null };
+
+    // Fallback: last DB record
+    const last = await this.locationRepo.findOne({
+      where: { deliveryId: agentId },
+      order: { recordedAt: "DESC" },
+    });
+    return { data: last ?? null, message: null };
+  }
+
+  async listAvailableAgents() {
+    const agents = await this.agentRepo.find({
+      where: { status: AgentStatus.ACTIVE, isDelivery: true },
+      select: ["id", "userId", "fullName", "phone", "vehicleType", "city", "rating"],
+    });
+
+    // Enrich with last known Redis location (set by WebSocket gateway)
+    const data = await Promise.all(
+      agents.map(async (agent) => {
+        const location = await this.cache.get<{
+          lat: number; lng: number; timestamp: number;
+        }>(`loc:${agent.userId}`);
+        return { ...agent, location: location ?? null };
+      }),
+    );
+
+    return { data, total: agents.length };
   }
 }

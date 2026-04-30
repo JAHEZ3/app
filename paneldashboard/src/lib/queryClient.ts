@@ -52,4 +52,15 @@ export const queryKeys = {
   stats: {
     overview: ["stats", "overview"] as const,
   },
+  analytics: {
+    root: ["analytics"] as const,
+    publicStats: ["analytics", "public-stats"] as const,
+    overview: ["analytics", "overview"] as const,
+    orders: ["analytics", "orders"] as const,
+    revenue: ["analytics", "revenue"] as const,
+    restaurants: ["analytics", "restaurants"] as const,
+    customers: ["analytics", "customers"] as const,
+    delivery: ["analytics", "delivery"] as const,
+    payments: ["analytics", "payments"] as const,
+  },
 };
