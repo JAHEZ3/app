@@ -191,12 +191,21 @@ export const restaurantApi = {
   getTopMeals: () => restaurantInstance.get("/api/restaurant/me/top-meals"),
 };
 
-// ── Orders ────────────────────────────────────────────────────────────────────
+// ── Orders (port 3001) ────────────────────────────────────────────────────────
+const ORDER_URL = process.env.NEXT_PUBLIC_ORDER_URL || "http://localhost:3001";
+export const orderInstance = axios.create({ baseURL: ORDER_URL, headers: { "Content-Type": "application/json" } });
+orderInstance.interceptors.request.use(attachToken);
+orderInstance.interceptors.response.use((res) => res, (err) => handle401(err, orderInstance));
+
 export const ordersApi = {
-  getAll: (params?: object) => api.get("/api/orders", { params }),
-  getOne: (id: string) => api.get(`/api/orders/${id}`),
-  updateStatus: (id: string, data: object) =>
-    api.patch(`/api/orders/${id}/status`, data),
+  getAll:       (params?: object)          => orderInstance.get("/api/order/orders", { params }),
+  getOne:       (id: string)               => orderInstance.get(`/api/order/orders/${id}`),
+  updateStatus: (id: string, data: object) => orderInstance.patch(`/api/order/orders/${id}/status`, data),
+  getChat:      (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/chat`),
+  sendChat:     (orderId: string, content: string) => orderInstance.post(`/api/order/orders/${orderId}/chat`, { content }),
+  getReceipt:   (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/receipt`),
+  assignDelivery: (orderId: string, deliveryAgentId: string) =>
+    orderInstance.patch(`/api/order/orders/${orderId}/delivery`, { deliveryAgentId }),
 };
 
 // ── Menus / Sections / Meals / Option groups / Options (restaurant-service) ───

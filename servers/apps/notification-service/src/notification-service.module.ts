@@ -1,38 +1,70 @@
 import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
+import { JwtModule } from '@nestjs/jwt';
+import { BullModule } from '@nestjs/bullmq';
 import { redisStore } from 'cache-manager-redis-yet';
 import { NotificationServiceController } from './notification-service.controller';
 import { NotificationServiceService } from './notification-service.service';
 import { Notification } from './entities/notification.entity';
+import { NOTIFICATION_QUEUE } from './queue/queue.constants';
+import { NotificationProcessor } from './queue/notification.processor';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: +(process.env.DB_PORT || 5432),
-      username: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'jahez_db',
-      entities: [],
-      synchronize: true,
-      autoLoadEntities: true,
+    ConfigModule.forRoot({ isGlobal: true }),
+
+    TypeOrmModule.forRootAsync({
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get('DB_HOST', 'localhost'),
+        port: config.get<number>('DB_PORT', 5432),
+        username: config.get('DB_USER', 'postgres'),
+        password: config.get('DB_PASSWORD', 'postgres'),
+        database: config.get('DB_NAME', 'jahez_db'),
+        autoLoadEntities: true,
+        synchronize: config.get('NODE_ENV') !== 'production',
+      }),
+      inject: [ConfigService],
     }),
+
     TypeOrmModule.forFeature([Notification]),
+
     CacheModule.registerAsync({
       isGlobal: true,
-      useFactory: async () => ({
+      useFactory: async (config: ConfigService) => ({
         store: await redisStore({
           socket: {
-            host: process.env.REDIS_HOST || 'localhost',
-            port: +(process.env.REDIS_PORT || 6379),
+            host: config.get('REDIS_HOST', 'localhost'),
+            port: config.get<number>('REDIS_PORT', 6379),
           },
         }),
       }),
+      inject: [ConfigService],
     }),
+
+    JwtModule.register({}),
+
+    BullModule.forRootAsync({
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: config.get<number>('REDIS_PORT', 6379),
+        },
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 3_000 },
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 500 },
+        },
+      }),
+      inject: [ConfigService],
+    }),
+
+    BullModule.registerQueue({ name: NOTIFICATION_QUEUE }),
   ],
   controllers: [NotificationServiceController],
-  providers: [NotificationServiceService],
+  providers: [NotificationServiceService, NotificationProcessor],
 })
 export class NotificationServiceModule {}
