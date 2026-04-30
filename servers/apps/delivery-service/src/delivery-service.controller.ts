@@ -13,6 +13,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import { EventPattern, Payload } from "@nestjs/microservices";
 import { FileFieldsInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { DeliveryServiceService } from "./delivery-service.service";
@@ -197,5 +198,55 @@ export class DeliveryServiceController {
   @Roles("manager")
   adminDeleteAgent(@Param("id", ParseUUIDPipe) id: string) {
     return this.service.adminDeleteAgent(id);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LIVE LOCATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/delivery/location
+   * Auth: delivery role — persists a GPS log entry for the agent.
+   * Real-time broadcasting is handled by the WebSocket gateway in api-gateway.
+   */
+  @Post("location")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("delivery")
+  updateLocation(
+    @CurrentUser("sub") userId: string,
+    @Body() body: { lat: number; lng: number; orderId?: string },
+  ) {
+    return this.service.logLocation(userId, body.lat, body.lng);
+  }
+
+  /**
+   * GET /api/delivery/location/:agentId
+   * Returns current cached location for an agent (available to manager/restaurant_owner/customer).
+   */
+  @Get("location/:agentId")
+  @UseGuards(JwtAuthGuard)
+  getAgentLocation(@Param("agentId", ParseUUIDPipe) agentId: string) {
+    return this.service.getLocation(agentId);
+  }
+
+  /**
+   * GET /api/delivery/available
+   * Returns all active/online delivery agents.
+   * Available to manager and restaurant_owner.
+   */
+  @Get("available")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("manager", "restaurant_owner")
+  listAvailableAgents() {
+    return this.service.listAvailableAgents();
+  }
+
+  // ─── NATS event: persist location log ────────────────────────────────────
+
+  @EventPattern("delivery.location.updated")
+  handleLocationUpdated(
+    @Payload() data: { agentId: string; lat: number; lng: number; orderId?: string },
+  ) {
+    return this.service.logLocation(data.agentId, data.lat, data.lng);
   }
 }

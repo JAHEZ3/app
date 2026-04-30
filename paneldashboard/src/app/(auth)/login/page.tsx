@@ -3,16 +3,28 @@
 import { useState } from "react";
 import { Eye, EyeOff, Mail, Lock, Shield } from "lucide-react";
 import { useLogin } from "@/hooks/useAuth";
+import { usePublicStats } from "@/hooks/useAnalytics";
 import { extractApiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CountUp } from "@/components/ui/count-up";
 import { useToast } from "@/providers/ToastProvider";
+
+// Marketing fallback values shown if the public stats endpoint is unreachable.
+const FALLBACK_STATS = {
+  restaurants: 1200,
+  customers: 50_000,
+  completedOrders: 200_000,
+  uptimePercent: 99.9,
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const login = useLogin();
+  const { data: publicStats } = usePublicStats();
+  const stats = publicStats ?? FALLBACK_STATS;
   const { success, error } = useToast();
 
   const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
@@ -70,13 +82,65 @@ export default function LoginPage() {
 
           <div className="mt-10 grid grid-cols-2 gap-4">
             {[
-              { value: "+1200", label: "مطعم مسجّل" },
-              { value: "+50K",  label: "مستخدم نشط" },
-              { value: "+200K", label: "طلب مكتمل" },
-              { value: "99.9%", label: "وقت التشغيل" },
+              {
+                key: "restaurants",
+                label: "مطعم مسجّل",
+                node: (
+                  <CountUp
+                    value={stats.restaurants}
+                    prefix="+"
+                    compact
+                    decimals={0}
+                  />
+                ),
+              },
+              {
+                key: "customers",
+                label: "مستخدم نشط",
+                node: (
+                  <CountUp
+                    value={stats.customers}
+                    prefix="+"
+                    compact
+                    decimals={stats.customers >= 1000 ? 1 : 0}
+                  />
+                ),
+              },
+              {
+                key: "orders",
+                label: "طلب مكتمل",
+                node: (
+                  <CountUp
+                    value={stats.completedOrders}
+                    prefix="+"
+                    compact
+                    decimals={stats.completedOrders >= 1000 ? 1 : 0}
+                  />
+                ),
+              },
+              {
+                key: "uptime",
+                label: "وقت التشغيل",
+                node: (
+                  <CountUp
+                    value={stats.uptimePercent}
+                    suffix="%"
+                    decimals={1}
+                  />
+                ),
+              },
             ].map((s) => (
-              <div key={s.label} className="bg-white/10 rounded-xl p-4 text-center">
-                <p className="text-2xl font-black" style={{ color: "#F55905" }}>{s.value}</p>
+              <div
+                key={s.key}
+                className="bg-white/10 rounded-xl p-4 text-center backdrop-blur-sm border border-white/10 hover:bg-white/15 transition-colors"
+              >
+                <p
+                  className="text-3xl font-black tabular-nums"
+                  style={{ color: "#F55905" }}
+                  dir="ltr"
+                >
+                  {s.node}
+                </p>
                 <p className="text-sm text-white/60 mt-1">{s.label}</p>
               </div>
             ))}

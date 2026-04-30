@@ -191,12 +191,36 @@ export const restaurantApi = {
   getTopMeals: () => restaurantInstance.get("/api/restaurant/me/top-meals"),
 };
 
-// ── Orders ────────────────────────────────────────────────────────────────────
+// ── Analytics (restaurant-service, owner-scoped) ─────────────────────────────
+export const analyticsApi = {
+  overview: () => restaurantInstance.get("/api/restaurant/analytics"),
+  orders: () => restaurantInstance.get("/api/restaurant/analytics/orders"),
+  revenue: () => restaurantInstance.get("/api/restaurant/analytics/revenue"),
+  topMeals: () => restaurantInstance.get("/api/restaurant/analytics/top-meals"),
+  customers: () => restaurantInstance.get("/api/restaurant/analytics/customers"),
+  ratings: () => restaurantInstance.get("/api/restaurant/analytics/ratings"),
+  delivery: () => restaurantInstance.get("/api/restaurant/analytics/delivery"),
+  payments: () => restaurantInstance.get("/api/restaurant/analytics/payments"),
+  report: (period: "daily" | "weekly" | "monthly") =>
+    restaurantInstance.get("/api/restaurant/analytics/report", {
+      params: { period },
+    }),
+};
+
+// ── Orders (port 3001) ────────────────────────────────────────────────────────
+const ORDER_URL = process.env.NEXT_PUBLIC_ORDER_URL || "http://localhost:3001";
+export const orderInstance = axios.create({ baseURL: ORDER_URL, headers: { "Content-Type": "application/json" } });
+orderInstance.interceptors.request.use(attachToken);
+orderInstance.interceptors.response.use((res) => res, (err) => handle401(err, orderInstance));
 export const ordersApi = {
-  getAll: (params?: object) => api.get("/api/orders", { params }),
-  getOne: (id: string) => api.get(`/api/orders/${id}`),
-  updateStatus: (id: string, data: object) =>
-    api.patch(`/api/orders/${id}/status`, data),
+  getAll:       (params?: object)          => orderInstance.get("/api/order/orders", { params }),
+  getOne:       (id: string)               => orderInstance.get(`/api/order/orders/${id}`),
+  updateStatus: (id: string, data: object) => orderInstance.patch(`/api/order/orders/${id}/status`, data),
+  getChat:      (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/chat`),
+  sendChat:     (orderId: string, content: string) => orderInstance.post(`/api/order/orders/${orderId}/chat`, { content }),
+  getReceipt:   (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/receipt`),
+  assignDelivery: (orderId: string, deliveryAgentId: string) =>
+    orderInstance.patch(`/api/order/orders/${orderId}/delivery`, { deliveryAgentId }),
 };
 
 // ── Menus / Sections / Meals / Option groups / Options (restaurant-service) ───
@@ -211,6 +235,9 @@ export const menuApi = {
   deleteMenu: (menuId: string) =>
     restaurantInstance.delete(`/api/restaurant/menus/${menuId}`),
 
+  reorderMenus: (orderedIds: string[]) =>
+    restaurantInstance.patch(`/api/restaurant/menus/reorder`, { orderedIds }),
+
   // Sections (list/create are menu-scoped; update/delete are flat)
   listSections: (menuId: string) =>
     restaurantInstance.get(`/api/restaurant/menus/${menuId}/sections`),
@@ -220,6 +247,11 @@ export const menuApi = {
     restaurantInstance.patch(`/api/restaurant/sections/${sectionId}`, data),
   deleteSection: (sectionId: string) =>
     restaurantInstance.delete(`/api/restaurant/sections/${sectionId}`),
+  reorderSections: (menuId: string, orderedIds: string[]) =>
+    restaurantInstance.patch(
+      `/api/restaurant/menus/${menuId}/sections/reorder`,
+      { orderedIds },
+    ),
 };
 
 export const mealsApi = {
@@ -236,6 +268,11 @@ export const mealsApi = {
     restaurantInstance.patch(
       `/api/restaurant/meals/${mealId}/toggle-availability`,
     ),
+  reorder: (sectionId: string, orderedIds: string[]) =>
+    restaurantInstance.patch(
+      `/api/restaurant/sections/${sectionId}/meals/reorder`,
+      { orderedIds },
+    ),
 };
 
 export const optionGroupsApi = {
@@ -250,6 +287,26 @@ export const optionGroupsApi = {
     restaurantInstance.patch(`/api/restaurant/option-groups/${groupId}`, data),
   delete: (groupId: string) =>
     restaurantInstance.delete(`/api/restaurant/option-groups/${groupId}`),
+};
+
+// ── AI — Smart Menu Import ───────────────────────────────────────────────────
+export const aiMenuImportApi = {
+  /** Multipart, field name `image`. Returns { data: MenuExtraction }. */
+  analyze: (image: File) => {
+    const fd = new FormData();
+    fd.append("image", image);
+    return restaurantInstance.post(
+      "/api/restaurant/ai/menu-import/analyze",
+      fd,
+    );
+  },
+  /** Persists the (optionally edited) extraction. */
+  apply: (data: {
+    targetMenuId?: string;
+    menuName?: string;
+    extraction: unknown;
+  }) =>
+    restaurantInstance.post("/api/restaurant/ai/menu-import/apply", data),
 };
 
 export const optionsApi = {
