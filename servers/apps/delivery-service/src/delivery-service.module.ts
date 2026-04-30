@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ClientsModule, Transport } from "@nestjs/microservices";
+import { CacheModule } from "@nestjs/cache-manager";
+import { redisStore } from "cache-manager-redis-yet";
 import { DeliveryServiceController } from "./delivery-service.controller";
 import { DeliveryServiceService } from "./delivery-service.service";
 import { S3Service } from "./s3.service";
@@ -41,6 +43,19 @@ import { DeliveryLocationLog } from "./entities/delivery-location-log.entity";
       Delivery,
       DeliveryLocationLog,
     ]),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useFactory: async (config: ConfigService) => ({
+        store: await redisStore({
+          socket: {
+            host: config.get<string>("REDIS_HOST", "localhost"),
+            port: config.get<number>("REDIS_PORT", 6379),
+          },
+        }),
+      }),
+      inject: [ConfigService],
+    }),
+
     // JwtModule with no default config — secret is read per-call in the guard
     JwtModule.register({}),
 
