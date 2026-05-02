@@ -1,466 +1,696 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    View,
-    ScrollView,
-    StyleSheet,
-    StatusBar,
-    Pressable,
-    RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import AppText from '@/components/ui/AppText';
-import { useRestaurantDetails } from '../hooks/useRestaurantDetails';
-import { useRestaurantMenus } from '../hooks/useRestaurantMenus';
-import { useMenuSections } from '../hooks/useMenuSections';
-import { RestaurantDetails } from '../entities/RestaurantDetails';
-import DetailsHeroSkeleton from '../components/DetailsHeroSkeleton';
-import ListErrorState from '../components/ListErrorState';
-import MenuTabs from '../components/MenuTabs';
-import MealsList from '../components/MealsList';
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import AnimatedPressable from "@/components/ui/AnimatedPressable";
+import FloatingTabBar from "@/components/ui/FloatingTabBar";
+import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
+import { useCartStore } from "@/store/useCartStore";
+import { useRestaurantDetails } from "../hooks/useRestaurantDetails";
+import { useRestaurantMenus } from "../hooks/useRestaurantMenus";
+import { useMenuSections } from "../hooks/useMenuSections";
+import { RestaurantDetails } from "../entities/RestaurantDetails";
+import { MenuSection } from "../entities/MenuSection";
+import { formatCuisineType, imageSource } from "../utils/foodImages";
+import DetailsHeroSkeleton from "../components/DetailsHeroSkeleton";
+import ListErrorState from "../components/ListErrorState";
+import MenuTabs from "../components/MenuTabs";
+import MealsList from "../components/MealsList";
 
-const COVER_BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
+const COVER_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
-const formatAddress = (r: RestaurantDetails) => {
-    if (r.address) return r.address;
-    const parts = [r.street, r.city].filter(Boolean);
-    return parts.length ? parts.join(', ') : r.city;
+const formatAddress = (restaurant: RestaurantDetails) => {
+  if (restaurant.address) return restaurant.address;
+  const parts = [restaurant.street, restaurant.city].filter(Boolean);
+  return parts.length ? parts.join(", ") : restaurant.city;
 };
 
-const InfoRow = ({
-    icon,
-    label,
-    value,
+const formatPrice = (value: number) => `${value.toFixed(value % 1 === 0 ? 0 : 2)} SAR`;
+
+function StatChip({
+  icon,
+  label,
+  value,
 }: {
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value: string;
-}) => (
-    <View style={styles.infoRow}>
-        <View style={styles.infoIcon}>
-            <Ionicons name={icon} size={16} color="#F55905" />
-        </View>
-        <View style={{ flex: 1 }}>
-            <AppText variant="body-sm" align="left" style={styles.infoLabel}>
-                {label}
-            </AppText>
-            <AppText variant="body-md" align="left" style={styles.infoValue} numberOfLines={2}>
-                {value}
-            </AppText>
-        </View>
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.statChip}>
+      <View style={styles.statIcon}>
+        <Ionicons name={icon} size={16} color={colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.statLabel}>{label}</Text>
+        <Text style={styles.statValue} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
     </View>
-);
+  );
+}
+
+function SectionTabs({
+  sections,
+  selectedSectionId,
+  onSelect,
+  isLoading,
+}: {
+  sections: MenuSection[];
+  selectedSectionId: string | null;
+  onSelect: (id: string) => void;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.sectionTabsRow}
+      >
+        {[112, 94, 128].map((width) => (
+          <View key={width} style={[styles.sectionTabSkeleton, { width }]} />
+        ))}
+      </ScrollView>
+    );
+  }
+
+  if (!sections.length) return null;
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.sectionTabsRow}
+    >
+      {sections.map((section) => {
+        const selected = section.id === selectedSectionId;
+        return (
+          <AnimatedPressable
+            key={section.id}
+            onPress={() => onSelect(section.id)}
+            style={[styles.sectionTab, selected && styles.sectionTabSelected]}
+          >
+            <Text style={[styles.sectionTabText, selected && styles.sectionTabTextSelected]} numberOfLines={1}>
+              {section.name}
+            </Text>
+            <View style={[styles.sectionCount, selected && styles.sectionCountSelected]}>
+              <Text style={[styles.sectionCountText, selected && styles.sectionCountTextSelected]}>
+                {section.meals.length}
+              </Text>
+            </View>
+          </AnimatedPressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoIcon}>
+        <Ionicons name={icon} size={16} color={colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue} numberOfLines={2}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 const RestaurantDetailsScreen = () => {
-    const { id } = useLocalSearchParams<{ id: string }>();
-    const { data, isLoading, isError, error, refetch, isRefetching } =
-        useRestaurantDetails(id);
-    const {
-        menus,
-        selectedMenuId,
-        selectMenu,
-        isLoading: menusLoading,
-        isError: menusError,
-        refetch: refetchMenus,
-    } = useRestaurantMenus(id);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const addCartItem = useCartStore((state) => state.addItem);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
 
-    const {
-        data: sections = [],
-        isLoading: sectionsLoading,
-        isError: sectionsError,
-        refetch: refetchSections,
-    } = useMenuSections(id, selectedMenuId ?? undefined);
+  const { data, isLoading, isError, error, refetch, isRefetching } =
+    useRestaurantDetails(id);
 
-    const handleBack = useCallback(() => {
-        if (router.canGoBack()) router.back();
-        else router.replace('/restaurants' as never);
-    }, []);
+  const {
+    menus,
+    selectedMenuId,
+    selectMenu,
+    isLoading: menusLoading,
+    isError: menusError,
+    refetch: refetchMenus,
+  } = useRestaurantMenus(id);
 
-    const address = useMemo(() => (data ? formatAddress(data) : ''), [data]);
+  const {
+    data: sections = [],
+    isLoading: sectionsLoading,
+    isError: sectionsError,
+    refetch: refetchSections,
+  } = useMenuSections(id, selectedMenuId ?? undefined);
 
-    if (isLoading) {
-        return (
-            <SafeAreaView style={styles.safe} edges={['top']}>
-                <StatusBar barStyle="dark-content" backgroundColor="#F7F7F7" />
-                <View style={styles.topBar}>
-                    <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={10}>
-                        <Ionicons name="chevron-back" size={22} color="#0F172A" />
-                    </Pressable>
-                </View>
-                <DetailsHeroSkeleton />
-            </SafeAreaView>
-        );
+  useEffect(() => {
+    if (!sections.length) {
+      setSelectedSectionId(null);
+      return;
     }
 
-    if (isError || !data) {
-        return (
-            <SafeAreaView style={styles.safe} edges={['top']}>
-                <StatusBar barStyle="dark-content" backgroundColor="#F7F7F7" />
-                <View style={styles.topBar}>
-                    <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={10}>
-                        <Ionicons name="chevron-back" size={22} color="#0F172A" />
-                    </Pressable>
-                </View>
-                <ListErrorState
-                    title="Couldn’t load restaurant"
-                    message={error?.message ?? 'Please try again in a moment.'}
-                    onRetry={refetch}
-                    loading={isRefetching}
-                />
-            </SafeAreaView>
-        );
+    const stillExists = sections.some((section) => section.id === selectedSectionId);
+    if (!stillExists) {
+      setSelectedSectionId(sections[0].id);
     }
+  }, [sections, selectedSectionId]);
 
-    const {
-        name,
-        coverUrl,
-        logoUrl,
-        cuisineType,
-        rating,
-        totalRatings,
-        minOrderAmount,
-        isOpen,
-        description,
-        phone,
-        deliveryFee,
-        estimatedDeliveryTime,
-        openingHours,
-    } = data;
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/restaurants" as never);
+  }, []);
 
+  const handleRefresh = useCallback(() => {
+    refetch();
+    refetchMenus();
+    refetchSections();
+  }, [refetch, refetchMenus, refetchSections]);
+
+  const address = useMemo(() => (data ? formatAddress(data) : ""), [data]);
+  const activeSection = useMemo(
+    () => sections.find((section) => section.id === selectedSectionId) ?? null,
+    [sections, selectedSectionId],
+  );
+
+  if (isLoading) {
     return (
-        <SafeAreaView style={styles.safe} edges={['top']}>
-            <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
-
-            <ScrollView
-                contentContainerStyle={styles.scroll}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={isRefetching}
-                        onRefresh={refetch}
-                        tintColor="#F55905"
-                        colors={['#F55905']}
-                    />
-                }
-            >
-                <View style={styles.heroWrap}>
-                    <Image
-                        source={{ uri: coverUrl }}
-                        placeholder={COVER_BLURHASH}
-                        contentFit="cover"
-                        transition={250}
-                        style={styles.cover}
-                    />
-                    <View style={styles.coverScrim} />
-
-                    <View style={styles.topBarOverlay}>
-                        <Pressable onPress={handleBack} style={styles.backBtnDark} hitSlop={10}>
-                            <Ionicons name="chevron-back" size={22} color="#fff" />
-                        </Pressable>
-                        <View
-                            style={[
-                                styles.statusBadge,
-                                { backgroundColor: isOpen ? '#16A34A' : '#9CA3AF' },
-                            ]}
-                        >
-                            <View style={styles.statusDot} />
-                            <AppText variant="body-sm" align="left" style={styles.statusText}>
-                                {isOpen ? 'Open now' : 'Closed'}
-                            </AppText>
-                        </View>
-                    </View>
-
-                    <View style={styles.logoWrap}>
-                        <Image source={{ uri: logoUrl }} contentFit="cover" style={styles.logo} />
-                    </View>
-                </View>
-
-                <View style={styles.titleBlock}>
-                    <AppText variant="headline-lg" align="left" style={styles.name}>
-                        {name}
-                    </AppText>
-                    <View style={styles.metaRow}>
-                        <View style={styles.ratingPill}>
-                            <Ionicons name="star" size={13} color="#F59E0B" />
-                            <AppText variant="body-sm" align="left" style={styles.ratingText}>
-                                {rating.toFixed(1)}
-                            </AppText>
-                            <AppText variant="body-sm" align="left" style={styles.ratingCount}>
-                                ({totalRatings} reviews)
-                            </AppText>
-                        </View>
-                        <View style={styles.cuisinePill}>
-                            <Ionicons name="restaurant-outline" size={13} color="#F55905" />
-                            <AppText variant="body-sm" align="left" style={styles.cuisineText}>
-                                {cuisineType}
-                            </AppText>
-                        </View>
-                    </View>
-                </View>
-
-                <View style={styles.menusBlock}>
-                    <View style={styles.menusHeader}>
-                        <AppText variant="headline-sm" align="left" style={styles.sectionTitle}>
-                            Menus
-                        </AppText>
-                        {menus.length > 0 && (
-                            <AppText variant="body-sm" align="left" style={styles.menusCount}>
-                                {menus.length} {menus.length === 1 ? 'menu' : 'menus'}
-                            </AppText>
-                        )}
-                    </View>
-                    <MenuTabs
-                        menus={menus}
-                        selectedMenuId={selectedMenuId}
-                        onSelect={selectMenu}
-                        isLoading={menusLoading}
-                        isError={menusError}
-                        onRetry={refetchMenus}
-                    />
-                </View>
-
-                <MealsList
-                    sections={sections}
-                    isLoading={sectionsLoading}
-                    isError={sectionsError}
-                    onRetry={refetchSections}
-                />
-
-                <View style={styles.statsRow}>
-                    <View style={styles.statCard}>
-                        <Ionicons name="cart-outline" size={18} color="#F55905" />
-                        <AppText variant="body-sm" align="center" style={styles.statLabel}>
-                            Min order
-                        </AppText>
-                        <AppText variant="body-md" align="center" style={styles.statValue}>
-                            {minOrderAmount.toFixed(0)} SAR
-                        </AppText>
-                    </View>
-                    {deliveryFee != null && (
-                        <View style={styles.statCard}>
-                            <Ionicons name="bicycle-outline" size={18} color="#F55905" />
-                            <AppText variant="body-sm" align="center" style={styles.statLabel}>
-                                Delivery
-                            </AppText>
-                            <AppText variant="body-md" align="center" style={styles.statValue}>
-                                {deliveryFee.toFixed(0)} SAR
-                            </AppText>
-                        </View>
-                    )}
-                    {estimatedDeliveryTime != null && (
-                        <View style={styles.statCard}>
-                            <Ionicons name="time-outline" size={18} color="#F55905" />
-                            <AppText variant="body-sm" align="center" style={styles.statLabel}>
-                                ETA
-                            </AppText>
-                            <AppText variant="body-md" align="center" style={styles.statValue}>
-                                {estimatedDeliveryTime} min
-                            </AppText>
-                        </View>
-                    )}
-                </View>
-
-                {description ? (
-                    <View style={styles.section}>
-                        <AppText variant="headline-sm" align="left" style={styles.sectionTitle}>
-                            About
-                        </AppText>
-                        <AppText variant="body-md" align="left" style={styles.description}>
-                            {description}
-                        </AppText>
-                    </View>
-                ) : null}
-
-                <View style={styles.section}>
-                    <AppText variant="headline-sm" align="left" style={styles.sectionTitle}>
-                        Information
-                    </AppText>
-                    <View style={styles.infoCard}>
-                        <InfoRow icon="location-outline" label="Address" value={address} />
-                        <View style={styles.divider} />
-                        <InfoRow
-                            icon={isOpen ? 'checkmark-circle-outline' : 'close-circle-outline'}
-                            label="Status"
-                            value={isOpen ? 'Open now' : 'Currently closed'}
-                        />
-                        {openingHours ? (
-                            <>
-                                <View style={styles.divider} />
-                                <InfoRow icon="time-outline" label="Hours" value={openingHours} />
-                            </>
-                        ) : null}
-                        {phone ? (
-                            <>
-                                <View style={styles.divider} />
-                                <InfoRow icon="call-outline" label="Phone" value={phone} />
-                            </>
-                        ) : null}
-                    </View>
-                </View>
-            </ScrollView>
-        </SafeAreaView>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+        <View style={styles.loadingTopBar}>
+          <AnimatedPressable onPress={handleBack} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
+          </AnimatedPressable>
+        </View>
+        <DetailsHeroSkeleton />
+      </SafeAreaView>
     );
+  }
+
+  if (isError || !data) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+        <View style={styles.loadingTopBar}>
+          <AnimatedPressable onPress={handleBack} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
+          </AnimatedPressable>
+        </View>
+        <ListErrorState
+          title="Couldn't load restaurant"
+          message={error?.message ?? "Please try again in a moment."}
+          onRetry={refetch}
+          loading={isRefetching}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const {
+    name,
+    coverUrl,
+    logoUrl,
+    cuisineType,
+    rating,
+    totalRatings,
+    minOrderAmount,
+    isOpen,
+    description,
+    phone,
+    deliveryFee,
+    estimatedDeliveryTime,
+    openingHours,
+  } = data;
+
+  return (
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.onSurface} />
+
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        <View style={styles.heroWrap}>
+          <Image
+            source={imageSource(coverUrl, cuisineType)}
+            placeholder={COVER_BLURHASH}
+            contentFit="cover"
+            transition={250}
+            style={styles.cover}
+          />
+          <LinearGradient
+            colors={["rgba(30,30,30,0.12)", "rgba(30,30,30,0.62)"]}
+            style={styles.coverScrim}
+          />
+
+          <View style={styles.topBarOverlay}>
+            <AnimatedPressable onPress={handleBack} style={styles.overlayIconButton}>
+              <Ionicons name="chevron-back" size={22} color={colors.onPrimary} />
+            </AnimatedPressable>
+            <AnimatedPressable style={styles.overlayIconButton}>
+              <Ionicons name="heart-outline" size={20} color={colors.onPrimary} />
+            </AnimatedPressable>
+          </View>
+
+          <View style={styles.heroContent}>
+            <View style={styles.logoWrap}>
+              <Image
+                source={imageSource(logoUrl, cuisineType)}
+                contentFit="cover"
+                transition={150}
+                style={styles.logo}
+              />
+            </View>
+            <View style={styles.heroCopy}>
+              <View
+                style={[
+                  styles.heroStatus,
+                  isOpen ? styles.openStatus : styles.closedStatus,
+                ]}
+              >
+                <View style={styles.statusDot} />
+                <Text style={styles.heroStatusText}>{isOpen ? "Open now" : "Closed"}</Text>
+              </View>
+              <Text style={styles.name} numberOfLines={2}>
+                {name}
+              </Text>
+              <Text style={styles.cuisineText}>{formatCuisineType(cuisineType)}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <View style={styles.metaCard}>
+            <StatChip icon="star" label="Rating" value={`${rating.toFixed(1)} (${totalRatings})`} />
+            <View style={styles.metaDivider} />
+            <StatChip icon="cart-outline" label="Min order" value={formatPrice(minOrderAmount)} />
+            {estimatedDeliveryTime != null ? (
+              <>
+                <View style={styles.metaDivider} />
+                <StatChip icon="time-outline" label="ETA" value={`${estimatedDeliveryTime} min`} />
+              </>
+            ) : null}
+          </View>
+
+          {description ? (
+            <View style={styles.aboutBlock}>
+              <Text style={styles.blockTitle}>About</Text>
+              <Text style={styles.description}>{description}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.menuBlock}>
+          <View style={styles.blockHeader}>
+            <Text style={styles.blockTitle}>Menus</Text>
+            <Text style={styles.blockMeta}>
+              {menus.length ? `${menus.length} menu${menus.length === 1 ? "" : "s"}` : ""}
+            </Text>
+          </View>
+          <MenuTabs
+            menus={menus}
+            selectedMenuId={selectedMenuId}
+            onSelect={selectMenu}
+            isLoading={menusLoading}
+            isError={menusError}
+            onRetry={refetchMenus}
+          />
+
+          <View style={styles.blockHeader}>
+            <Text style={styles.blockTitle}>Sections</Text>
+            <Text style={styles.blockMeta}>
+              {sections.length ? `${sections.length} section${sections.length === 1 ? "" : "s"}` : ""}
+            </Text>
+          </View>
+          <SectionTabs
+            sections={sections}
+            selectedSectionId={selectedSectionId}
+            onSelect={setSelectedSectionId}
+            isLoading={sectionsLoading}
+          />
+        </View>
+
+        <MealsList
+          sections={activeSection ? [activeSection] : []}
+          isLoading={sectionsLoading}
+          isError={sectionsError}
+          onRetry={refetchSections}
+          onAddToCart={addCartItem}
+          showSectionHeaders={false}
+        />
+
+        <View style={styles.infoSection}>
+          <Text style={styles.blockTitle}>Information</Text>
+          <View style={styles.infoCard}>
+            <InfoRow icon="location-outline" label="Address" value={address} />
+            <View style={styles.infoDivider} />
+            <InfoRow
+              icon={isOpen ? "checkmark-circle-outline" : "close-circle-outline"}
+              label="Status"
+              value={isOpen ? "Open now" : "Currently closed"}
+            />
+            {deliveryFee != null ? (
+              <>
+                <View style={styles.infoDivider} />
+                <InfoRow icon="bicycle-outline" label="Delivery fee" value={formatPrice(deliveryFee)} />
+              </>
+            ) : null}
+            {openingHours ? (
+              <>
+                <View style={styles.infoDivider} />
+                <InfoRow icon="time-outline" label="Hours" value={openingHours} />
+              </>
+            ) : null}
+            {phone ? (
+              <>
+                <View style={styles.infoDivider} />
+                <InfoRow icon="call-outline" label="Phone" value={phone} />
+              </>
+            ) : null}
+          </View>
+        </View>
+      </ScrollView>
+
+      <FloatingTabBar />
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
-    safe: { flex: 1, backgroundColor: '#F7F7F7' },
-    topBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    backBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-        elevation: 2,
-    },
-    backBtnDark: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(15,23,42,0.55)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    scroll: { paddingBottom: 32 },
-    heroWrap: { width: '100%', aspectRatio: 16 / 10, position: 'relative', backgroundColor: '#E5E7EB' },
-    cover: { width: '100%', height: '100%' },
-    coverScrim: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(15,23,42,0.18)',
-    },
-    topBarOverlay: {
-        position: 'absolute',
-        top: 12,
-        left: 16,
-        right: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    statusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 999,
-    },
-    statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
-    statusText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-    logoWrap: {
-        position: 'absolute',
-        bottom: -28,
-        left: 20,
-        width: 76,
-        height: 76,
-        borderRadius: 20,
-        backgroundColor: '#fff',
-        padding: 4,
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.18,
-        shadowRadius: 10,
-        elevation: 6,
-    },
-    logo: { width: '100%', height: '100%', borderRadius: 16 },
-    titleBlock: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 8, gap: 10 },
-    name: { color: '#0F172A', fontSize: 26 },
-    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    ratingPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5,
-        backgroundColor: '#FEF3C7',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 999,
-    },
-    ratingText: { color: '#92400E', fontWeight: '700', fontSize: 12 },
-    ratingCount: { color: '#A16207', fontSize: 11 },
-    cuisinePill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5,
-        backgroundColor: '#FFF3EC',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 999,
-    },
-    cuisineText: { color: '#F55905', fontWeight: '600', fontSize: 12 },
-    menusBlock: { marginTop: 18, gap: 10 },
-    menusHeader: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-    },
-    menusCount: { color: '#6B7280' },
-    statsRow: {
-        flexDirection: 'row',
-        gap: 10,
-        paddingHorizontal: 20,
-        marginTop: 18,
-    },
-    statCard: {
-        flex: 1,
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        paddingVertical: 14,
-        paddingHorizontal: 8,
-        alignItems: 'center',
-        gap: 4,
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 1,
-    },
-    statLabel: { color: '#6B7280', fontSize: 11 },
-    statValue: { color: '#0F172A', fontWeight: '700' },
-    section: { paddingHorizontal: 20, marginTop: 22, gap: 10 },
-    sectionTitle: { color: '#0F172A' },
-    description: { color: '#475569', lineHeight: 22 },
-    infoCard: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 4,
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 1,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-    },
-    infoIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 12,
-        backgroundColor: '#FFF3EC',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    infoLabel: { color: '#6B7280', fontSize: 11, marginBottom: 2 },
-    infoValue: { color: '#0F172A', fontWeight: '600' },
-    divider: { height: 1, backgroundColor: '#F1F5F9', marginHorizontal: 14 },
+  safe: {
+    flex: 1,
+    backgroundColor: colors.surface,
+  },
+  loadingTopBar: {
+    paddingHorizontal: screen.horizontal,
+    paddingVertical: 12,
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.soft,
+  },
+  scroll: {
+    paddingBottom: screen.bottomTabSpace + 20,
+  },
+  heroWrap: {
+    width: "100%",
+    height: 300,
+    position: "relative",
+    overflow: "hidden",
+    borderBottomLeftRadius: 34,
+    borderBottomRightRadius: 34,
+    backgroundColor: colors.surfaceContainerHighest,
+  },
+  cover: {
+    width: "100%",
+    height: "100%",
+  },
+  coverScrim: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  topBarOverlay: {
+    position: "absolute",
+    top: 14,
+    left: screen.horizontal,
+    right: screen.horizontal,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  overlayIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(30,30,30,0.42)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroContent: {
+    position: "absolute",
+    left: screen.horizontal,
+    right: screen.horizontal,
+    bottom: 20,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 13,
+  },
+  logoWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    backgroundColor: colors.card,
+    padding: 4,
+    ...shadows.card,
+  },
+  logo: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 20,
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 5,
+  },
+  heroStatus: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+  openStatus: {
+    backgroundColor: "rgba(22,163,74,0.9)",
+  },
+  closedStatus: {
+    backgroundColor: "rgba(118,119,119,0.9)",
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.onPrimary,
+  },
+  heroStatusText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onPrimary,
+    fontSize: 11,
+  },
+  name: {
+    fontFamily: typography.headline,
+    color: colors.onPrimary,
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  cuisineText: {
+    fontFamily: typography.bodyMedium,
+    color: "rgba(255,255,255,0.84)",
+    fontSize: 13,
+  },
+  content: {
+    paddingHorizontal: screen.horizontal,
+    paddingTop: 18,
+    gap: 18,
+  },
+  metaCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: 12,
+    gap: 10,
+    ...shadows.soft,
+  },
+  statChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.faintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statLabel: {
+    fontFamily: typography.body,
+    color: colors.outline,
+    fontSize: 11,
+  },
+  statValue: {
+    fontFamily: typography.bodyBold,
+    color: colors.onSurface,
+    fontSize: 14,
+    marginTop: 1,
+  },
+  metaDivider: {
+    height: 1,
+    backgroundColor: colors.surfaceContainer,
+    marginLeft: 46,
+  },
+  aboutBlock: {
+    gap: 7,
+  },
+  blockTitle: {
+    fontFamily: typography.headlineSemi,
+    color: colors.onSurface,
+    fontSize: 18,
+  },
+  blockMeta: {
+    fontFamily: typography.bodyMedium,
+    color: colors.outline,
+    fontSize: 12,
+  },
+  description: {
+    fontFamily: typography.body,
+    color: colors.outline,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  menuBlock: {
+    paddingTop: 22,
+    gap: 10,
+  },
+  blockHeader: {
+    paddingHorizontal: screen.horizontal,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionTabsRow: {
+    paddingHorizontal: screen.horizontal,
+    gap: 10,
+    paddingBottom: 8,
+  },
+  sectionTab: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 15,
+    borderRadius: radii.pill,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainerHighest,
+  },
+  sectionTabSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    ...shadows.primary,
+  },
+  sectionTabText: {
+    maxWidth: 150,
+    fontFamily: typography.bodyBold,
+    color: colors.onSurface,
+    fontSize: 13,
+  },
+  sectionTabTextSelected: {
+    color: colors.onPrimary,
+  },
+  sectionCount: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainer,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  sectionCountSelected: {
+    backgroundColor: "rgba(255,255,255,0.24)",
+  },
+  sectionCountText: {
+    fontFamily: typography.bodyBold,
+    color: colors.outline,
+    fontSize: 11,
+  },
+  sectionCountTextSelected: {
+    color: colors.onPrimary,
+  },
+  sectionTabSkeleton: {
+    height: 42,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainerHighest,
+  },
+  infoSection: {
+    paddingHorizontal: screen.horizontal,
+    paddingTop: 24,
+    gap: 10,
+  },
+  infoCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: 4,
+    ...shadows.soft,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  infoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.faintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoLabel: {
+    color: colors.outline,
+    fontFamily: typography.body,
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  infoValue: {
+    color: colors.onSurface,
+    fontFamily: typography.bodyBold,
+    fontSize: 13,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: colors.surfaceContainer,
+    marginHorizontal: 12,
+    marginLeft: 60,
+  },
 });
 
 export default RestaurantDetailsScreen;

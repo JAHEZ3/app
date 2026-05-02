@@ -1,134 +1,185 @@
-import React, { memo, useCallback } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import AppText from '@/components/ui/AppText';
-import { Meal } from '../entities/Meal';
+import React, { memo, useCallback } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
+import AnimatedPressable from "@/components/ui/AnimatedPressable";
+import { colors, radii, shadows, typography } from "@/components/ui/theme";
+import { Meal } from "../entities/Meal";
+import { getMealImageSource } from "../utils/foodImages";
 
-const MEAL_BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
+const MEAL_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
 interface MealCardProps {
-    meal: Meal;
-    onPress: (meal: Meal) => void;
-    currency?: string;
+  meal: Meal;
+  onPress: (meal: Meal) => void;
+  currency?: string;
 }
 
-const MealCard = ({ meal, onPress, currency = 'SAR' }: MealCardProps) => {
-    const handlePress = useCallback(() => onPress(meal), [meal, onPress]);
+const formatPrice = (value: number, currency: string) =>
+  `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
-    return (
-        <Pressable
-            onPress={handlePress}
-            android_ripple={{ color: 'rgba(245,89,5,0.07)' }}
-            style={({ pressed }) => [
-                styles.card,
-                !meal.isAvailable && styles.cardUnavailable,
-                pressed && { opacity: 0.94 },
-            ]}
-        >
-            <View style={styles.info}>
-                <AppText variant="body-md" align="left" style={styles.name} numberOfLines={2}>
-                    {meal.name}
-                </AppText>
-                {meal.description ? (
-                    <AppText variant="body-sm" align="left" style={styles.description} numberOfLines={2}>
-                        {meal.description}
-                    </AppText>
-                ) : null}
-                <View style={styles.footer}>
-                    <AppText variant="body-md" align="left" style={styles.price}>
-                        {meal.price.toFixed(2)} {currency}
-                    </AppText>
-                    {meal.optionGroups.length > 0 && (
-                        <AppText variant="body-sm" align="left" style={styles.customizable}>
-                            Customizable
-                        </AppText>
-                    )}
-                </View>
-            </View>
+const MealCard = ({ meal, onPress, currency = "SAR" }: MealCardProps) => {
+  const handlePress = useCallback(() => onPress(meal), [meal, onPress]);
+  const calories = meal.calories ? `${Math.round(meal.calories)} Kcal` : null;
 
-            <View style={styles.imageWrap}>
-                {meal.imageUrl ? (
-                    <Image
-                        source={{ uri: meal.imageUrl }}
-                        placeholder={MEAL_BLURHASH}
-                        contentFit="cover"
-                        transition={150}
-                        style={styles.image}
-                    />
-                ) : (
-                    <View style={styles.imageFallback}>
-                        <Ionicons name="fast-food-outline" size={24} color="#CBD5E1" />
-                    </View>
-                )}
-                {!meal.isAvailable && (
-                    <View style={styles.unavailableOverlay}>
-                        <AppText variant="body-sm" align="center" style={styles.unavailableText}>
-                            Unavailable
-                        </AppText>
-                    </View>
-                )}
-                <View style={styles.addBtn}>
-                    <Ionicons name="add" size={16} color="#fff" />
-                </View>
+  return (
+    <AnimatedPressable
+      onPress={handlePress}
+      haptic="impact"
+      disabled={!meal.isAvailable}
+      disabledStyle={styles.cardUnavailable}
+      style={styles.card}
+    >
+      <View style={styles.imageWrap}>
+        <Image
+          source={getMealImageSource(meal.imageUrl, meal.tags)}
+          placeholder={MEAL_BLURHASH}
+          contentFit="cover"
+          transition={180}
+          style={styles.image}
+        />
+        {meal.isFeatured ? (
+          <View style={styles.featuredBadge}>
+            <Ionicons name="sparkles" size={11} color={colors.onPrimary} />
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.info}>
+        <View style={styles.titleRow}>
+          <Text style={styles.name} numberOfLines={2}>
+            {meal.name}
+          </Text>
+          <View style={styles.addBtn}>
+            <Ionicons name="add" size={16} color={colors.onPrimary} />
+          </View>
+        </View>
+
+        {meal.description ? (
+          <Text style={styles.description} numberOfLines={2}>
+            {meal.description}
+          </Text>
+        ) : null}
+
+        <View style={styles.footer}>
+          <View style={styles.pricePill}>
+            <Text style={styles.price}>{formatPrice(meal.price, currency)}</Text>
+          </View>
+          {calories ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="flame-outline" size={13} color={colors.outline} />
+              <Text style={styles.metaText}>{calories}</Text>
             </View>
-        </Pressable>
-    );
+          ) : null}
+          {meal.optionGroups.length > 0 ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="options-outline" size={13} color={colors.outline} />
+              <Text style={styles.metaText}>{meal.optionGroups.length}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </AnimatedPressable>
+  );
 };
 
 const styles = StyleSheet.create({
-    card: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    cardUnavailable: { opacity: 0.55 },
-    info: { flex: 1, gap: 4 },
-    name: { color: '#0F172A', fontWeight: '700', fontSize: 14 },
-    description: { color: '#6B7280', lineHeight: 18 },
-    footer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-    price: { color: '#F55905', fontWeight: '700' },
-    customizable: {
-        color: '#94A3B8',
-        fontSize: 11,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        borderRadius: 999,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-    },
-    imageWrap: { width: 88, height: 88, borderRadius: 12, overflow: 'hidden', position: 'relative' },
-    image: { width: '100%', height: '100%' },
-    imageFallback: {
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#F8FAFC',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    unavailableOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(255,255,255,0.7)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    unavailableText: { color: '#94A3B8', fontWeight: '700', fontSize: 11 },
-    addBtn: {
-        position: 'absolute',
-        bottom: 6,
-        right: 6,
-        width: 26,
-        height: 26,
-        borderRadius: 13,
-        backgroundColor: '#F55905',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainerHighest,
+    ...shadows.soft,
+  },
+  cardUnavailable: {
+    opacity: 0.5,
+  },
+  imageWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: radii.lg,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: colors.surfaceContainer,
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+  },
+  featuredBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  info: {
+    flex: 1,
+    minHeight: 96,
+    justifyContent: "space-between",
+    gap: 7,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  name: {
+    flex: 1,
+    fontFamily: typography.headlineSemi,
+    color: colors.onSurface,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  addBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  description: {
+    fontFamily: typography.body,
+    color: colors.outline,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  pricePill: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+    backgroundColor: colors.faintPrimary,
+  },
+  price: {
+    fontFamily: typography.bodyBold,
+    color: colors.primary,
+    fontSize: 12,
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontFamily: typography.bodyMedium,
+    color: colors.outline,
+    fontSize: 11,
+  },
 });
 
 export default memo(MealCard);

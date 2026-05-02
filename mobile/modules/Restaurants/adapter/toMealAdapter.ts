@@ -34,7 +34,12 @@ export const toMealAdapter = (dto: MealDTO): Meal => ({
     name: dto.name,
     description: dto.description,
     imageUrl: dto.imageUrl,
-    price: Number(dto.price ?? 0),
+    price: Number(dto.discountPrice ?? dto.price ?? dto.basePrice ?? 0),
+    basePrice: dto.basePrice != null ? Number(dto.basePrice) : undefined,
+    discountPrice: dto.discountPrice != null ? Number(dto.discountPrice) : undefined,
+    calories: dto.calories != null ? Number(dto.calories) : undefined,
+    isFeatured: Boolean(dto.isFeatured),
+    tags: dto.tags ?? undefined,
     isAvailable: dto.isAvailable ?? true,
     optionGroups: (dto.optionGroups ?? []).map(toMealOptionGroup),
 });

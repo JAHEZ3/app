@@ -1,7 +1,8 @@
 import React, { memo, useCallback, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AppText from '@/components/ui/AppText';
+import AnimatedPressable from '@/components/ui/AnimatedPressable';
+import { colors, radii, screen, shadows, typography } from '@/components/ui/theme';
 import { Meal } from '../entities/Meal';
 import { MenuSection } from '../entities/MenuSection';
 import { MealSelectionResult } from '../hooks/useMealOptionsSelection';
@@ -15,6 +16,7 @@ interface MealsListProps {
     onRetry?: () => void;
     onAddToCart?: (result: MealSelectionResult) => void;
     currency?: string;
+    showSectionHeaders?: boolean;
 }
 
 const SectionSkeleton = () => (
@@ -33,6 +35,7 @@ const MealsList = ({
     onRetry,
     onAddToCart,
     currency = 'SAR',
+    showSectionHeaders = true,
 }: MealsListProps) => {
     const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
 
@@ -61,19 +64,13 @@ const MealsList = ({
     if (isError) {
         return (
             <View style={styles.errorWrap}>
-                <Ionicons name="alert-circle-outline" size={20} color="#F55905" />
-                <AppText variant="body-sm" align="left" style={styles.errorText}>
-                    Couldn't load meals.
-                </AppText>
+                <Ionicons name="alert-circle-outline" size={20} color={colors.primary} />
+                <Text style={styles.errorText}>Couldn't load meals.</Text>
                 {onRetry && (
-                    <AppText
-                        variant="body-sm"
-                        align="left"
-                        style={styles.retryText}
-                        onPress={onRetry}
-                    >
-                        Retry
-                    </AppText>
+                    <AnimatedPressable onPress={onRetry} style={styles.retryBtn}>
+                        <Ionicons name="refresh" size={14} color={colors.primary} />
+                        <Text style={styles.retryText}>Retry</Text>
+                    </AnimatedPressable>
                 )}
             </View>
         );
@@ -82,10 +79,10 @@ const MealsList = ({
     if (!sections.length) {
         return (
             <View style={styles.emptyWrap}>
-                <Ionicons name="fast-food-outline" size={20} color="#CBD5E1" />
-                <AppText variant="body-sm" align="left" style={styles.emptyText}>
-                    No meals in this menu yet.
-                </AppText>
+                <View style={styles.emptyIcon}>
+                    <Ionicons name="fast-food-outline" size={20} color={colors.primary} />
+                </View>
+                <Text style={styles.emptyText}>No meals in this menu yet.</Text>
             </View>
         );
     }
@@ -94,16 +91,14 @@ const MealsList = ({
         <View style={styles.wrap}>
             {sections.map((section) => (
                 <View key={section.id} style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <AppText variant="headline-sm" align="left" style={styles.sectionName}>
-                            {section.name}
-                        </AppText>
-                        <View style={styles.countPill}>
-                            <AppText variant="body-sm" align="left" style={styles.countText}>
-                                {section.meals.length}
-                            </AppText>
+                    {showSectionHeaders ? (
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionName}>{section.name}</Text>
+                            <View style={styles.countPill}>
+                                <Text style={styles.countText}>{section.meals.length}</Text>
+                            </View>
                         </View>
-                    </View>
+                    ) : null}
                     <View style={styles.mealsList}>
                         {section.meals.map((meal) => (
                             <MealCard
@@ -129,54 +124,101 @@ const MealsList = ({
 };
 
 const styles = StyleSheet.create({
-    wrap: { paddingHorizontal: 20, paddingTop: 4, gap: 24 },
+    wrap: { paddingHorizontal: screen.horizontal, paddingTop: 4, gap: 24 },
     section: { gap: 10 },
     sectionHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
     },
-    sectionName: { color: '#0F172A' },
+    sectionName: {
+        color: colors.onSurface,
+        fontFamily: typography.headlineSemi,
+        fontSize: 18,
+    },
     countPill: {
-        backgroundColor: '#F1F5F9',
+        backgroundColor: colors.surfaceContainer,
         paddingHorizontal: 8,
         paddingVertical: 2,
-        borderRadius: 999,
+        borderRadius: radii.pill,
     },
-    countText: { color: '#475569', fontWeight: '700', fontSize: 11 },
+    countText: {
+        color: colors.outline,
+        fontFamily: typography.bodyBold,
+        fontSize: 11,
+    },
     mealsList: { gap: 10 },
 
     skeletonSection: { gap: 10 },
     skeletonTitle: {
         width: 120,
         height: 18,
-        borderRadius: 8,
-        backgroundColor: '#E5E7EB',
+        borderRadius: radii.sm,
+        backgroundColor: colors.surfaceContainerHighest,
     },
     skeletonCard: {
-        height: 108,
-        borderRadius: 16,
-        backgroundColor: '#F1F5F9',
+        height: 118,
+        borderRadius: radii.xl,
+        backgroundColor: colors.surfaceContainerHighest,
     },
 
     errorWrap: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        paddingHorizontal: 20,
-        paddingVertical: 16,
+        marginHorizontal: screen.horizontal,
+        marginVertical: 16,
+        padding: 14,
+        borderRadius: radii.xl,
+        backgroundColor: colors.card,
+        ...shadows.soft,
     },
-    errorText: { color: '#6B7280', flex: 1 },
-    retryText: { color: '#F55905', fontWeight: '700' },
+    errorText: {
+        color: colors.outline,
+        flex: 1,
+        fontFamily: typography.bodyMedium,
+        fontSize: 12,
+    },
+    retryBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: radii.pill,
+        backgroundColor: colors.faintPrimary,
+    },
+    retryText: {
+        color: colors.primary,
+        fontFamily: typography.bodyBold,
+        fontSize: 12,
+    },
 
     emptyWrap: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 20,
-        paddingVertical: 20,
+        gap: 10,
+        marginHorizontal: screen.horizontal,
+        marginVertical: 16,
+        padding: 14,
+        borderRadius: radii.xl,
+        backgroundColor: colors.card,
+        ...shadows.soft,
     },
-    emptyText: { color: '#94A3B8' },
+    emptyIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: colors.faintPrimary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
+        color: colors.outline,
+        fontFamily: typography.bodyMedium,
+        fontSize: 12,
+        flex: 1,
+    },
 });
 
 export default memo(MealsList);

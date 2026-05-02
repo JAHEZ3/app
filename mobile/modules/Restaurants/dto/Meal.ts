@@ -23,7 +23,12 @@ export interface MealDTO {
     name: string;
     description?: string;
     imageUrl?: string;
-    price: number;
+    price?: number;
+    basePrice?: number;
+    discountPrice?: number | null;
+    calories?: number | null;
+    isFeatured?: boolean;
+    tags?: string[] | null;
     isAvailable?: boolean;
     optionGroups?: MealOptionGroupDTO[];
 }

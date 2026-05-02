@@ -23,6 +23,11 @@ export interface Meal {
     description?: string;
     imageUrl?: string;
     price: number;
+    basePrice?: number;
+    discountPrice?: number;
+    calories?: number;
+    isFeatured?: boolean;
+    tags?: string[];
     isAvailable: boolean;
     optionGroups: MealOptionGroup[];
 }

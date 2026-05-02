@@ -12,6 +12,7 @@ import { MenuSection } from '../entities/MenuSection';
 import { RestaurantsRepository, RestaurantsPage } from './RestaurantsRepository';
 
 const BASE = '/api/restaurant/mobile/restaurants';
+const MENU_BASE = '/api/restaurant/mobile/menus';
 
 export const restRepository = (): RestaurantsRepository => ({
     getRestaurants: async (params): Promise<RestaurantsPage> => {
@@ -32,10 +33,12 @@ export const restRepository = (): RestaurantsRepository => ({
         return (res.data.data ?? []).map(toMenuAdapter);
     },
 
-    getMenuSections: async (restaurantId, menuId): Promise<MenuSection[]> => {
-        const res = await restaurantApi.get<{ data: MenuSectionDTO[] }>(
-            `${BASE}/${restaurantId}/menus/${menuId}/sections`,
+    getMenuSections: async (_restaurantId, menuId): Promise<MenuSection[]> => {
+        const res = await restaurantApi.get<{ data: { sections?: MenuSectionDTO[] } | MenuSectionDTO[] }>(
+            `${MENU_BASE}/${menuId}`,
         );
-        return (res.data.data ?? []).map(toMenuSectionAdapter);
+        const payload = res.data.data;
+        const sections = Array.isArray(payload) ? payload : payload.sections ?? [];
+        return sections.map(toMenuSectionAdapter);
     },
 });

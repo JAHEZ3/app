@@ -7,6 +7,7 @@ export interface MenuDTO {
     mealsCount?: number;
     totalMeals?: number;
     meals?: unknown[];
+    sections?: unknown[];
 }
 
 export interface MenusResponseDTO {
