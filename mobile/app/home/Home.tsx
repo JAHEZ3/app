@@ -6,6 +6,7 @@ import {
   StyleProp,
   StyleSheet,
   Text,
+  TextInput,
   View,
   ViewStyle,
   useWindowDimensions,
@@ -17,12 +18,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import Animated, {
   Easing,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withTiming,
 } from "react-native-reanimated";
 import { ProtectedRoute } from "@/hooks/useProtectedRoute";
+import { useHomeT } from "@/hooks/useAppTranslation";
 import { useGetProfile } from "@/modules/Profile/hooks/useGetProfile";
 import { useRestaurantHomeFeed } from "@/modules/Restaurants/hooks/useRestaurantHomeFeed";
 import { Meal } from "@/modules/Restaurants/entities/Meal";
@@ -31,6 +34,7 @@ import MealOptionsModal from "@/modules/Restaurants/components/MealOptionsModal"
 import { MealSelectionResult } from "@/modules/Restaurants/hooks/useMealOptionsSelection";
 import {
   formatCuisineType,
+  getFoodPlaceholderUrl,
   getMealImageSource,
   imageSource,
 } from "@/modules/Restaurants/utils/foodImages";
@@ -38,11 +42,19 @@ import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
 import { getCartQuantity, useCartStore } from "@/store/useCartStore";
+import { useLanguageStore } from "@/store/useLanguageStore";
 
 const IMAGE_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
 const formatPrice = (value: number, currency = "SAR") =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
+
+const getGreetingKey = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  return "evening";
+};
 
 function FadeInView({
   children,
@@ -75,34 +87,106 @@ function FadeInView({
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
-function Header({ firstName, cartCount }: { firstName: string; cartCount: number }) {
+function HomeHero({
+  firstName,
+  cartCount,
+  search,
+  onSearchChange,
+}: {
+  firstName: string;
+  cartCount: number;
+  search: string;
+  onSearchChange: (value: string) => void;
+}) {
+  const { t } = useHomeT();
+  const { language } = useLanguageStore();
+  const isArabic = language === "ar";
+  const focus = useSharedValue(0);
+
+  const searchAnimatedStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(
+      focus.value,
+      [0, 1],
+      ["rgba(255,255,255,0.14)", "rgba(255,255,255,0.58)"],
+    ),
+    transform: [{ scale: 1 + focus.value * 0.012 }],
+  }));
+
+  const textAlign = isArabic ? "right" : "left";
+
   return (
-    <View style={styles.header}>
-      <View style={styles.headerCopy}>
-        <Text style={styles.greetingLabel}>Good Morning</Text>
-        <Text style={styles.greetingName} numberOfLines={1}>
-          {firstName}
-        </Text>
+    <View style={styles.heroCard}>
+      <View style={styles.heroShapeLarge} />
+      <View style={styles.heroShapeSmall} />
+
+      <View style={styles.heroTopRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.heroGreeting, { textAlign }]}>
+            {t(`greeting.${getGreetingKey()}`)}
+          </Text>
+          <Text style={[styles.heroName, { textAlign }]} numberOfLines={1}>
+            {firstName}
+          </Text>
+        </View>
+
+        <View style={styles.heroActions}>
+          <AnimatedPressable style={styles.heroIconButton} accessibilityLabel="Notifications">
+            <Ionicons name="notifications-outline" size={18} color={colors.onPrimary} />
+          </AnimatedPressable>
+
+          <AnimatedPressable
+            onPress={() => router.navigate("/cart" as never)}
+            style={styles.heroIconButton}
+            accessibilityLabel="Cart"
+          >
+            <Ionicons name="bag-handle-outline" size={18} color={colors.onPrimary} />
+            {cartCount > 0 ? (
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>{cartCount > 9 ? "9+" : cartCount}</Text>
+              </View>
+            ) : null}
+          </AnimatedPressable>
+        </View>
       </View>
 
-      <View style={styles.headerActions}>
-        <AnimatedPressable style={styles.iconButton} accessibilityLabel="Notifications">
-          <Ionicons name="notifications-outline" size={19} color={colors.onSurface} />
-        </AnimatedPressable>
+      <View style={[styles.heroMainRow, isArabic && styles.heroMainRowRtl]}>
+        <View style={styles.heroCopy}>
+          <Text style={[styles.heroTitle, { textAlign }]}>{t("hero.title")}</Text>
+          <Text style={[styles.heroSubtitle, { textAlign }]}>{t("hero.subtitle")}</Text>
+        </View>
 
-        <AnimatedPressable
-          onPress={() => router.navigate("/cart" as never)}
-          style={styles.iconButton}
-          accessibilityLabel="Cart"
-        >
-          <Ionicons name="bag-handle-outline" size={19} color={colors.onSurface} />
-          {cartCount > 0 ? (
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>{cartCount > 9 ? "9+" : cartCount}</Text>
-            </View>
-          ) : null}
-        </AnimatedPressable>
+        <View style={styles.heroVisualWrap}>
+          <View style={styles.heroVisualGlow} />
+          <Image
+            source={{ uri: getFoodPlaceholderUrl("healthy") }}
+            placeholder={IMAGE_BLURHASH}
+            contentFit="cover"
+            transition={240}
+            style={styles.heroVisualImage}
+          />
+          <View style={styles.heroVisualBadge}>
+            <Ionicons name="restaurant" size={16} color={colors.primary} />
+          </View>
+        </View>
       </View>
+
+      <Animated.View style={[styles.heroSearch, searchAnimatedStyle]}>
+        <Ionicons name="search" size={18} color="rgba(255,255,255,0.86)" />
+        <TextInput
+          value={search}
+          onChangeText={onSearchChange}
+          placeholder={t("search.placeholder")}
+          placeholderTextColor="rgba(255,255,255,0.68)"
+          onFocus={() => {
+            focus.value = withTiming(1, { duration: 180 });
+          }}
+          onBlur={() => {
+            focus.value = withTiming(0, { duration: 180 });
+          }}
+          style={[styles.heroSearchInput, { textAlign }]}
+          selectionColor={colors.onPrimary}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -288,17 +372,40 @@ function HomeScreen() {
   const cartItems = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
   const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
+  const [search, setSearch] = useState("");
 
   const cartCount = getCartQuantity(cartItems);
   const firstName = profile?.firstName?.trim() || "Guest";
   const mealCardWidth = Math.min(width * 0.42, 172);
+  const normalizedSearch = search.trim().toLowerCase();
 
   const restaurantPreview = useMemo(
-    () => feed.filteredRestaurants.slice(0, 3),
-    [feed.filteredRestaurants],
+    () =>
+      feed.filteredRestaurants
+        .filter((restaurant) => {
+          if (!normalizedSearch) return true;
+          return (
+            restaurant.name.toLowerCase().includes(normalizedSearch) ||
+            restaurant.cuisineType.toLowerCase().includes(normalizedSearch)
+          );
+        })
+        .slice(0, 3),
+    [feed.filteredRestaurants, normalizedSearch],
   );
 
-  const popularMeals = useMemo(() => feed.meals.slice(0, 5), [feed.meals]);
+  const popularMeals = useMemo(
+    () =>
+      feed.meals
+        .filter((meal) => {
+          if (!normalizedSearch) return true;
+          return (
+            meal.name.toLowerCase().includes(normalizedSearch) ||
+            (meal.description ?? "").toLowerCase().includes(normalizedSearch)
+          );
+        })
+        .slice(0, 5),
+    [feed.meals, normalizedSearch],
+  );
 
   const handleCategoryPress = useCallback(
     (cuisineType: string) => {
@@ -332,22 +439,12 @@ function HomeScreen() {
         }
       >
         <FadeInView>
-          <Header firstName={firstName} cartCount={cartCount} />
-        </FadeInView>
-
-        <FadeInView delay={80} style={styles.deliveryStrip}>
-          <View style={styles.deliveryIcon}>
-            <Ionicons name="location-outline" size={17} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.deliveryLabel}>Delivering to</Text>
-            <Text style={styles.deliveryValue} numberOfLines={1}>
-              {profile?.locationLat && profile?.locationLng
-                ? "Current saved location"
-                : "Choose your delivery address"}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.outline} />
+          <HomeHero
+            firstName={firstName}
+            cartCount={cartCount}
+            search={search}
+            onSearchChange={setSearch}
+          />
         </FadeInView>
 
         <FadeInView delay={130}>
@@ -449,93 +546,168 @@ const styles = StyleSheet.create({
   scroll: {
     paddingBottom: screen.bottomTabSpace + 18,
   },
-  header: {
+  heroCard: {
+    marginHorizontal: screen.horizontal,
+    marginTop: 8,
+    marginBottom: 24,
+    minHeight: 286,
+    borderRadius: 30,
+    backgroundColor: colors.primary,
+    overflow: "hidden",
+    padding: 18,
+    ...shadows.primary,
+  },
+  heroShapeLarge: {
+    position: "absolute",
+    width: 172,
+    height: 88,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.13)",
+    top: 22,
+    right: -44,
+    transform: [{ rotate: "-22deg" }],
+  },
+  heroShapeSmall: {
+    position: "absolute",
+    width: 118,
+    height: 62,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    bottom: 62,
+    left: -34,
+    transform: [{ rotate: "18deg" }],
+  },
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: screen.horizontal,
-    paddingTop: 8,
-    paddingBottom: 14,
+    gap: 14,
   },
-  headerCopy: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  greetingLabel: {
+  heroGreeting: {
     fontFamily: typography.bodyMedium,
-    color: colors.outline,
+    color: "rgba(255,255,255,0.78)",
     fontSize: 12,
-    marginBottom: 1,
   },
-  greetingName: {
-    fontFamily: typography.headline,
-    color: colors.onSurface,
-    fontSize: 25,
-    lineHeight: 33,
+  heroName: {
+    marginTop: 2,
+    fontFamily: typography.headlineSemi,
+    color: colors.onPrimary,
+    fontSize: 19,
+    lineHeight: 25,
   },
-  headerActions: {
+  heroActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 9,
   },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.card,
+  heroIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.17)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
-    ...shadows.soft,
   },
-  headerBadge: {
+  heroBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 7,
+    right: 7,
     minWidth: 15,
     height: 15,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.onPrimary,
     borderWidth: 2,
-    borderColor: colors.card,
+    borderColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerBadgeText: {
+  heroBadgeText: {
     fontFamily: typography.bodyBold,
     fontSize: 8,
-    color: colors.onPrimary,
+    color: colors.primary,
     lineHeight: 9,
   },
-  deliveryStrip: {
-    marginHorizontal: screen.horizontal,
-    marginBottom: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
+  heroMainRow: {
+    marginTop: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  heroMainRowRtl: {
+    flexDirection: "row-reverse",
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 8,
+  },
+  heroTitle: {
+    fontFamily: typography.headline,
+    color: colors.onPrimary,
+    fontSize: 27,
+    lineHeight: 34,
+  },
+  heroSubtitle: {
+    fontFamily: typography.bodyMedium,
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  heroVisualWrap: {
+    width: 106,
+    height: 106,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  heroVisualGlow: {
+    position: "absolute",
+    width: 88,
+    height: 88,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    transform: [{ rotate: "12deg" }],
+  },
+  heroVisualImage: {
+    width: 82,
+    height: 82,
+    borderRadius: 26,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  heroVisualBadge: {
+    position: "absolute",
+    right: 4,
+    bottom: 4,
+    width: 33,
+    height: 33,
+    borderRadius: 16.5,
+    backgroundColor: colors.onPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.soft,
+  },
+  heroSearch: {
+    marginTop: 22,
+    minHeight: 52,
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(255,255,255,0.17)",
+    borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    ...shadows.soft,
+    paddingHorizontal: 16,
   },
-  deliveryIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.faintPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deliveryLabel: {
-    fontFamily: typography.body,
-    fontSize: 11,
-    color: colors.outline,
-  },
-  deliveryValue: {
-    fontFamily: typography.bodyBold,
+  heroSearchInput: {
+    flex: 1,
+    minHeight: 48,
+    paddingVertical: 0,
+    fontFamily: typography.bodyMedium,
+    color: colors.onPrimary,
     fontSize: 14,
-    color: colors.onSurface,
-    marginTop: 2,
   },
   sectionHeader: {
     marginTop: 4,

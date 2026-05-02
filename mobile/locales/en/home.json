@@ -7,6 +7,10 @@
   "search": {
     "placeholder": "Search restaurants or meals..."
   },
+  "hero": {
+    "title": "What are you craving today?",
+    "subtitle": "Discover fresh meals, top restaurants, and fast delivery around you."
+  },
   "sections": {
     "categories": "Categories",
     "popular": "Most Popular",

@@ -79,6 +79,7 @@ export default function RootLayout() {
                 <Stack.Screen name="delivery" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="restaurants/index" />
                 <Stack.Screen name="restaurants/[id]" />
+                <Stack.Screen name="profile/index" />
               </Stack>
             </RestaurantsProvider>
           </DeliveryProvider>
