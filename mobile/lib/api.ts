@@ -17,6 +17,11 @@ export const deliveryApi = axios.create({
     timeout: 10000,
 });
 
+export const restaurantApi = axios.create({
+    baseURL: process.env.EXPO_PUBLIC_API_URL_RESTAURANT,
+    timeout: 10000,
+});
+
 // ─── Customer interceptors ───────────────────────────────────────────────────
 
 let isRefreshing = false;

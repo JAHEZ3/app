@@ -1,7 +1,12 @@
 {
   "title": "My Profile",
+  "subtitle": "Manage your account and preferences",
   "edit": "Edit Profile",
   "changePhoto": "Change profile photo",
+  "user": {
+    "fallbackName": "Guest",
+    "fallbackInfo": "Customer account"
+  },
   "settings": {
     "title": "Settings",
     "language": "Language",
@@ -15,9 +20,16 @@
   },
   "language": {
     "title": "Select Language",
+    "current": "Current language",
     "arabic": "Arabic",
     "english": "English",
     "restartRequired": "Restart required to apply language direction change.",
     "restart": "Restart Now"
+  },
+  "logout": {
+    "confirmTitle": "Sign out?",
+    "confirmMessage": "You can sign back in anytime with your phone number.",
+    "cancel": "Cancel",
+    "confirm": "Sign Out"
   }
 }
