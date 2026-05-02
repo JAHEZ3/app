@@ -7,6 +7,12 @@ import { Restaurant } from "../entities/Restaurant";
 
 const HOME_RESTAURANT_LIMIT = 50;
 
+export interface HomeCategory {
+  cuisineType: string | null;
+  count: number;
+  imageUrl?: string;
+}
+
 export interface HomeFeaturedMeal {
   type: "meal";
   id: string;
@@ -30,7 +36,7 @@ export const useRestaurantHomeFeed = () => {
   const restaurants = restaurantsQuery.restaurants;
 
   const categories = useMemo(() => {
-    const map = new Map<string, { cuisineType: string; count: number; imageUrl?: string }>();
+    const map = new Map<string, HomeCategory>();
 
     for (const restaurant of restaurants) {
       if (!restaurant.cuisineType) continue;
@@ -38,22 +44,35 @@ export const useRestaurantHomeFeed = () => {
       map.set(restaurant.cuisineType, {
         cuisineType: restaurant.cuisineType,
         count: (existing?.count ?? 0) + 1,
-        imageUrl: existing?.imageUrl ?? restaurant.coverUrl ?? restaurant.logoUrl,
+        imageUrl: existing?.imageUrl || restaurant.coverUrl || restaurant.logoUrl,
       });
     }
 
-    return Array.from(map.values());
-  }, [restaurants]);
+    if (!restaurants.length && restaurantsQuery.isLoading) return [];
+
+    const firstRestaurant = restaurants[0];
+
+    return [
+      {
+        cuisineType: null,
+        count: restaurants.length,
+        imageUrl: firstRestaurant ? firstRestaurant.coverUrl || firstRestaurant.logoUrl : undefined,
+      },
+      ...Array.from(map.values()),
+    ];
+  }, [restaurants, restaurantsQuery.isLoading]);
 
   useEffect(() => {
+    if (selectedCuisineType === null) return;
+
     if (!categories.length) {
-      if (selectedCuisineType !== null) setSelectedCuisineType(null);
+      setSelectedCuisineType(null);
       return;
     }
 
     const stillExists = categories.some((category) => category.cuisineType === selectedCuisineType);
     if (!stillExists) {
-      setSelectedCuisineType(categories[0].cuisineType);
+      setSelectedCuisineType(null);
     }
   }, [categories, selectedCuisineType]);
 

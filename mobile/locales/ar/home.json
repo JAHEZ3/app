@@ -7,25 +7,76 @@
   "search": {
     "placeholder": "ابحث عن مطاعم أو وجبات..."
   },
+  "accessibility": {
+    "notifications": "الإشعارات",
+    "cart": "السلة"
+  },
+  "actions": {
+    "seeAll": "عرض الكل"
+  },
+  "user": {
+    "guest": "ضيف"
+  },
   "hero": {
     "title": "ماذا تشتهي اليوم؟",
     "subtitle": "اكتشف وجبات شهية ومطاعم مميزة بالقرب منك."
   },
+  "category": {
+    "all": "الكل",
+    "placesCount_zero": "لا توجد أماكن",
+    "placesCount_one": "مكان واحد",
+    "placesCount_two": "مكانان",
+    "placesCount_few": "{{count}} أماكن",
+    "placesCount_many": "{{count}} مكاناً",
+    "placesCount_other": "{{count}} مكان"
+  },
+  "price": {
+    "currency": "ريال"
+  },
   "sections": {
     "categories": "الفئات",
-    "popular": "الأكثر طلباً",
+    "restaurants": "المطاعم",
+    "popularMeals": "الوجبات الشائعة",
     "nearYou": "بالقرب منك",
     "featured": "مميز"
   },
   "restaurant": {
     "open": "مفتوح",
     "closed": "مغلق",
+    "minOrderAmount": "الحد الأدنى {{amount}} {{currency}}",
     "minOrder": "أقل طلب",
     "deliveryTime": "{{min}}-{{max}} دقيقة",
     "deliveryFee": "رسوم التوصيل"
   },
   "empty": {
     "title": "لا توجد نتائج",
-    "subtitle": "جرّب مصطلح بحث مختلف"
+    "subtitle": "جرّب مصطلح بحث مختلف",
+    "noCategories": "لا توجد فئات متاحة حالياً.",
+    "restaurantsInCategory": "لا توجد مطاعم في هذه الفئة.",
+    "mealsForRestaurant": "لا توجد وجبات لعرضها لهذا المطعم حالياً."
+  },
+  "mealModal": {
+    "mealDetails": "تفاصيل الوجبة",
+    "customize": "تخصيص",
+    "options": "الخيارات",
+    "groupsCount_zero": "لا توجد مجموعات",
+    "groupsCount_one": "مجموعة واحدة",
+    "groupsCount_two": "مجموعتان",
+    "groupsCount_few": "{{count}} مجموعات",
+    "groupsCount_many": "{{count}} مجموعة",
+    "groupsCount_other": "{{count}} مجموعة",
+    "chooseOne": "اختر خياراً واحداً",
+    "chooseOneOptional": "اختر خياراً واحداً اختيارياً",
+    "chooseUpTo": "اختر حتى {{count}}",
+    "chooseAny": "اختر ما يناسبك",
+    "required": "مطلوب",
+    "optional": "اختياري",
+    "unavailable": "غير متاح",
+    "noCustomizations": "لا حاجة إلى تخصيص.",
+    "addToCart": "أضف إلى السلة",
+    "completeRequired": "أكمل الاختيارات المطلوبة.",
+    "selectAtLeast": "اختر {{count}} على الأقل",
+    "selectAtMost": "اختر {{count}} كحد أقصى",
+    "kcal": "{{count}} سعرة"
   }
 }

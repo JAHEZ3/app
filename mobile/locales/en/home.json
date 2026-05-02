@@ -7,25 +7,68 @@
   "search": {
     "placeholder": "Search restaurants or meals..."
   },
+  "accessibility": {
+    "notifications": "Notifications",
+    "cart": "Cart"
+  },
+  "actions": {
+    "seeAll": "See All"
+  },
+  "user": {
+    "guest": "Guest"
+  },
   "hero": {
     "title": "What are you craving today?",
     "subtitle": "Discover fresh meals, top restaurants, and fast delivery around you."
   },
+  "category": {
+    "all": "All",
+    "placesCount_one": "{{count}} place",
+    "placesCount_other": "{{count}} places"
+  },
+  "price": {
+    "currency": "SAR"
+  },
   "sections": {
     "categories": "Categories",
-    "popular": "Most Popular",
+    "restaurants": "Restaurants",
+    "popularMeals": "Popular Meals",
     "nearYou": "Near You",
     "featured": "Featured"
   },
   "restaurant": {
     "open": "Open",
     "closed": "Closed",
+    "minOrderAmount": "Min {{amount}} {{currency}}",
     "minOrder": "Min. order",
     "deliveryTime": "{{min}}-{{max}} min",
     "deliveryFee": "Delivery fee"
   },
   "empty": {
     "title": "No results found",
-    "subtitle": "Try a different search term"
+    "subtitle": "Try a different search term",
+    "noCategories": "No categories available yet.",
+    "restaurantsInCategory": "No restaurants in this category.",
+    "mealsForRestaurant": "No meals to show for this restaurant yet."
+  },
+  "mealModal": {
+    "mealDetails": "Meal details",
+    "customize": "Customize",
+    "options": "Options",
+    "groupsCount_one": "{{count}} group",
+    "groupsCount_other": "{{count}} groups",
+    "chooseOne": "Choose one",
+    "chooseOneOptional": "Choose one optional",
+    "chooseUpTo": "Choose up to {{count}}",
+    "chooseAny": "Choose any",
+    "required": "Required",
+    "optional": "Optional",
+    "unavailable": "Unavailable",
+    "noCustomizations": "No customizations needed.",
+    "addToCart": "Add to cart",
+    "completeRequired": "Complete required selections.",
+    "selectAtLeast": "Select at least {{count}}",
+    "selectAtMost": "Select at most {{count}}",
+    "kcal": "{{count}} Kcal"
   }
 }

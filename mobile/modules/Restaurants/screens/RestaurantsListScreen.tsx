@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AppText from '@/components/ui/AppText';
+import { useLanguageStore } from '@/store/useLanguageStore';
 import { useRestaurants } from '../hooks/useRestaurants';
 import { Restaurant } from '../entities/Restaurant';
 import RestaurantCard from '../components/RestaurantCard';
@@ -24,28 +25,33 @@ const SKELETON_KEYS = Array.from({ length: SKELETON_COUNT }, (_, i) => `sk-${i}`
 
 const keyExtractor = (item: Restaurant) => item.id;
 
-const ListHeader = ({ total }: { total: number }) => (
-    <View style={styles.header}>
-        <View style={styles.headerTop}>
-            <View>
-                <AppText variant="body-sm" align="left" style={styles.eyebrow}>
-                    Discover
-                </AppText>
-                <AppText variant="headline-lg" align="left" style={styles.title}>
-                    Restaurants
-                </AppText>
+const ListHeader = ({ total }: { total: number }) => {
+    const { isRTL } = useLanguageStore();
+    const textAlign = isRTL ? 'right' : 'left';
+
+    return (
+        <View style={styles.header}>
+            <View style={[styles.headerTop, isRTL && styles.headerTopRtl]}>
+                <View>
+                    <AppText variant="body-sm" align={textAlign} style={styles.eyebrow}>
+                        Discover
+                    </AppText>
+                    <AppText variant="headline-lg" align={textAlign} style={styles.title}>
+                        Restaurants
+                    </AppText>
+                </View>
+                <View style={styles.iconBubble}>
+                    <Ionicons name="storefront-outline" size={20} color="#F55905" />
+                </View>
             </View>
-            <View style={styles.iconBubble}>
-                <Ionicons name="storefront-outline" size={20} color="#F55905" />
-            </View>
+            {total > 0 && (
+                <AppText variant="body-sm" align={textAlign} style={styles.subtitle}>
+                    {total} place{total === 1 ? '' : 's'} ready to order from
+                </AppText>
+            )}
         </View>
-        {total > 0 && (
-            <AppText variant="body-sm" align="left" style={styles.subtitle}>
-                {total} place{total === 1 ? '' : 's'} ready to order from
-            </AppText>
-        )}
-    </View>
-);
+    );
+};
 
 const SkeletonList = () => (
     <View style={styles.skeletonWrap}>
@@ -152,6 +158,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
+    headerTopRtl: {
+        flexDirection: 'row-reverse',
+    },
     eyebrow: {
         color: '#F55905',
         fontWeight: '700',
@@ -160,7 +169,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
         marginBottom: 2,
     },
-    title: { color: '#0F172A', fontSize: 28 },
+    title: { color: '#0F172A', fontSize: 28, writingDirection: 'ltr' },
     subtitle: { color: '#6B7280', marginTop: 2 },
     iconBubble: {
         width: 44,

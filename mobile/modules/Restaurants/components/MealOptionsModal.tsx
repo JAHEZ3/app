@@ -19,11 +19,11 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import { colors, radii, shadows, typography } from "@/components/ui/theme";
+import { useHomeT } from "@/hooks/useAppTranslation";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import { Meal, MealOption, MealOptionGroup } from "../entities/Meal";
-import {
-  useMealOptionsSelection,
-  MealSelectionResult,
-} from "../hooks/useMealOptionsSelection";
+import { useMealOptionsSelection } from "../hooks/useMealOptionsSelection";
+import type { MealSelectionResult, GroupValidation } from "../hooks/useMealOptionsSelection";
 import { getMealImageSource } from "../utils/foodImages";
 
 const MEAL_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
@@ -50,6 +50,11 @@ const formatPrice = (value: number, currency: string) =>
 
 const OptionRow = memo(
   ({ option, selected, selectionType, disabled, onToggle }: OptionRowProps) => {
+    const { t } = useHomeT();
+    const { isRTL } = useLanguageStore();
+    const textAlign = isRTL ? "right" : "left";
+    const currency = t("price.currency");
+
     const handlePress = useCallback(() => {
       if (!disabled && option.isAvailable) onToggle(option.id);
     }, [disabled, onToggle, option.id, option.isAvailable]);
@@ -59,7 +64,7 @@ const OptionRow = memo(
         onPress={handlePress}
         disabled={disabled || !option.isAvailable}
         disabledStyle={styles.optionRowDisabled}
-        style={[styles.optionRow, selected && styles.optionRowSelected]}
+        style={[styles.optionRow, isRTL && styles.optionRowRtl, selected && styles.optionRowSelected]}
       >
         {selectionType === "single" ? (
           <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
@@ -72,14 +77,21 @@ const OptionRow = memo(
         )}
 
         <View style={{ flex: 1 }}>
-          <Text style={[styles.optionName, !option.isAvailable && styles.optionMuted]} numberOfLines={2}>
+          <Text
+            style={[styles.optionName, { textAlign }, !option.isAvailable && styles.optionMuted]}
+            numberOfLines={2}
+          >
             {option.name}
           </Text>
-          {!option.isAvailable ? <Text style={styles.optionUnavailable}>Unavailable</Text> : null}
+          {!option.isAvailable ? (
+            <Text style={[styles.optionUnavailable, { textAlign }]}>
+              {t("mealModal.unavailable")}
+            </Text>
+          ) : null}
         </View>
 
         {option.extraPrice > 0 ? (
-          <Text style={styles.extraPrice}>+{option.extraPrice.toFixed(2)}</Text>
+          <Text style={styles.extraPrice}>+{formatPrice(option.extraPrice, currency)}</Text>
         ) : null}
       </AnimatedPressable>
     );
@@ -102,6 +114,10 @@ function OptionGroupBlock({
   errorMessage?: string;
   showError: boolean;
 }) {
+  const { t } = useHomeT();
+  const { isRTL } = useLanguageStore();
+  const textAlign = isRTL ? "right" : "left";
+
   const handleToggle = useCallback(
     (optionId: string) => onToggle(group, optionId),
     [group, onToggle],
@@ -113,30 +129,30 @@ function OptionGroupBlock({
   const helperText =
     group.selectionType === "single"
       ? group.isRequired
-        ? "Choose one"
-        : "Choose one optional"
+        ? t("mealModal.chooseOne")
+        : t("mealModal.chooseOneOptional")
       : group.maxSelections > 1
-        ? `Choose up to ${group.maxSelections}`
-        : "Choose any";
+        ? t("mealModal.chooseUpTo", { count: group.maxSelections })
+        : t("mealModal.chooseAny");
 
   return (
     <View style={styles.groupBlock}>
-      <View style={styles.groupHeader}>
+      <View style={[styles.groupHeader, isRTL && styles.groupHeaderRtl]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.groupTitle}>{group.name}</Text>
-          <Text style={styles.groupHelper}>{helperText}</Text>
+          <Text style={[styles.groupTitle, { textAlign }]}>{group.name}</Text>
+          <Text style={[styles.groupHelper, { textAlign }]}>{helperText}</Text>
         </View>
         <View style={[styles.groupBadge, group.isRequired ? styles.requiredBadge : styles.optionalBadge]}>
           <Text style={[styles.groupBadgeText, group.isRequired ? styles.requiredText : styles.optionalText]}>
-            {group.isRequired ? "Required" : "Optional"}
+            {group.isRequired ? t("mealModal.required") : t("mealModal.optional")}
           </Text>
         </View>
       </View>
 
       {showError && errorMessage ? (
-        <View style={styles.errorRow}>
+        <View style={[styles.errorRow, isRTL && styles.errorRowRtl]}>
           <Ionicons name="alert-circle" size={14} color={colors.error} />
-          <Text style={styles.errorText}>{errorMessage}</Text>
+          <Text style={[styles.errorText, { textAlign }]}>{errorMessage}</Text>
         </View>
       ) : null}
 
@@ -192,12 +208,17 @@ const MealOptionsModal = ({
   meal,
   onClose,
   onConfirm,
-  confirmLabel = "Add to cart",
-  currency = "SAR",
+  confirmLabel,
+  currency,
 }: MealOptionsModalProps) => {
+  const { t } = useHomeT();
+  const { isRTL, language } = useLanguageStore();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const sheetHeight = Math.round(height * 0.56);
+  const textAlign = isRTL ? "right" : "left";
+  const resolvedCurrency = currency ?? t("price.currency");
+  const resolvedConfirmLabel = confirmLabel ?? t("mealModal.addToCart");
 
   const [mounted, setMounted] = useState(visible);
   const [sheetMeal, setSheetMeal] = useState<Meal | null>(meal);
@@ -258,6 +279,20 @@ const MealOptionsModal = ({
     return map;
   }, [groupValidations]);
 
+  const getValidationMessage = useCallback(
+    (validation: GroupValidation) => {
+      if (validation.reason === "required") return t("mealModal.required");
+      if (validation.reason === "min") {
+        return t("mealModal.selectAtLeast", { count: validation.minSelections });
+      }
+      if (validation.reason === "max") {
+        return t("mealModal.selectAtMost", { count: validation.maxSelections });
+      }
+      return undefined;
+    },
+    [t],
+  );
+
   const handleConfirm = useCallback(() => {
     if (!isValid) {
       setShowErrors(true);
@@ -283,6 +318,7 @@ const MealOptionsModal = ({
         </Animated.View>
 
         <Animated.View
+          key={language}
           style={[
             styles.sheet,
             {
@@ -294,11 +330,13 @@ const MealOptionsModal = ({
         >
           <View style={styles.handleBar} />
 
-          <View style={styles.headerBar}>
+          <View style={[styles.headerBar, isRTL && styles.headerBarRtl]}>
             <View>
-              <Text style={styles.headerEyebrow}>Meal details</Text>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                Customize
+              <Text style={[styles.headerEyebrow, { textAlign }]}>
+                {t("mealModal.mealDetails")}
+              </Text>
+              <Text style={[styles.headerTitle, { textAlign }]} numberOfLines={1}>
+                {t("mealModal.customize")}
               </Text>
             </View>
             <AnimatedPressable onPress={onClose} style={styles.closeBtn}>
@@ -310,7 +348,7 @@ const MealOptionsModal = ({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
-            <View style={styles.heroRow}>
+            <View style={[styles.heroRow, isRTL && styles.heroRowRtl]}>
               <Image
                 source={getMealImageSource(sheetMeal.imageUrl, sheetMeal.tags)}
                 placeholder={MEAL_BLURHASH}
@@ -319,28 +357,36 @@ const MealOptionsModal = ({
                 style={styles.mealImage}
               />
               <View style={styles.mealIntro}>
-                <Text style={styles.mealName} numberOfLines={2}>
+                <Text style={[styles.mealName, { textAlign }]} numberOfLines={2}>
                   {sheetMeal.name}
                 </Text>
-                <Text style={styles.mealPrice}>{formatPrice(sheetMeal.price, currency)}</Text>
+                <Text style={[styles.mealPrice, { textAlign }]}>
+                  {formatPrice(sheetMeal.price, resolvedCurrency)}
+                </Text>
                 {sheetMeal.calories ? (
-                  <View style={styles.caloriePill}>
+                  <View style={[styles.caloriePill, isRTL && styles.caloriePillRtl]}>
                     <Ionicons name="flame-outline" size={13} color={colors.primary} />
-                    <Text style={styles.calorieText}>{Math.round(sheetMeal.calories)} Kcal</Text>
+                    <Text style={styles.calorieText}>
+                      {t("mealModal.kcal", { count: Math.round(sheetMeal.calories) })}
+                    </Text>
                   </View>
                 ) : null}
               </View>
             </View>
 
             {sheetMeal.description ? (
-              <Text style={styles.mealDescription}>{sheetMeal.description}</Text>
+              <Text style={[styles.mealDescription, { textAlign }]}>{sheetMeal.description}</Text>
             ) : null}
 
             {sheetMeal.optionGroups.length > 0 ? (
               <>
-                <View style={styles.customizeHeader}>
-                  <Text style={styles.customizeTitle}>Options</Text>
-                  <Text style={styles.customizeMeta}>{sheetMeal.optionGroups.length} group{sheetMeal.optionGroups.length === 1 ? "" : "s"}</Text>
+                <View style={[styles.customizeHeader, isRTL && styles.customizeHeaderRtl]}>
+                  <Text style={[styles.customizeTitle, { textAlign }]}>
+                    {t("mealModal.options")}
+                  </Text>
+                  <Text style={[styles.customizeMeta, { textAlign }]}>
+                    {t("mealModal.groupsCount", { count: sheetMeal.optionGroups.length })}
+                  </Text>
                 </View>
                 {sheetMeal.optionGroups.map((group) => {
                   const validation = validationByGroupId[group.id];
@@ -351,38 +397,44 @@ const MealOptionsModal = ({
                       isOptionSelected={isOptionSelected}
                       onToggle={toggleOption}
                       selectedCount={validation?.selectedCount ?? 0}
-                      errorMessage={validation?.message}
+                      errorMessage={validation ? getValidationMessage(validation) : undefined}
                       showError={showErrors && validation != null && !validation.valid}
                     />
                   );
                 })}
               </>
             ) : (
-              <View style={styles.noOptions}>
+              <View style={[styles.noOptions, isRTL && styles.noOptionsRtl]}>
                 <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
-                <Text style={styles.noOptionsText}>No customizations needed.</Text>
+                <Text style={[styles.noOptionsText, { textAlign }]}>
+                  {t("mealModal.noCustomizations")}
+                </Text>
               </View>
             )}
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, isRTL && styles.footerRtl]}>
             <QtyStepper quantity={quantity} onIncrement={increment} onDecrement={decrement} />
 
             <AnimatedPressable
               onPress={handleConfirm}
               haptic="impact"
-              style={[styles.confirmBtn, !isValid && showErrors && styles.confirmBtnInvalid]}
+              style={[
+                styles.confirmBtn,
+                isRTL && styles.confirmBtnRtl,
+                !isValid && showErrors && styles.confirmBtnInvalid,
+              ]}
             >
-              <Text style={styles.confirmLabel}>{confirmLabel}</Text>
+              <Text style={styles.confirmLabel}>{resolvedConfirmLabel}</Text>
               <View style={styles.confirmDivider} />
-              <Text style={styles.confirmPrice}>{formatPrice(totalPrice, currency)}</Text>
+              <Text style={styles.confirmPrice}>{formatPrice(totalPrice, resolvedCurrency)}</Text>
             </AnimatedPressable>
           </View>
 
           {showErrors && firstInvalidGroupId ? (
-            <View style={styles.toast} pointerEvents="none">
+            <View style={[styles.toast, isRTL && styles.toastRtl]} pointerEvents="none">
               <Ionicons name="alert-circle" size={16} color={colors.onPrimary} />
-              <Text style={styles.toastText}>Complete required selections.</Text>
+              <Text style={styles.toastText}>{t("mealModal.completeRequired")}</Text>
             </View>
           ) : null}
         </Animated.View>
@@ -423,6 +475,9 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 10,
   },
+  headerBarRtl: {
+    flexDirection: "row-reverse",
+  },
   headerEyebrow: {
     fontFamily: typography.bodyMedium,
     color: colors.outline,
@@ -450,6 +505,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 13,
     alignItems: "center",
+  },
+  heroRowRtl: {
+    flexDirection: "row-reverse",
   },
   mealImage: {
     width: 112,
@@ -482,6 +540,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.faintPrimary,
   },
+  caloriePillRtl: {
+    alignSelf: "flex-end",
+    flexDirection: "row-reverse",
+  },
   calorieText: {
     fontFamily: typography.bodyBold,
     color: colors.primary,
@@ -501,6 +563,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  customizeHeaderRtl: {
+    flexDirection: "row-reverse",
+  },
   customizeTitle: {
     fontFamily: typography.headlineSemi,
     color: colors.onSurface,
@@ -519,6 +584,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+  },
+  groupHeaderRtl: {
+    flexDirection: "row-reverse",
   },
   groupTitle: {
     fontFamily: typography.headlineSemi,
@@ -561,6 +629,9 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: radii.md,
   },
+  errorRowRtl: {
+    flexDirection: "row-reverse",
+  },
   errorText: {
     color: colors.error,
     fontFamily: typography.bodyBold,
@@ -579,6 +650,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.surfaceContainerHighest,
+  },
+  optionRowRtl: {
+    flexDirection: "row-reverse",
   },
   optionRowSelected: {
     borderColor: colors.primary,
@@ -646,6 +720,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     backgroundColor: colors.surface,
   },
+  noOptionsRtl: {
+    flexDirection: "row-reverse",
+  },
   noOptionsText: {
     fontFamily: typography.bodyMedium,
     color: colors.outline,
@@ -660,6 +737,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.surfaceContainer,
     backgroundColor: colors.card,
+  },
+  footerRtl: {
+    flexDirection: "row-reverse",
   },
   qtyWrap: {
     flexDirection: "row",
@@ -698,6 +778,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     ...shadows.primary,
   },
+  confirmBtnRtl: {
+    flexDirection: "row-reverse",
+  },
   confirmBtnInvalid: {
     backgroundColor: colors.outline,
     shadowOpacity: 0,
@@ -728,6 +811,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radii.pill,
     backgroundColor: "rgba(30,30,30,0.92)",
+  },
+  toastRtl: {
+    flexDirection: "row-reverse",
   },
   toastText: {
     color: colors.onPrimary,

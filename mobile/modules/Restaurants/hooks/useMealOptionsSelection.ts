@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Meal, MealOption, MealOptionGroup } from '../entities/Meal';
 
 export type SelectionsByGroup = Record<string, string[]>;
+export type GroupValidationReason = 'required' | 'min' | 'max';
 
 export interface MealSelectionResult {
     meal: Meal;
@@ -18,7 +19,7 @@ export interface GroupValidation {
     selectedCount: number;
     minSelections: number;
     maxSelections: number;
-    message?: string;
+    reason?: GroupValidationReason;
 }
 
 interface UseMealOptionsSelectionOptions {
@@ -141,14 +142,11 @@ export const useMealOptionsSelection = ({
             const minOk = selectedCount >= group.minSelections;
             const maxOk = selectedCount <= group.maxSelections;
             const valid = minOk && maxOk;
-            let message: string | undefined;
+            let reason: GroupValidationReason | undefined;
             if (!minOk) {
-                message =
-                    group.minSelections === 1
-                        ? 'Required'
-                        : `Select at least ${group.minSelections}`;
+                reason = group.minSelections === 1 ? 'required' : 'min';
             } else if (!maxOk) {
-                message = `Select at most ${group.maxSelections}`;
+                reason = 'max';
             }
             return {
                 groupId: group.id,
@@ -156,7 +154,7 @@ export const useMealOptionsSelection = ({
                 selectedCount,
                 minSelections: group.minSelections,
                 maxSelections: group.maxSelections,
-                message,
+                reason,
             };
         });
     }, [meal, selections]);

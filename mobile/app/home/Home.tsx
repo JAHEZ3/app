@@ -46,7 +46,7 @@ import { useLanguageStore } from "@/store/useLanguageStore";
 
 const IMAGE_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
-const formatPrice = (value: number, currency = "SAR") =>
+const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
 const getGreetingKey = () => {
@@ -99,8 +99,7 @@ function HomeHero({
   onSearchChange: (value: string) => void;
 }) {
   const { t } = useHomeT();
-  const { language } = useLanguageStore();
-  const isArabic = language === "ar";
+  const { isRTL } = useLanguageStore();
   const focus = useSharedValue(0);
 
   const searchAnimatedStyle = useAnimatedStyle(() => ({
@@ -112,14 +111,14 @@ function HomeHero({
     transform: [{ scale: 1 + focus.value * 0.012 }],
   }));
 
-  const textAlign = isArabic ? "right" : "left";
+  const textAlign = isRTL ? "right" : "left";
 
   return (
     <View style={styles.heroCard}>
       <View style={styles.heroShapeLarge} />
       <View style={styles.heroShapeSmall} />
 
-      <View style={styles.heroTopRow}>
+      <View style={[styles.heroTopRow, isRTL && styles.heroTopRowRtl]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.heroGreeting, { textAlign }]}>
             {t(`greeting.${getGreetingKey()}`)}
@@ -130,14 +129,17 @@ function HomeHero({
         </View>
 
         <View style={styles.heroActions}>
-          <AnimatedPressable style={styles.heroIconButton} accessibilityLabel="Notifications">
+          <AnimatedPressable
+            style={styles.heroIconButton}
+            accessibilityLabel={t("accessibility.notifications")}
+          >
             <Ionicons name="notifications-outline" size={18} color={colors.onPrimary} />
           </AnimatedPressable>
 
           <AnimatedPressable
             onPress={() => router.navigate("/cart" as never)}
             style={styles.heroIconButton}
-            accessibilityLabel="Cart"
+            accessibilityLabel={t("accessibility.cart")}
           >
             <Ionicons name="bag-handle-outline" size={18} color={colors.onPrimary} />
             {cartCount > 0 ? (
@@ -149,7 +151,7 @@ function HomeHero({
         </View>
       </View>
 
-      <View style={[styles.heroMainRow, isArabic && styles.heroMainRowRtl]}>
+      <View style={[styles.heroMainRow, isRTL && styles.heroMainRowRtl]}>
         <View style={styles.heroCopy}>
           <Text style={[styles.heroTitle, { textAlign }]}>{t("hero.title")}</Text>
           <Text style={[styles.heroSubtitle, { textAlign }]}>{t("hero.subtitle")}</Text>
@@ -170,7 +172,7 @@ function HomeHero({
         </View>
       </View>
 
-      <Animated.View style={[styles.heroSearch, searchAnimatedStyle]}>
+      <Animated.View style={[styles.heroSearch, isRTL && styles.heroSearchRtl, searchAnimatedStyle]}>
         <Ionicons name="search" size={18} color="rgba(255,255,255,0.86)" />
         <TextInput
           value={search}
@@ -200,15 +202,21 @@ function SectionHeader({
   action?: string;
   onAction?: () => void;
 }) {
+  const { isRTL } = useLanguageStore();
+  const textAlign = isRTL ? "right" : "left";
+  const titleDirection = isRTL ? "rtl" : "ltr";
+
   return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={[styles.sectionHeader, isRTL && styles.sectionHeaderRtl]}>
+      <Text style={[styles.sectionTitle, { textAlign, writingDirection: titleDirection }]}>
+        {title}
+      </Text>
       {action && onAction ? (
         <AnimatedPressable onPress={onAction} haptic="selection">
-          <Text style={styles.sectionAction}>{action}</Text>
+          <Text style={[styles.sectionAction, { textAlign }]}>{action}</Text>
         </AnimatedPressable>
       ) : action ? (
-        <Text style={styles.sectionMutedAction} numberOfLines={1}>
+        <Text style={[styles.sectionMutedAction, { textAlign }]} numberOfLines={1}>
           {action}
         </Text>
       ) : null}
@@ -223,12 +231,16 @@ function CategoryCard({
   selected,
   onPress,
 }: {
-  cuisineType: string;
+  cuisineType: string | null;
   count: number;
   imageUrl?: string;
   selected: boolean;
   onPress: () => void;
 }) {
+  const { t } = useHomeT();
+  const { isRTL } = useLanguageStore();
+  const textAlign = isRTL ? "right" : "left";
+
   return (
     <AnimatedPressable
       onPress={onPress}
@@ -236,7 +248,7 @@ function CategoryCard({
       style={[styles.categoryCard, selected && styles.categoryCardSelected]}
     >
       <Image
-        source={imageSource(imageUrl, cuisineType)}
+        source={imageSource(imageUrl, cuisineType ?? "other")}
         placeholder={IMAGE_BLURHASH}
         contentFit="cover"
         transition={220}
@@ -247,16 +259,22 @@ function CategoryCard({
         style={styles.categoryOverlay}
       />
       <View style={styles.categoryContent}>
-        <Text style={styles.categoryTitle} numberOfLines={1}>
-          {formatCuisineType(cuisineType)}
+        <Text style={[styles.categoryTitle, { textAlign }]} numberOfLines={1}>
+          {cuisineType ? formatCuisineType(cuisineType) : t("category.all")}
         </Text>
-        <Text style={styles.categoryCount}>{count} place{count === 1 ? "" : "s"}</Text>
+        <Text style={[styles.categoryCount, { textAlign }]}>
+          {t("category.placesCount", { count })}
+        </Text>
       </View>
     </AnimatedPressable>
   );
 }
 
 function RestaurantPreviewCard({ restaurant }: { restaurant: Restaurant }) {
+  const { t } = useHomeT();
+  const { isRTL } = useLanguageStore();
+  const textAlign = isRTL ? "right" : "left";
+  const currency = t("price.currency");
   const handlePress = () => router.push(`/restaurants/${restaurant.id}` as never);
 
   return (
@@ -272,28 +290,34 @@ function RestaurantPreviewCard({ restaurant }: { restaurant: Restaurant }) {
         <View
           style={[
             styles.statusBadge,
+            isRTL && styles.statusBadgeRtl,
             restaurant.isOpen ? styles.openBadge : styles.closedBadge,
           ]}
         >
           <View style={styles.statusDot} />
-          <Text style={styles.statusBadgeText}>{restaurant.isOpen ? "Open" : "Closed"}</Text>
+          <Text style={styles.statusBadgeText}>
+            {restaurant.isOpen ? t("restaurant.open") : t("restaurant.closed")}
+          </Text>
         </View>
       </View>
 
       <View style={styles.restaurantBody}>
-        <Text style={styles.restaurantName} numberOfLines={1}>
+        <Text style={[styles.restaurantName, { textAlign }]} numberOfLines={1}>
           {restaurant.name}
         </Text>
-        <Text style={styles.restaurantCuisine} numberOfLines={1}>
+        <Text style={[styles.restaurantCuisine, { textAlign }]} numberOfLines={1}>
           {formatCuisineType(restaurant.cuisineType)}
         </Text>
-        <View style={styles.restaurantMetaRow}>
+        <View style={[styles.restaurantMetaRow, isRTL && styles.restaurantMetaRowRtl]}>
           <View style={styles.ratingPill}>
             <Ionicons name="star" size={12} color="#D68A00" />
             <Text style={styles.ratingText}>{restaurant.rating.toFixed(1)}</Text>
           </View>
-          <Text style={styles.minOrderText}>
-            Min {restaurant.minOrderAmount.toFixed(0)} SAR
+          <Text style={[styles.minOrderText, { textAlign: isRTL ? "left" : "right" }]}>
+            {t("restaurant.minOrderAmount", {
+              amount: restaurant.minOrderAmount.toFixed(0),
+              currency,
+            })}
           </Text>
         </View>
       </View>
@@ -310,6 +334,11 @@ function MealPreviewCard({
   width: number;
   onPress: (meal: Meal) => void;
 }) {
+  const { t } = useHomeT();
+  const { isRTL } = useLanguageStore();
+  const textAlign = isRTL ? "right" : "left";
+  const currency = t("price.currency");
+
   return (
     <AnimatedPressable
       onPress={() => onPress(meal)}
@@ -326,11 +355,13 @@ function MealPreviewCard({
         style={styles.mealPreviewImage}
       />
       <View style={styles.mealPreviewBody}>
-        <Text style={styles.mealPreviewName} numberOfLines={2}>
+        <Text style={[styles.mealPreviewName, { textAlign }]} numberOfLines={2}>
           {meal.name}
         </Text>
-        <View style={styles.mealPreviewFooter}>
-          <Text style={styles.mealPreviewPrice}>{formatPrice(meal.price)}</Text>
+        <View style={[styles.mealPreviewFooter, isRTL && styles.mealPreviewFooterRtl]}>
+          <Text style={[styles.mealPreviewPrice, { textAlign }]}>
+            {formatPrice(meal.price, currency)}
+          </Text>
           <View style={styles.addBubble}>
             <Ionicons name="add" size={16} color={colors.onPrimary} />
           </View>
@@ -355,17 +386,22 @@ function RailSkeleton({ count = 3, width = 144, height = 168 }: { count?: number
 }
 
 function EmptySection({ text }: { text: string }) {
+  const { isRTL } = useLanguageStore();
+  const textAlign = isRTL ? "right" : "left";
+
   return (
-    <View style={styles.emptySection}>
+    <View style={[styles.emptySection, isRTL && styles.emptySectionRtl]}>
       <View style={styles.emptyIcon}>
         <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
       </View>
-      <Text style={styles.emptyText}>{text}</Text>
+      <Text style={[styles.emptyText, { textAlign }]}>{text}</Text>
     </View>
   );
 }
 
 function HomeScreen() {
+  const { t } = useHomeT();
+  const { language } = useLanguageStore();
   const { width } = useWindowDimensions();
   const { data: profile } = useGetProfile();
   const feed = useRestaurantHomeFeed();
@@ -375,7 +411,7 @@ function HomeScreen() {
   const [search, setSearch] = useState("");
 
   const cartCount = getCartQuantity(cartItems);
-  const firstName = profile?.firstName?.trim() || "Guest";
+  const firstName = profile?.firstName?.trim() || t("user.guest");
   const mealCardWidth = Math.min(width * 0.42, 172);
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -408,7 +444,7 @@ function HomeScreen() {
   );
 
   const handleCategoryPress = useCallback(
-    (cuisineType: string) => {
+    (cuisineType: string | null) => {
       feed.setSelectedCuisineType(cuisineType);
     },
     [feed],
@@ -423,7 +459,7 @@ function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView key={language} style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
       <ScrollView
@@ -448,7 +484,7 @@ function HomeScreen() {
         </FadeInView>
 
         <FadeInView delay={130}>
-          <SectionHeader title="Categories" />
+          <SectionHeader title={t("sections.categories")} />
           {feed.isLoading && !feed.categories.length ? (
             <RailSkeleton count={4} width={116} height={118} />
           ) : feed.categories.length ? (
@@ -458,7 +494,7 @@ function HomeScreen() {
               contentContainerStyle={styles.categoryRail}
             >
               {feed.categories.map((category, index) => (
-                <FadeInView key={category.cuisineType} delay={170 + index * 45}>
+                <FadeInView key={category.cuisineType ?? "all"} delay={170 + index * 45}>
                   <CategoryCard
                     cuisineType={category.cuisineType}
                     count={category.count}
@@ -470,14 +506,14 @@ function HomeScreen() {
               ))}
             </ScrollView>
           ) : (
-            <EmptySection text="No categories available yet." />
+            <EmptySection text={t("empty.noCategories")} />
           )}
         </FadeInView>
 
         <FadeInView delay={230}>
           <SectionHeader
-            title="Restaurants"
-            action="See All"
+            title={t("sections.restaurants")}
+            action={t("actions.seeAll")}
             onAction={() => router.push("/restaurants" as never)}
           />
           {feed.isLoading && !restaurantPreview.length ? (
@@ -496,13 +532,13 @@ function HomeScreen() {
               ))}
             </ScrollView>
           ) : (
-            <EmptySection text="No restaurants in this category." />
+            <EmptySection text={t("empty.restaurantsInCategory")} />
           )}
         </FadeInView>
 
         <FadeInView delay={320}>
           <SectionHeader
-            title="Popular Meals"
+            title={t("sections.popularMeals")}
             action={feed.selectedRestaurant?.name}
           />
           {feed.isLoading && !popularMeals.length ? (
@@ -521,7 +557,7 @@ function HomeScreen() {
               ))}
             </ScrollView>
           ) : (
-            <EmptySection text="No meals to show for this restaurant yet." />
+            <EmptySection text={t("empty.mealsForRestaurant")} />
           )}
         </FadeInView>
       </ScrollView>
@@ -533,6 +569,7 @@ function HomeScreen() {
         meal={activeMeal}
         onClose={() => setActiveMeal(null)}
         onConfirm={handleConfirmMeal}
+        currency={t("price.currency")}
       />
     </SafeAreaView>
   );
@@ -582,6 +619,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
+  },
+  heroTopRowRtl: {
+    flexDirection: "row-reverse",
   },
   heroGreeting: {
     fontFamily: typography.bodyMedium,
@@ -701,6 +741,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
   },
+  heroSearchRtl: {
+    flexDirection: "row-reverse",
+  },
   heroSearchInput: {
     flex: 1,
     minHeight: 48,
@@ -717,6 +760,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+  sectionHeaderRtl: {
+    flexDirection: "row-reverse",
   },
   sectionTitle: {
     fontFamily: typography.headlineSemi,
@@ -813,6 +859,11 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: radii.pill,
   },
+  statusBadgeRtl: {
+    left: undefined,
+    right: 9,
+    flexDirection: "row-reverse",
+  },
   openBadge: {
     backgroundColor: "rgba(22,163,74,0.9)",
   },
@@ -851,6 +902,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
     marginTop: 4,
+  },
+  restaurantMetaRowRtl: {
+    flexDirection: "row-reverse",
   },
   ratingPill: {
     flexDirection: "row",
@@ -904,6 +958,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  mealPreviewFooterRtl: {
+    flexDirection: "row-reverse",
+  },
   mealPreviewPrice: {
     flex: 1,
     fontFamily: typography.bodyBold,
@@ -932,6 +989,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     ...shadows.soft,
+  },
+  emptySectionRtl: {
+    flexDirection: "row-reverse",
   },
   emptyIcon: {
     width: 38,
