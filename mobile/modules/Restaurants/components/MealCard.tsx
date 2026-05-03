@@ -1,5 +1,5 @@
 import React, { memo, useCallback } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
@@ -13,12 +13,13 @@ interface MealCardProps {
   meal: Meal;
   onPress: (meal: Meal) => void;
   currency?: string;
+  isAdding?: boolean;
 }
 
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
-const MealCard = ({ meal, onPress, currency = "SAR" }: MealCardProps) => {
+const MealCard = ({ meal, onPress, currency = "SAR", isAdding = false }: MealCardProps) => {
   const handlePress = useCallback(() => onPress(meal), [meal, onPress]);
   const calories = meal.calories ? `${Math.round(meal.calories)} Kcal` : null;
 
@@ -26,7 +27,7 @@ const MealCard = ({ meal, onPress, currency = "SAR" }: MealCardProps) => {
     <AnimatedPressable
       onPress={handlePress}
       haptic="impact"
-      disabled={!meal.isAvailable}
+      disabled={!meal.isAvailable || isAdding}
       disabledStyle={styles.cardUnavailable}
       style={styles.card}
     >
@@ -51,7 +52,11 @@ const MealCard = ({ meal, onPress, currency = "SAR" }: MealCardProps) => {
             {meal.name}
           </Text>
           <View style={styles.addBtn}>
-            <Ionicons name="add" size={16} color={colors.onPrimary} />
+            {isAdding ? (
+              <ActivityIndicator size="small" color={colors.onPrimary} />
+            ) : (
+              <Ionicons name="add" size={16} color={colors.onPrimary} />
+            )}
           </View>
         </View>
 

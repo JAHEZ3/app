@@ -22,6 +22,7 @@ import { createAuthModule } from "@/modules/Auth/index";
 import { createProfileModule } from "@/modules/Profile/index";
 import { createDeliveryModule } from "@/modules/delivery/index";
 import { createRestaurantsModule } from "@/modules/Restaurants/index";
+import { createCartModule } from "@/modules/Cart/index";
 
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 
@@ -31,6 +32,7 @@ const { Provider: AuthProvider } = createAuthModule();
 const { Provider: ProfileProvider } = createProfileModule();
 const { Provider: DeliveryProvider } = createDeliveryModule();
 const { Provider: RestaurantsProvider } = createRestaurantsModule();
+const { Provider: CartProvider } = createCartModule();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,19 +70,22 @@ export default function RootLayout() {
         <ProfileProvider>
           <DeliveryProvider>
             <RestaurantsProvider>
-              <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="onboarding" />
-                <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="auth/terms" />
-                <Stack.Screen name="auth/otp" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="auth/complete-profile" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="delivery" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="restaurants/index" />
-                <Stack.Screen name="restaurants/[id]" />
-                <Stack.Screen name="profile/index" />
-              </Stack>
+              <CartProvider>
+                <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+                  <Stack.Screen name="index" />
+                  <Stack.Screen name="onboarding" />
+                  <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="auth/terms" />
+                  <Stack.Screen name="auth/otp" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="auth/complete-profile" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="delivery" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="restaurants/index" />
+                  <Stack.Screen name="restaurants/[id]" />
+                  <Stack.Screen name="cart" />
+                  <Stack.Screen name="profile/index" />
+                </Stack>
+              </CartProvider>
             </RestaurantsProvider>
           </DeliveryProvider>
         </ProfileProvider>
