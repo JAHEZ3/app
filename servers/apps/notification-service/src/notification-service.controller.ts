@@ -1,60 +1,78 @@
-import { Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { NotificationServiceService } from './notification-service.service';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
 import { NOTIFICATION_QUEUE, JOBS } from './queue/queue.constants';
-
-@Injectable()
-class JwtGuard implements CanActivate {
-  constructor(private jwt: JwtService, private config: ConfigService) {}
-  canActivate(ctx: ExecutionContext): boolean {
-    const req = ctx.switchToHttp().getRequest();
-    const token = (req.headers['authorization'] ?? '').replace('Bearer ', '');
-    if (!token) throw new UnauthorizedException();
-    req.user = this.jwt.verify(token, { secret: this.config.get('JWT_ACCESS_SECRET') });
-    return true;
-  }
-}
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
+import { SendBroadcastDto } from './dto/send-broadcast.dto';
+import { SendToPhoneDto } from './dto/send-to-phone.dto';
 
 @Controller()
 export class NotificationServiceController {
   constructor(
     private readonly service: NotificationServiceService,
-    private readonly jwt: JwtService,
-    private readonly config: ConfigService,
     @InjectQueue(NOTIFICATION_QUEUE) private readonly notificationQueue: Queue,
   ) {}
 
-  // ─── REST endpoints ───────────────────────────────────────────────────────
+  // ─── REST: notifications for the current user ─────────────────────────────
 
   @Get('notifications')
-  @UseGuards(JwtGuard)
-  async list(@Query('page') page: number, @Query('limit') limit: number, ctx: any) {
-    const userId = ctx?.user?.sub;
-    return this.service.getForUser(userId, page, limit);
-  }
-
-  @Patch('notifications/:id/read')
-  @UseGuards(JwtGuard)
-  async markRead(@Param('id') id: string, ctx: any) {
-    await this.service.markRead(ctx?.user?.sub, id);
-    return { message: 'تم تحديد الإشعار كمقروء' };
+  @UseGuards(JwtAuthGuard)
+  list(
+    @Req() req: any,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ) {
+    return this.service.getForUser(req.user.sub, page, limit);
   }
 
   @Patch('notifications/read-all')
-  @UseGuards(JwtGuard)
-  async markAllRead(ctx: any) {
-    await this.service.markAllRead(ctx?.user?.sub);
+  @UseGuards(JwtAuthGuard)
+  async markAllRead(@Req() req: any) {
+    await this.service.markAllRead(req.user.sub);
     return { message: 'تم تحديد جميع الإشعارات كمقروءة' };
+  }
+
+  @Patch('notifications/:id/read')
+  @UseGuards(JwtAuthGuard)
+  async markRead(@Req() req: any, @Param('id') id: string) {
+    await this.service.markRead(req.user.sub, id);
+    return { message: 'تم تحديد الإشعار كمقروء' };
+  }
+
+  // ─── REST: manager-only send ──────────────────────────────────────────────
+
+  @Post('notifications/broadcast')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('manager')
+  async broadcast(@Body() dto: SendBroadcastDto) {
+    const result = await this.service.broadcast(dto);
+    return {
+      message: `تم إرسال الإشعار إلى ${result.recipients} مستخدم.`,
+      ...result,
+    };
+  }
+
+  @Post('notifications/send-to-phone')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('manager')
+  async sendToPhone(@Body() dto: SendToPhoneDto) {
+    const { phone, ...payload } = dto;
+    const n = await this.service.sendToPhone(phone, payload);
+    return { message: 'تم إرسال الإشعار.', notification: n };
   }
 
   // ─── NATS event handlers — enqueue rather than process inline ────────────
@@ -73,7 +91,6 @@ export class NotificationServiceController {
     await this.notificationQueue.add(
       JOBS.SEND_NOTIFICATION,
       { type: 'order.status.changed', payload: data },
-      // No deduplication key here — each status change is a distinct notification
     );
   }
 

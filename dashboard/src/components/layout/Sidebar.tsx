@@ -7,24 +7,29 @@ import {
   ShoppingBag,
   UtensilsCrossed,
   BarChart3,
+  Bell,
   Settings,
   LogOut,
   ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "الرئيسية" },
   { href: "/orders", icon: ShoppingBag, label: "الطلبات" },
   { href: "/menu", icon: UtensilsCrossed, label: "القائمة" },
   { href: "/analytics", icon: BarChart3, label: "الإحصائيات" },
+  { href: "/notifications", icon: Bell, label: "الإشعارات" },
   { href: "/settings", icon: Settings, label: "الإعدادات" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const logout = useLogout();
+  const { data: notifs } = useNotifications(1, 1);
+  const unread = notifs?.unread ?? 0;
 
   return (
     <aside
@@ -74,7 +79,12 @@ export function Sidebar() {
                 )}
               />
               <span>{label}</span>
-              {isActive && (
+              {href === "/notifications" && unread > 0 && (
+                <span className="mr-auto min-w-[20px] h-[20px] px-1.5 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center tabular-nums">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+              {isActive && href !== "/notifications" && (
                 <ChevronLeft className="w-4 h-4 text-primary mr-auto" />
               )}
             </Link>

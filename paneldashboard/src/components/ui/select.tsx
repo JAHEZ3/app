@@ -19,7 +19,7 @@ const SelectTrigger = React.forwardRef<
       "flex h-10 w-full items-center justify-between rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground",
       "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary",
       "disabled:cursor-not-allowed disabled:opacity-50 transition-colors",
-      className
+      className,
     )}
     {...props}
   >
@@ -39,14 +39,16 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 min-w-[8rem] overflow-hidden rounded-xl border border-border bg-white shadow-lg animate-scale-in",
+        "relative z-50 min-w-[10rem] overflow-hidden rounded-xl border border-border bg-white shadow-lg animate-scale-in",
         position === "popper" && "translate-y-1",
-        className
+        className,
       )}
       position={position}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.Viewport className="p-1">
+        {children}
+      </SelectPrimitive.Viewport>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 ));
@@ -59,9 +61,9 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-pointer select-none items-center rounded-lg py-2 px-3 text-sm outline-none",
+      "relative flex w-full cursor-pointer select-none items-end rounded-lg py-2 px-3 text-sm outline-none",
       "focus:bg-primary/5 focus:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      className
+      className,
     )}
     {...props}
   >
@@ -75,4 +77,11 @@ const SelectItem = React.forwardRef<
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem };
+export {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+};

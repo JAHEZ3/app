@@ -4,10 +4,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { JwtModule } from '@nestjs/jwt';
 import { BullModule } from '@nestjs/bullmq';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { redisStore } from 'cache-manager-redis-yet';
 import { NotificationServiceController } from './notification-service.controller';
 import { NotificationServiceService } from './notification-service.service';
 import { Notification } from './entities/notification.entity';
+import { UserRead } from './entities/user.read';
 import { NOTIFICATION_QUEUE } from './queue/queue.constants';
 import { NotificationProcessor } from './queue/notification.processor';
 
@@ -29,7 +31,18 @@ import { NotificationProcessor } from './queue/notification.processor';
       inject: [ConfigService],
     }),
 
-    TypeOrmModule.forFeature([Notification]),
+    TypeOrmModule.forFeature([Notification, UserRead]),
+
+    ClientsModule.registerAsync([
+      {
+        name: 'NATS_SERVICE',
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.NATS,
+          options: { servers: [config.get<string>('NATS_URL', 'nats://localhost:4222')] },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
 
     CacheModule.registerAsync({
       isGlobal: true,
