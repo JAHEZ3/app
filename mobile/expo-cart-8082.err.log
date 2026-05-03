@@ -1,8 +1,0 @@
-The following packages should be updated for best compatibility with the installed expo version:
-  babel-preset-expo@55.0.15 - expected version: ~54.0.10
-  expo@54.0.33 - expected version: ~54.0.34
-  expo-image-picker@17.0.10 - expected version: ~17.0.11
-  expo-linking@8.0.11 - expected version: ~8.0.12
-  expo-localization@55.0.13 - expected version: ~17.0.8
-  expo-web-browser@15.0.10 - expected version: ~15.0.11
-Your project may not work correctly until you install the expected versions of the packages.
