@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import * as SecureStore from 'expo-secure-store';
+import { I18nManager } from 'react-native';
 import i18n, { SupportedLanguage, isRTLLanguage, initialLanguage } from '@/lib/i18n';
 
 const secureStorage = createJSONStorage(() => ({
@@ -17,6 +18,14 @@ interface LanguageState {
   applyStoredLanguage: () => void;
 }
 
+const applyNativeDirection = (lang: SupportedLanguage) => {
+  const rtl = isRTLLanguage(lang);
+  I18nManager.allowRTL(true);
+  I18nManager.swapLeftAndRightInRTL(false);
+  I18nManager.forceRTL(rtl);
+  return rtl;
+};
+
 export const useLanguageStore = create<LanguageState>()(
   persist(
     (set, get) => ({
@@ -27,12 +36,12 @@ export const useLanguageStore = create<LanguageState>()(
       setLanguage: async (lang: SupportedLanguage) => {
         set({ isChanging: true });
         await i18n.changeLanguage(lang);
-        set({ language: lang, isRTL: isRTLLanguage(lang), isChanging: false });
+        set({ language: lang, isRTL: applyNativeDirection(lang), isChanging: false });
       },
 
       applyStoredLanguage: () => {
         const { language } = get();
-        const rtl = isRTLLanguage(language);
+        const rtl = applyNativeDirection(language);
         if (i18n.language !== language) {
           i18n.changeLanguage(language);
         }

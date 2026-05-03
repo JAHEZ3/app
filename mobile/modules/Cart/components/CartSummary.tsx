@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleProp, StyleSheet, Text, TextStyle, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   FadeInUp,
@@ -10,6 +10,8 @@ import Animated, {
 } from "react-native-reanimated";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import { colors, radii, shadows, typography } from "@/components/ui/theme";
+import { useCartT } from "@/hooks/useAppTranslation";
+import { useLanguageStore } from "@/store/useLanguageStore";
 
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
@@ -21,7 +23,7 @@ function AnimatedAmount({
 }: {
   value: number;
   currency: string;
-  style: object;
+  style: StyleProp<TextStyle>;
 }) {
   const previousValue = useRef(value);
   const [displayValue, setDisplayValue] = useState(value);
@@ -87,13 +89,18 @@ function CartSummary({
   subtotal,
   itemCount,
   deliveryFee = 8,
-  currency = "SAR",
+  currency = "ILS",
   bottomInset = 0,
   disabled = false,
   onCheckout,
 }: CartSummaryProps) {
+  const { t } = useCartT();
+  const isRTL = useLanguageStore((state) => state.isRTL);
+  const textAlign = isRTL ? "right" : "left";
+  const writingDirection = isRTL ? "rtl" : "ltr";
   const total = useMemo(() => subtotal + deliveryFee, [deliveryFee, subtotal]);
-  const itemLabel = itemCount === 1 ? "1 item" : `${itemCount} items`;
+  const itemLabel = t("items.count", { count: itemCount });
+  const arrowIcon = isRTL ? "arrow-back" : "arrow-forward";
 
   return (
     <Animated.View
@@ -102,34 +109,54 @@ function CartSummary({
     >
       <View style={styles.handle} />
 
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.eyebrow}>Order summary</Text>
-          <Text style={styles.itemCount}>{itemLabel}</Text>
+      <View style={[styles.headerRow, isRTL && styles.rowReverse]}>
+        <View style={[styles.headerText, isRTL && styles.headerTextRtl]}>
+          <Text style={[styles.eyebrow, { textAlign, writingDirection }]}>
+            {t("summary.title")}
+          </Text>
+          <Text style={[styles.itemCount, { textAlign, writingDirection }]}>
+            {itemLabel}
+          </Text>
         </View>
-        <View style={styles.deliveryPill}>
+        <View style={[styles.deliveryPill, isRTL && styles.rowReverse]}>
           <Ionicons name="bicycle-outline" size={14} color={colors.primary} />
-          <Text style={styles.deliveryPillText}>Fast delivery</Text>
+          <Text style={[styles.deliveryPillText, { textAlign, writingDirection }]}>
+            {t("summary.fastDelivery")}
+          </Text>
         </View>
       </View>
 
       <View style={styles.rows}>
-        <View style={styles.row}>
-          <Text style={styles.label}>Subtotal</Text>
-          <Text style={styles.value}>{formatPrice(subtotal, currency)}</Text>
+        <View style={[styles.row, isRTL && styles.rowReverse]}>
+          <Text style={[styles.label, { textAlign, writingDirection }]}>
+            {t("summary.subtotal")}
+          </Text>
+          <Text style={[styles.value, { textAlign, writingDirection }]}>
+            {formatPrice(subtotal, currency)}
+          </Text>
         </View>
 
-        <View style={styles.row}>
-          <Text style={styles.label}>Delivery fee</Text>
-          <Text style={styles.value}>{formatPrice(deliveryFee, currency)}</Text>
+        <View style={[styles.row, isRTL && styles.rowReverse]}>
+          <Text style={[styles.label, { textAlign, writingDirection }]}>
+            {t("summary.deliveryFee")}
+          </Text>
+          <Text style={[styles.value, { textAlign, writingDirection }]}>
+            {formatPrice(deliveryFee, currency)}
+          </Text>
         </View>
       </View>
 
       <View style={styles.divider} />
 
-      <View style={styles.totalRow}>
-        <Text style={styles.totalLabel}>Total</Text>
-        <AnimatedAmount value={total} currency={currency} style={styles.totalValue} />
+      <View style={[styles.totalRow, isRTL && styles.rowReverse]}>
+        <Text style={[styles.totalLabel, { textAlign, writingDirection }]}>
+          {t("summary.total")}
+        </Text>
+        <AnimatedAmount
+          value={total}
+          currency={currency}
+          style={[styles.totalValue, { textAlign, writingDirection }]}
+        />
       </View>
 
       <AnimatedPressable
@@ -137,15 +164,22 @@ function CartSummary({
         disabled={disabled}
         scaleTo={0.965}
         haptic="impact"
-        style={styles.checkoutButton}
+        style={[
+          styles.checkoutButton,
+          isRTL && [styles.rowReverse, styles.checkoutButtonRtl],
+        ]}
         disabledStyle={styles.checkoutDisabled}
         accessibilityRole="button"
-        accessibilityLabel="Checkout"
+        accessibilityLabel={t("accessibility.checkout")}
       >
-        <Text style={styles.checkoutText}>Checkout</Text>
-        <View style={styles.checkoutAmount}>
-          <Text style={styles.checkoutAmountText}>{formatPrice(total, currency)}</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.onPrimary} />
+        <Text style={[styles.checkoutText, { textAlign, writingDirection }]}>
+          {t("actions.checkout")}
+        </Text>
+        <View style={[styles.checkoutAmount, isRTL && styles.rowReverse]}>
+          <Text style={[styles.checkoutAmountText, { textAlign, writingDirection }]}>
+            {formatPrice(total, currency)}
+          </Text>
+          <Ionicons name={arrowIcon} size={16} color={colors.onPrimary} />
         </View>
       </AnimatedPressable>
     </Animated.View>
@@ -172,11 +206,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHighest,
     marginBottom: 12,
   },
+  rowReverse: {
+    flexDirection: "row-reverse",
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+  headerText: {
+    alignItems: "flex-start",
+  },
+  headerTextRtl: {
+    alignItems: "flex-end",
   },
   eyebrow: {
     fontFamily: typography.bodyBold,
@@ -264,6 +307,10 @@ const styles = StyleSheet.create({
     paddingLeft: 20,
     paddingRight: 8,
     ...shadows.primary,
+  },
+  checkoutButtonRtl: {
+    paddingLeft: 8,
+    paddingRight: 20,
   },
   checkoutDisabled: {
     opacity: 0.62,

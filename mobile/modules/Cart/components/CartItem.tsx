@@ -1,19 +1,30 @@
-import React, { memo, useCallback, useMemo } from "react";
+import React, { memo, useCallback, useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   FadeInUp,
   FadeOutLeft,
+  FadeOutRight,
   LinearTransition,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import { colors, radii, shadows, typography } from "@/components/ui/theme";
+import { useCartT } from "@/hooks/useAppTranslation";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import type { CartItem as CartItemType } from "../types";
 
 const MEAL_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1543353071-873f17a7a088?auto=format&fit=crop&w=700&q=80";
+const SWIPE_REVEAL = 94;
+const SWIPE_THRESHOLD = 72;
 
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
@@ -30,11 +41,22 @@ interface CartItemProps {
 function CartItem({
   item,
   index,
-  currency = "SAR",
+  currency = "ILS",
   disabled = false,
   onChangeQuantity,
   onRemove,
 }: CartItemProps) {
+  const { t } = useCartT();
+  const isRTL = useLanguageStore((state) => state.isRTL);
+  const textAlign = isRTL ? "right" : "left";
+  const writingDirection = isRTL ? "rtl" : "ltr";
+  const directionMultiplier = isRTL ? 1 : -1;
+  const translateX = useSharedValue(0);
+
+  useEffect(() => {
+    translateX.value = withTiming(0, { duration: 160 });
+  }, [isRTL, translateX]);
+
   const imageSource = useMemo(
     () => ({ uri: item.mealImage || FALLBACK_IMAGE }),
     [item.mealImage],
@@ -53,8 +75,49 @@ function CartItem({
   }, [item.mealId, item.quantity, onChangeQuantity]);
 
   const handleRemove = useCallback(() => {
+    translateX.value = withTiming(directionMultiplier * SWIPE_REVEAL, { duration: 120 });
     onRemove(item.mealId);
-  }, [item.mealId, onRemove]);
+  }, [directionMultiplier, item.mealId, onRemove, translateX]);
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!disabled)
+        .activeOffsetX(isRTL ? [-999, 12] : [-12, 999])
+        .failOffsetY([-12, 12])
+        .onUpdate((event) => {
+          const directionalDrag = event.translationX * directionMultiplier;
+
+          if (directionalDrag > 0) {
+            translateX.value =
+              directionMultiplier * Math.min(directionalDrag, SWIPE_REVEAL);
+            return;
+          }
+
+          translateX.value = directionMultiplier * Math.max(directionalDrag * 0.18, -14);
+        })
+        .onEnd((event) => {
+          const directionalDrag = event.translationX * directionMultiplier;
+
+          if (directionalDrag > SWIPE_THRESHOLD) {
+            translateX.value = withTiming(
+              directionMultiplier * SWIPE_REVEAL,
+              { duration: 150 },
+              (finished) => {
+                if (finished) runOnJS(handleRemove)();
+              },
+            );
+            return;
+          }
+
+          translateX.value = withSpring(0, { damping: 18, stiffness: 220 });
+        }),
+    [directionMultiplier, disabled, handleRemove, isRTL, translateX],
+  );
+
+  const cardMotionStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   return (
     <Animated.View
@@ -62,127 +125,175 @@ function CartItem({
         .duration(420)
         .springify()
         .damping(18)}
-      exiting={FadeOutLeft.duration(220)}
+      exiting={(isRTL ? FadeOutRight : FadeOutLeft).duration(220)}
       layout={LinearTransition.springify().damping(18).stiffness(180)}
       style={styles.shell}
     >
-      <View style={styles.card}>
-        <View style={styles.imageWrap}>
-          <Image
-            source={imageSource}
-            placeholder={MEAL_BLURHASH}
-            contentFit="cover"
-            transition={180}
-            style={styles.image}
-          />
-          <View style={styles.qtyBadge}>
-            <Text style={styles.qtyBadgeText}>x{item.quantity}</Text>
-          </View>
-        </View>
-
-        <View style={styles.content}>
-          <View style={styles.titleRow}>
-            <View style={styles.titleBlock}>
-              <Text style={styles.name} numberOfLines={2}>
-                {item.mealName}
-              </Text>
-              <Text style={styles.unitPrice}>
-                {formatPrice(item.unitPrice, currency)} each
-              </Text>
-            </View>
-
-            <AnimatedPressable
-              onPress={handleRemove}
-              disabled={disabled}
-              scaleTo={0.9}
-              haptic="impact"
-              style={styles.trashButton}
-              disabledStyle={styles.disabledAction}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${item.mealName}`}
-            >
-              <Ionicons name="trash-outline" size={17} color={colors.error} />
-            </AnimatedPressable>
-          </View>
-
-          {visibleOptions.length > 0 ? (
-            <View style={styles.optionsWrap}>
-              {visibleOptions.map((option) => (
-                <View key={option.optionId} style={styles.optionChip}>
-                  <Text style={styles.optionText} numberOfLines={1}>
-                    {option.optionName}
-                  </Text>
-                </View>
-              ))}
-              {hiddenOptionsCount > 0 ? (
-                <View style={styles.optionChip}>
-                  <Text style={styles.optionText}>+{hiddenOptionsCount}</Text>
-                </View>
-              ) : null}
-            </View>
-          ) : (
-            <Text style={styles.noOptions}>No customizations</Text>
-          )}
-
-          {item.specialInstructions ? (
-            <View style={styles.noteRow}>
-              <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.outline} />
-              <Text style={styles.noteText} numberOfLines={1}>
-                {item.specialInstructions}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.footer}>
-            <View style={styles.stepper}>
-              <AnimatedPressable
-                onPress={handleDecrement}
-                disabled={disabled || item.quantity <= 1}
-                scaleTo={0.86}
-                haptic="impact"
-                style={styles.stepButton}
-                disabledStyle={styles.stepButtonDisabled}
-                accessibilityRole="button"
-                accessibilityLabel={`Decrease ${item.mealName} quantity`}
-              >
-                <Ionicons
-                  name="remove"
-                  size={16}
-                  color={item.quantity <= 1 ? colors.outline : colors.onSurface}
-                />
-              </AnimatedPressable>
-
-              <Animated.View
-                key={item.quantity}
-                entering={FadeInUp.duration(180)}
-                style={styles.quantityPill}
-              >
-                <Text style={styles.quantityText}>{item.quantity}</Text>
-              </Animated.View>
-
-              <AnimatedPressable
-                onPress={handleIncrement}
-                disabled={disabled}
-                scaleTo={0.86}
-                haptic="impact"
-                style={[styles.stepButton, styles.stepButtonPrimary]}
-                disabledStyle={styles.disabledAction}
-                accessibilityRole="button"
-                accessibilityLabel={`Increase ${item.mealName} quantity`}
-              >
-                <Ionicons name="add" size={17} color={colors.onPrimary} />
-              </AnimatedPressable>
-            </View>
-
-            <View style={styles.priceBlock}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalPrice}>
-                {formatPrice(item.totalPrice, currency)}
-              </Text>
-            </View>
-          </View>
+      <View
+        style={[
+          styles.swipeAction,
+          isRTL ? styles.swipeActionRtl : styles.swipeActionLtr,
+        ]}
+        pointerEvents="none"
+      >
+        <View style={[styles.swipeContent, isRTL && styles.rowReverse]}>
+          <Ionicons name="trash-outline" size={18} color={colors.error} />
+          <Text style={[styles.swipeText, { textAlign, writingDirection }]}>
+            {t("actions.swipeToDelete")}
+          </Text>
         </View>
       </View>
+
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[
+            styles.card,
+            isRTL && styles.rowReverse,
+            cardMotionStyle,
+          ]}
+        >
+          <View style={styles.imageWrap}>
+            <Image
+              source={imageSource}
+              placeholder={MEAL_BLURHASH}
+              contentFit="cover"
+              transition={180}
+              style={styles.image}
+            />
+            <View style={[styles.qtyBadge, isRTL && styles.qtyBadgeRtl]}>
+              <Text style={styles.qtyBadgeText}>x{item.quantity}</Text>
+            </View>
+          </View>
+
+          <View style={styles.content}>
+            <View style={[styles.titleRow, isRTL && styles.rowReverse]}>
+              <View style={styles.titleBlock}>
+                <Text
+                  style={[styles.name, { textAlign, writingDirection }]}
+                  numberOfLines={2}
+                >
+                  {item.mealName}
+                </Text>
+                <Text style={[styles.unitPrice, { textAlign, writingDirection }]}>
+                  {formatPrice(item.unitPrice, currency)} {t("items.each")}
+                </Text>
+              </View>
+
+              <AnimatedPressable
+                onPress={handleRemove}
+                disabled={disabled}
+                scaleTo={0.9}
+                haptic="impact"
+                style={styles.trashButton}
+                disabledStyle={styles.disabledAction}
+                accessibilityRole="button"
+                accessibilityLabel={t("accessibility.removeItem", {
+                  mealName: item.mealName,
+                })}
+              >
+                <Ionicons name="trash-outline" size={17} color={colors.error} />
+              </AnimatedPressable>
+            </View>
+
+            {visibleOptions.length > 0 ? (
+              <View style={[styles.optionsWrap, isRTL && styles.rowReverse]}>
+                {visibleOptions.map((option) => (
+                  <View key={option.optionId} style={styles.optionChip}>
+                    <Text
+                      style={[styles.optionText, { textAlign, writingDirection }]}
+                      numberOfLines={1}
+                    >
+                      {option.optionName}
+                    </Text>
+                  </View>
+                ))}
+                {hiddenOptionsCount > 0 ? (
+                  <View style={styles.optionChip}>
+                    <Text style={[styles.optionText, { textAlign, writingDirection }]}>
+                      {t("items.moreOptions", { count: hiddenOptionsCount })}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={[styles.noOptions, { textAlign, writingDirection }]}>
+                {t("items.noCustomizations")}
+              </Text>
+            )}
+
+            {item.specialInstructions ? (
+              <View style={[styles.noteRow, isRTL && styles.rowReverse]}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={13}
+                  color={colors.outline}
+                />
+                <Text
+                  style={[styles.noteText, { textAlign, writingDirection }]}
+                  numberOfLines={1}
+                >
+                  {item.specialInstructions}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.footer, isRTL && styles.rowReverse]}>
+              <View style={[styles.stepper, isRTL && styles.rowReverse]}>
+                <AnimatedPressable
+                  onPress={handleDecrement}
+                  disabled={disabled || item.quantity <= 1}
+                  scaleTo={0.86}
+                  haptic="impact"
+                  style={styles.stepButton}
+                  disabledStyle={styles.stepButtonDisabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("accessibility.decreaseQuantity", {
+                    mealName: item.mealName,
+                  })}
+                >
+                  <Ionicons
+                    name="remove"
+                    size={16}
+                    color={item.quantity <= 1 ? colors.outline : colors.onSurface}
+                  />
+                </AnimatedPressable>
+
+                <Animated.View
+                  key={item.quantity}
+                  entering={FadeInUp.duration(180)}
+                  style={styles.quantityPill}
+                >
+                  <Text style={styles.quantityText}>{item.quantity}</Text>
+                </Animated.View>
+
+                <AnimatedPressable
+                  onPress={handleIncrement}
+                  disabled={disabled}
+                  scaleTo={0.86}
+                  haptic="impact"
+                  style={[styles.stepButton, styles.stepButtonPrimary]}
+                  disabledStyle={styles.disabledAction}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("accessibility.increaseQuantity", {
+                    mealName: item.mealName,
+                  })}
+                >
+                  <Ionicons name="add" size={17} color={colors.onPrimary} />
+                </AnimatedPressable>
+              </View>
+
+              <View style={[styles.priceBlock, isRTL && styles.priceBlockRtl]}>
+                <Text style={[styles.totalLabel, { textAlign, writingDirection }]}>
+                  {t("items.total")}
+                </Text>
+                <Text style={[styles.totalPrice, { textAlign, writingDirection }]}>
+                  {formatPrice(item.totalPrice, currency)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }
@@ -190,6 +301,7 @@ function CartItem({
 const styles = StyleSheet.create({
   shell: {
     paddingHorizontal: 20,
+    position: "relative",
   },
   card: {
     minHeight: 138,
@@ -201,6 +313,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(229,229,229,0.78)",
     ...shadows.card,
+  },
+  rowReverse: {
+    flexDirection: "row-reverse",
+  },
+  swipeAction: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    top: 0,
+    bottom: 0,
+    borderRadius: 22,
+    backgroundColor: "#FFF0EA",
+    justifyContent: "center",
+  },
+  swipeActionLtr: {
+    alignItems: "flex-end",
+    paddingRight: 22,
+  },
+  swipeActionRtl: {
+    alignItems: "flex-start",
+    paddingLeft: 22,
+  },
+  swipeContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  swipeText: {
+    fontFamily: typography.bodyBold,
+    color: colors.error,
+    fontSize: 12,
+    lineHeight: 15,
   },
   imageWrap: {
     width: 104,
@@ -226,6 +370,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  qtyBadgeRtl: {
+    left: undefined,
+    right: 8,
+  },
   qtyBadgeText: {
     fontFamily: typography.bodyBold,
     color: colors.onPrimary,
@@ -235,6 +383,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     gap: 9,
+    minWidth: 0,
   },
   titleRow: {
     flexDirection: "row",
@@ -349,6 +498,9 @@ const styles = StyleSheet.create({
   priceBlock: {
     alignItems: "flex-end",
     minWidth: 76,
+  },
+  priceBlockRtl: {
+    alignItems: "flex-start",
   },
   totalLabel: {
     fontFamily: typography.bodyMedium,

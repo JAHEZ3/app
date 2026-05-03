@@ -19,7 +19,7 @@ interface MealCardProps {
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
-const MealCard = ({ meal, onPress, currency = "SAR", isAdding = false }: MealCardProps) => {
+const MealCard = ({ meal, onPress, currency = "ILS", isAdding = false }: MealCardProps) => {
   const handlePress = useCallback(() => onPress(meal), [meal, onPress]);
   const calories = meal.calories ? `${Math.round(meal.calories)} Kcal` : null;
 

@@ -18,7 +18,9 @@ import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
+import { useCartT } from "@/hooks/useAppTranslation";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import CartItem from "../components/CartItem";
 import CartSummary from "../components/CartSummary";
 import { getAddToCartErrorMessage } from "../hooks/useAddToCart";
@@ -28,7 +30,6 @@ import { useRemoveCartItem } from "../hooks/useRemoveCartItem";
 import { useUpdateCartItem } from "../hooks/useUpdateCartItem";
 import type { Cart, CartItem as CartItemType } from "../types";
 
-const CURRENCY = "ILS";
 const DELIVERY_FEE = 8;
 const SUMMARY_HEIGHT = 248;
 
@@ -43,22 +44,34 @@ function CartHeader({
   clearDisabled: boolean;
   onClear: () => void;
 }) {
+  const { t } = useCartT();
+  const isRTL = useLanguageStore((state) => state.isRTL);
+  const writingDirection = isRTL ? "rtl" : "ltr";
+
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, isRTL && styles.rowReverse]}>
       <AnimatedPressable
         onPress={onBack}
         haptic="impact"
         scaleTo={0.92}
         style={styles.iconButton}
         accessibilityRole="button"
-        accessibilityLabel="Go back"
+        accessibilityLabel={t("accessibility.goBack")}
       >
-        <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
+        <Ionicons
+          name={isRTL ? "chevron-forward" : "chevron-back"}
+          size={22}
+          color={colors.onSurface}
+        />
       </AnimatedPressable>
 
       <View style={styles.headerTitleBlock}>
-        <Text style={styles.headerEyebrow}>Your order</Text>
-        <Text style={styles.headerTitle}>Cart</Text>
+        <Text style={[styles.headerEyebrow, { writingDirection }]}>
+          {t("header.eyebrow")}
+        </Text>
+        <Text style={[styles.headerTitle, { writingDirection }]}>
+          {t("header.title")}
+        </Text>
       </View>
 
       {canClear ? (
@@ -70,7 +83,7 @@ function CartHeader({
           style={styles.clearIconButton}
           disabledStyle={styles.disabledAction}
           accessibilityRole="button"
-          accessibilityLabel="Clear cart"
+          accessibilityLabel={t("accessibility.clearCart")}
         >
           <Ionicons name="trash-outline" size={18} color={colors.error} />
         </AnimatedPressable>
@@ -90,25 +103,34 @@ const RestaurantBanner = memo(function RestaurantBanner({
   disabled: boolean;
   onClear: () => void;
 }) {
+  const { t } = useCartT();
+  const isRTL = useLanguageStore((state) => state.isRTL);
+  const textAlign = isRTL ? "right" : "left";
+  const writingDirection = isRTL ? "rtl" : "ltr";
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
-  const itemLabel = itemCount === 1 ? "1 item" : `${itemCount} items`;
+  const itemLabel = t("items.count", { count: itemCount });
 
   return (
     <Animated.View entering={FadeInUp.duration(420)} style={styles.bannerWrap}>
       <LinearGradient
         colors={[colors.primary, "#FF7A2B"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        start={{ x: isRTL ? 1 : 0, y: 0 }}
+        end={{ x: isRTL ? 0 : 1, y: 1 }}
         style={styles.restaurantBanner}
       >
-        <View style={styles.bannerTopRow}>
+        <View style={[styles.bannerTopRow, isRTL && styles.rowReverse]}>
           <View style={styles.storeIcon}>
             <Ionicons name="storefront" size={19} color={colors.primary} />
           </View>
 
           <View style={styles.bannerTitleBlock}>
-            <Text style={styles.bannerKicker}>Delivering from</Text>
-            <Text style={styles.restaurantName} numberOfLines={2}>
+            <Text style={[styles.bannerKicker, { textAlign, writingDirection }]}>
+              {t("banner.deliveringFrom")}
+            </Text>
+            <Text
+              style={[styles.restaurantName, { textAlign, writingDirection }]}
+              numberOfLines={2}
+            >
               {cart.restaurantName}
             </Text>
           </View>
@@ -121,24 +143,34 @@ const RestaurantBanner = memo(function RestaurantBanner({
             style={styles.bannerClearButton}
             disabledStyle={styles.disabledAction}
             accessibilityRole="button"
-            accessibilityLabel="Clear cart"
+            accessibilityLabel={t("accessibility.clearCart")}
           >
             <Ionicons name="trash-outline" size={17} color={colors.onPrimary} />
           </AnimatedPressable>
         </View>
 
-        <View style={styles.bannerMetaRow}>
-          <View style={styles.bannerPill}>
+        <View style={[styles.bannerMetaRow, isRTL && styles.rowReverse]}>
+          <View style={[styles.bannerPill, isRTL && styles.rowReverse]}>
             <Ionicons name="time-outline" size={13} color={colors.onPrimary} />
-            <Text style={styles.bannerPillText}>25-35 min</Text>
+            <Text style={[styles.bannerPillText, { textAlign, writingDirection }]}>
+              {t("banner.eta")}
+            </Text>
           </View>
-          <View style={styles.bannerPill}>
+          <View style={[styles.bannerPill, isRTL && styles.rowReverse]}>
             <Ionicons name="bag-handle-outline" size={13} color={colors.onPrimary} />
-            <Text style={styles.bannerPillText}>{itemLabel}</Text>
+            <Text style={[styles.bannerPillText, { textAlign, writingDirection }]}>
+              {itemLabel}
+            </Text>
           </View>
-          <View style={styles.bannerPill}>
-            <Ionicons name="shield-checkmark-outline" size={13} color={colors.onPrimary} />
-            <Text style={styles.bannerPillText}>Protected</Text>
+          <View style={[styles.bannerPill, isRTL && styles.rowReverse]}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={13}
+              color={colors.onPrimary}
+            />
+            <Text style={[styles.bannerPillText, { textAlign, writingDirection }]}>
+              {t("banner.protected")}
+            </Text>
           </View>
         </View>
       </LinearGradient>
@@ -163,11 +195,14 @@ function StateBlock({
   loading?: boolean;
   destructive?: boolean;
 }) {
+  const isRTL = useLanguageStore((state) => state.isRTL);
+  const writingDirection = isRTL ? "rtl" : "ltr";
+
   return (
     <Animated.View entering={FadeIn.duration(260)} style={styles.stateWrap}>
       <View style={[styles.stateIllustration, destructive && styles.stateIllustrationError]}>
         <View style={styles.stateOrbLg} />
-        <View style={styles.stateOrbSm} />
+        <View style={[styles.stateOrbSm, isRTL && styles.stateOrbSmRtl]} />
         <View style={styles.stateIcon}>
           {loading ? (
             <ActivityIndicator size="large" color={colors.primary} />
@@ -181,20 +216,26 @@ function StateBlock({
         </View>
       </View>
 
-      <Text style={styles.stateTitle}>{title}</Text>
-      <Text style={styles.stateBody}>{body}</Text>
+      <Text style={[styles.stateTitle, { writingDirection }]}>{title}</Text>
+      <Text style={[styles.stateBody, { writingDirection }]}>{body}</Text>
 
       {actionLabel && onAction ? (
         <AnimatedPressable
           onPress={onAction}
           haptic="impact"
           scaleTo={0.96}
-          style={styles.stateButton}
+          style={[styles.stateButton, isRTL && styles.rowReverse]}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
         >
-          <Text style={styles.stateButtonText}>{actionLabel}</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.onPrimary} />
+          <Text style={[styles.stateButtonText, { writingDirection }]}>
+            {actionLabel}
+          </Text>
+          <Ionicons
+            name={isRTL ? "arrow-back" : "arrow-forward"}
+            size={16}
+            color={colors.onPrimary}
+          />
         </AnimatedPressable>
       ) : null}
     </Animated.View>
@@ -203,9 +244,11 @@ function StateBlock({
 
 function CartScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useCartT();
   const authStatus = useAuthStore((state) => state.status);
   const isAuthed = authStatus === "authenticated";
   const isAuthBooting = authStatus === "idle" || authStatus === "loading";
+  const currency = t("price.currency");
 
   const { data: cart, isLoading, isError, error, refetch, isRefetching } = useCart();
   const { mutate: updateCartItem, isPending: isUpdatingItem } = useUpdateCartItem();
@@ -248,22 +291,22 @@ function CartScreen() {
     if (isMutating || !hasItems) return;
 
     Alert.alert(
-      "Clear cart",
-      "Remove every item from your cart?",
+      t("alerts.clearTitle"),
+      t("alerts.clearMessage"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("actions.cancel"), style: "cancel" },
         {
-          text: "Clear",
+          text: t("actions.clear"),
           style: "destructive",
           onPress: () => clearCart(),
         },
       ],
     );
-  }, [clearCart, hasItems, isMutating]);
+  }, [clearCart, hasItems, isMutating, t]);
 
   const handleCheckout = useCallback(() => {
-    Alert.alert("Checkout", "Your cart is ready for the next checkout step.");
-  }, []);
+    Alert.alert(t("alerts.checkoutTitle"), t("alerts.checkoutMessage"));
+  }, [t]);
 
   const keyExtractor = useCallback((item: CartItemType) => {
     const optionsKey = item.options.map((option) => option.optionId).join("-");
@@ -275,13 +318,13 @@ function CartScreen() {
       <CartItem
         item={item}
         index={index}
-        currency={CURRENCY}
+        currency={currency}
         disabled={isMutating}
         onChangeQuantity={handleChangeQuantity}
         onRemove={handleRemoveItem}
       />
     ),
-    [handleChangeQuantity, handleRemoveItem, isMutating],
+    [currency, handleChangeQuantity, handleRemoveItem, isMutating],
   );
 
   const listHeader = useMemo(
@@ -297,15 +340,15 @@ function CartScreen() {
     : screen.bottomTabSpace + 30;
 
   const errorMessage =
-    getAddToCartErrorMessage(error) ?? error?.message ?? "Something went wrong.";
+    getAddToCartErrorMessage(error) ?? error?.message ?? t("state.errorFallback");
 
   let content: React.ReactNode;
   if (isAuthBooting) {
     content = (
       <StateBlock
         icon="bag-handle-outline"
-        title="Preparing your cart"
-        body="Checking your session and loading your order."
+        title={t("state.preparingTitle")}
+        body={t("state.preparingBody")}
         loading
       />
     );
@@ -313,9 +356,9 @@ function CartScreen() {
     content = (
       <StateBlock
         icon="lock-closed-outline"
-        title="Sign in to view your cart"
-        body="Your saved meals and checkout details will appear here after login."
-        actionLabel="Sign in"
+        title={t("state.signedOutTitle")}
+        body={t("state.signedOutBody")}
+        actionLabel={t("actions.signIn")}
         onAction={() => router.push("/auth/login" as never)}
       />
     );
@@ -323,8 +366,8 @@ function CartScreen() {
     content = (
       <StateBlock
         icon="bag-handle-outline"
-        title="Loading your cart"
-        body="Fresh picks are on their way."
+        title={t("state.loadingTitle")}
+        body={t("state.loadingBody")}
         loading
       />
     );
@@ -332,9 +375,9 @@ function CartScreen() {
     content = (
       <StateBlock
         icon="alert-circle-outline"
-        title="Could not load cart"
+        title={t("state.errorTitle")}
         body={errorMessage}
-        actionLabel="Try again"
+        actionLabel={t("actions.retry")}
         onAction={refetch}
         destructive
       />
@@ -343,9 +386,9 @@ function CartScreen() {
     content = (
       <StateBlock
         icon="cart-outline"
-        title="Your cart is empty"
-        body="Discover restaurants and add something delicious to start your order."
-        actionLabel="Browse restaurants"
+        title={t("state.emptyTitle")}
+        body={t("state.emptyBody")}
+        actionLabel={t("actions.browseRestaurants")}
         onAction={() => router.push("/restaurants" as never)}
       />
     );
@@ -369,7 +412,7 @@ function CartScreen() {
             colors={[colors.primary]}
           />
         }
-        extraData={isMutating}
+        extraData={`${isMutating}-${currency}`}
         removeClippedSubviews
         initialNumToRender={8}
         maxToRenderPerBatch={8}
@@ -396,7 +439,7 @@ function CartScreen() {
             subtotal={cart.subtotal}
             itemCount={itemCount}
             deliveryFee={DELIVERY_FEE}
-            currency={CURRENCY}
+            currency={currency}
             bottomInset={Math.max(insets.bottom, 10)}
             disabled={isMutating}
             onCheckout={handleCheckout}
@@ -413,6 +456,9 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.surface,
+  },
+  rowReverse: {
+    flexDirection: "row-reverse",
   },
   header: {
     paddingHorizontal: screen.horizontal,
@@ -452,6 +498,7 @@ const styles = StyleSheet.create({
     color: colors.outline,
     fontSize: 11,
     lineHeight: 13,
+    textAlign: "center",
   },
   headerTitle: {
     marginTop: 1,
@@ -459,6 +506,7 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontSize: 20,
     lineHeight: 25,
+    textAlign: "center",
   },
   content: {
     flex: 1,
@@ -575,6 +623,10 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: colors.card,
     ...shadows.soft,
+  },
+  stateOrbSmRtl: {
+    right: undefined,
+    left: 8,
   },
   stateIcon: {
     width: 82,
