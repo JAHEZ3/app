@@ -1,0 +1,68 @@
+{
+  "price": {
+    "currency": "شيكل"
+  },
+  "accessibility": {
+    "goBack": "رجوع",
+    "clearCart": "إفراغ السلة",
+    "removeItem": "إزالة {{mealName}}",
+    "decreaseQuantity": "تقليل كمية {{mealName}}",
+    "increaseQuantity": "زيادة كمية {{mealName}}",
+    "checkout": "إتمام الطلب"
+  },
+  "header": {
+    "eyebrow": "طلبك",
+    "title": "السلة"
+  },
+  "actions": {
+    "cancel": "إلغاء",
+    "clear": "إفراغ",
+    "retry": "حاول مجددا",
+    "signIn": "تسجيل الدخول",
+    "browseRestaurants": "تصفح المطاعم",
+    "checkout": "إتمام الطلب",
+    "swipeToDelete": "اسحب للحذف"
+  },
+  "alerts": {
+    "clearTitle": "إفراغ السلة",
+    "clearMessage": "هل تريد إزالة كل العناصر من السلة؟",
+    "checkoutTitle": "إتمام الطلب",
+    "checkoutMessage": "سلتك جاهزة للانتقال إلى خطوة الدفع التالية."
+  },
+  "banner": {
+    "deliveringFrom": "التوصيل من",
+    "eta": "25-35 دقيقة",
+    "protected": "محمي"
+  },
+  "items": {
+    "count_zero": "لا توجد عناصر",
+    "count_one": "عنصر واحد",
+    "count_two": "عنصران",
+    "count_few": "{{count}} عناصر",
+    "count_many": "{{count}} عنصرا",
+    "count_other": "{{count}} عنصر",
+    "each": "للوحدة",
+    "total": "المجموع",
+    "noCustomizations": "بدون إضافات",
+    "moreOptions": "+{{count}}"
+  },
+  "state": {
+    "preparingTitle": "نجهز سلتك",
+    "preparingBody": "نتحقق من جلستك ونحمل تفاصيل الطلب.",
+    "signedOutTitle": "سجل الدخول لعرض سلتك",
+    "signedOutBody": "ستظهر وجباتك المحفوظة وتفاصيل الدفع بعد تسجيل الدخول.",
+    "loadingTitle": "جاري تحميل السلة",
+    "loadingBody": "اختياراتك الشهية في الطريق.",
+    "errorTitle": "تعذر تحميل السلة",
+    "errorFallback": "حدث خطأ غير متوقع.",
+    "emptyTitle": "سلتك فارغة",
+    "emptyBody": "اكتشف المطاعم وأضف وجبة شهية لبدء طلبك."
+  },
+  "summary": {
+    "title": "ملخص الطلب",
+    "fastDelivery": "توصيل سريع",
+    "subtotal": "المجموع الفرعي",
+    "deliveryFee": "رسوم التوصيل",
+    "total": "الإجمالي"
+  }
+}

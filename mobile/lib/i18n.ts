@@ -4,9 +4,6 @@ import resourcesToBackend from 'i18next-resources-to-backend';
 import * as Localization from 'expo-localization';
 import { I18nManager } from 'react-native';
 
-I18nManager.allowRTL(false);
-I18nManager.forceRTL(false);
-
 export const SUPPORTED_LANGUAGES = ['ar', 'en'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
@@ -23,6 +20,10 @@ export const initialLanguage: SupportedLanguage = SUPPORTED_LANGUAGES.includes(
   ? (deviceLocale as SupportedLanguage)
   : 'en';
 
+I18nManager.allowRTL(true);
+I18nManager.swapLeftAndRightInRTL(false);
+I18nManager.forceRTL(isRTLLanguage(initialLanguage));
+
 const localeMap: Record<string, Record<string, () => Promise<unknown>>> = {
   en: {
     common: () => import('../locales/en/common.json'),
@@ -30,6 +31,8 @@ const localeMap: Record<string, Record<string, () => Promise<unknown>>> = {
     home: () => import('../locales/en/home.json'),
     profile: () => import('../locales/en/profile.json'),
     orders: () => import('../locales/en/orders.json'),
+    delivery: () => import('../locales/en/delivery.json'),
+    cart: () => import('../locales/en/cart.json'),
   },
   ar: {
     common: () => import('../locales/ar/common.json'),
@@ -37,6 +40,8 @@ const localeMap: Record<string, Record<string, () => Promise<unknown>>> = {
     home: () => import('../locales/ar/home.json'),
     profile: () => import('../locales/ar/profile.json'),
     orders: () => import('../locales/ar/orders.json'),
+    delivery: () => import('../locales/ar/delivery.json'),
+    cart: () => import('../locales/ar/cart.json'),
   },
 };
 
@@ -53,7 +58,7 @@ i18n
     fallbackLng: 'en',
     supportedLngs: SUPPORTED_LANGUAGES,
     defaultNS: 'common',
-    ns: ['common', 'auth', 'home', 'profile', 'orders'],
+    ns: ['common', 'auth', 'home', 'profile', 'orders', 'delivery', 'cart'],
     interpolation: {
       escapeValue: false,
     },

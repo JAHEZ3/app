@@ -331,6 +331,38 @@ export default function LoginScreen() {
                 </Text>
               </Text>
             </Row>
+
+            <Row delay={620}>
+              <View style={{ marginTop: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "#eeeeee" }} />
+                  <Text style={{ fontFamily: "Tajawal_400Regular", fontSize: 12, color: "#c0c0c0" }}>
+                    OR
+                  </Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "#eeeeee" }} />
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => router.push("/delivery" as never)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    borderWidth: 1.5,
+                    borderColor: "#F55905",
+                    borderRadius: 9999,
+                    paddingVertical: 14,
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  <Ionicons name="bicycle" size={20} color="#F55905" />
+                  <Text style={{ fontFamily: "Tajawal_500Medium", fontSize: 15, color: "#F55905" }}>
+                    {t("phone.becomeDeliveryAgent")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Row>
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>

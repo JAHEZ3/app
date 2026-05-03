@@ -1,0 +1,201 @@
+{
+  "guard": {
+    "connectionProblemTitle": "Connection Problem",
+    "connectionProblemSubtitle": "Unable to load your account data. Please check your connection and try again.",
+    "tryAgain": "Try Again",
+    "goToLogin": "Go to Login"
+  },
+  "register": {
+    "heroTitle": "Delivery Agent",
+    "heroSubtitle": "JOIN THE TEAM",
+    "tabs": {
+      "register": "New Agent",
+      "login": "Sign In"
+    },
+    "title": {
+      "register": "New Delivery Agent",
+      "login": "Welcome Back"
+    },
+    "subtitle": {
+      "register": "First time here? Enter your phone to receive an OTP and create your account.",
+      "login": "Sign in with your phone number and password."
+    },
+    "phoneLabel": "Phone Number",
+    "phonePlaceholder": "+966 5X XXX XXXX",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "sendOtp": "Send OTP",
+    "signIn": "Sign In",
+    "backToHome": "Back to Home",
+    "errors": {
+      "generic": "Something went wrong",
+      "incorrectCredentials": "Incorrect phone number or password.",
+      "noAccount": "No account found. Please create a new one.",
+      "accountExists": "Account already exists. Please sign in."
+    }
+  },
+  "otp": {
+    "title": "Verify OTP",
+    "heading": "Enter Verification Code",
+    "subtitle": "We sent a 6-digit code to",
+    "resendIn": "Resend in",
+    "resendOtp": "Resend OTP",
+    "verifyContinue": "Verify & Continue",
+    "newOtpSent": "New OTP sent to {{phone}}",
+    "invalidOtp": "Invalid OTP. Please try again."
+  },
+  "application": {
+    "steps": {
+      "personal": "Personal Info",
+      "vehicleContact": "Vehicle & Contact",
+      "documents": "Documents",
+      "stepLabel": "Step {{current}} of {{total}}"
+    },
+    "dateOfBirth": "Date of Birth",
+    "selectDateOfBirth": "Select your date of birth",
+    "cancel": "Cancel",
+    "done": "Done",
+    "sections": {
+      "personalTitle": "Personal Information",
+      "personalSubtitle": "Fill in your personal details",
+      "vehicleTitle": "Vehicle Details",
+      "emergencyTitle": "Emergency Contact",
+      "emergencySubtitle": "Someone we can reach in case of emergency",
+      "paymentTitle": "Payment Info",
+      "paymentSubtitle": "How would you like to receive your earnings?",
+      "photosTitle": "Photos & Documents",
+      "photosSubtitle": "Upload clear photos - max 5 MB each",
+      "questionsTitle": "Application Questions",
+      "questionsSubtitle": "Answer honestly - these help us know you better",
+      "passwordTitle": "Set Password",
+      "passwordSubtitle": "Create a password for future logins"
+    },
+    "fields": {
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "nationalIdNumber": "National ID Number",
+      "city": "City",
+      "vehicleType": "Vehicle Type",
+      "vehicleLicenseNumber": "Vehicle License Number",
+      "contactName": "Contact Name",
+      "contactPhone": "Contact Phone",
+      "paymentMethod": "Payment Method",
+      "bankName": "Bank Name",
+      "iban": "IBAN",
+      "accountNumber": "Account Number",
+      "walletNumber": "Wallet Number",
+      "profilePhoto": "Profile Photo",
+      "nationalIdPhoto": "National ID Photo",
+      "password": "Password"
+    },
+    "placeholders": {
+      "firstName": "Ahmad",
+      "lastName": "Al-Rashidi",
+      "nationalIdNumber": "1XXXXXXXXX",
+      "city": "Riyadh",
+      "vehicleLicenseNumber": "ABC-1234",
+      "contactName": "Full name",
+      "contactPhone": "+966 5X XXX XXXX",
+      "bankName": "e.g. Al Rajhi Bank",
+      "iban": "SA00 0000 0000 0000 0000 0000",
+      "accountNumber": "Optional",
+      "walletNumber": "e.g. 05XXXXXXXX",
+      "answer": "Your answer...",
+      "password": "Minimum 8 characters"
+    },
+    "vehicles": {
+      "motorcycle": "Motorcycle",
+      "bicycle": "Bicycle",
+      "car": "Car",
+      "onFoot": "On Foot"
+    },
+    "paymentOptions": {
+      "bankAccount": "Bank Account",
+      "wallet": "Wallet"
+    },
+    "picker": {
+      "permissionRequiredTitle": "Permission Required",
+      "permissionRequiredMessage": "Please allow access to your photo library.",
+      "tapToUpload": "Tap to upload",
+      "changePhoto": "Change Photo",
+      "maxSizeHint": "JPG or PNG, up to 5 MB"
+    },
+    "questionsFailed": "Failed to load questions. Please go back and try again.",
+    "termsPrefix": "I agree to the",
+    "termsLink": "Terms and Conditions",
+    "termsSuffix": "and confirm all provided information is accurate.",
+    "continue": "Continue",
+    "submitApplication": "Submit Application",
+    "submissionFailed": "Submission failed. Please try again.",
+    "validation": {
+      "nameRequired": "First and last name are required.",
+      "dateOfBirthRequired": "Please select your date of birth.",
+      "nationalIdRequired": "National ID number is required.",
+      "cityRequired": "City is required.",
+      "vehicleTypeRequired": "Please select a vehicle type.",
+      "licenseRequired": "License number is required for car.",
+      "emergencyRequired": "Emergency contact name and phone are required.",
+      "paymentMethodRequired": "Please select a payment method.",
+      "bankAndIbanRequired": "Bank name and IBAN are required.",
+      "walletRequired": "Wallet number is required.",
+      "profilePhotoRequired": "Please upload your profile photo.",
+      "nationalIdPhotoRequired": "Please upload your national ID photo.",
+      "passwordRequired": "Password must be at least 8 characters.",
+      "termsRequired": "Please accept the terms and conditions.",
+      "questionsLoadFailed": "Questions failed to load. Please go back and try again.",
+      "questionsRequired": "Please answer all application questions."
+    }
+  },
+  "pending": {
+    "title": "Application Submitted!",
+    "subtitle": "Your application is currently under review. Our team will verify your information and get back to you soon.",
+    "checkingStatus": "Checking Status...",
+    "pendingApproval": "Pending Approval",
+    "items": {
+      "documentsVerified": "Documents verified successfully",
+      "backgroundCheck": "Background check in progress",
+      "notifyApproved": "You will be notified when approved"
+    },
+    "refreshStatus": "Refresh Status"
+  },
+  "rejected": {
+    "title": "Application Rejected",
+    "subtitle": "Unfortunately, your application did not meet our current requirements. You may re-apply after reviewing the reason below.",
+    "reasonTitle": "Rejection Reason",
+    "nextTitle": "What to do next:",
+    "tips": {
+      "reviewReason": "Review the rejection reason carefully",
+      "documents": "Ensure all documents are valid and clear",
+      "support": "Contact support if you have questions"
+    },
+    "reapply": "Re-Apply Now",
+    "loggingOut": "Logging out...",
+    "logout": "Logout"
+  },
+  "dashboard": {
+    "title": "My Dashboard",
+    "loggingOut": "Logging out...",
+    "logout": "Logout",
+    "activeAgent": "Active Agent",
+    "stats": {
+      "deliveries": "Deliveries",
+      "balance": "Balance",
+      "rating": "Rating"
+    },
+    "profileDetails": "Profile Details",
+    "fields": {
+      "phone": "Phone",
+      "city": "City",
+      "vehicle": "Vehicle",
+      "nationalId": "National ID",
+      "emergencyContact": "Emergency Contact",
+      "empty": "-"
+    },
+    "quickActions": "Quick Actions",
+    "actions": {
+      "viewDeliveries": "View Deliveries",
+      "walletPayouts": "Wallet & Payouts",
+      "contactSupport": "Contact Support"
+    }
+  }
+}

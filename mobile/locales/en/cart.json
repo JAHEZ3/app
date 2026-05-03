@@ -1,0 +1,64 @@
+{
+  "price": {
+    "currency": "ILS"
+  },
+  "accessibility": {
+    "goBack": "Go back",
+    "clearCart": "Clear cart",
+    "removeItem": "Remove {{mealName}}",
+    "decreaseQuantity": "Decrease {{mealName}} quantity",
+    "increaseQuantity": "Increase {{mealName}} quantity",
+    "checkout": "Checkout"
+  },
+  "header": {
+    "eyebrow": "Your order",
+    "title": "Cart"
+  },
+  "actions": {
+    "cancel": "Cancel",
+    "clear": "Clear",
+    "retry": "Try again",
+    "signIn": "Sign in",
+    "browseRestaurants": "Browse restaurants",
+    "checkout": "Checkout",
+    "swipeToDelete": "Swipe to delete"
+  },
+  "alerts": {
+    "clearTitle": "Clear cart",
+    "clearMessage": "Remove every item from your cart?",
+    "checkoutTitle": "Checkout",
+    "checkoutMessage": "Your cart is ready for the next checkout step."
+  },
+  "banner": {
+    "deliveringFrom": "Delivering from",
+    "eta": "25-35 min",
+    "protected": "Protected"
+  },
+  "items": {
+    "count_one": "{{count}} item",
+    "count_other": "{{count}} items",
+    "each": "each",
+    "total": "Total",
+    "noCustomizations": "No customizations",
+    "moreOptions": "+{{count}}"
+  },
+  "state": {
+    "preparingTitle": "Preparing your cart",
+    "preparingBody": "Checking your session and loading your order.",
+    "signedOutTitle": "Sign in to view your cart",
+    "signedOutBody": "Your saved meals and checkout details will appear here after login.",
+    "loadingTitle": "Loading your cart",
+    "loadingBody": "Fresh picks are on their way.",
+    "errorTitle": "Could not load cart",
+    "errorFallback": "Something went wrong.",
+    "emptyTitle": "Your cart is empty",
+    "emptyBody": "Discover restaurants and add something delicious to start your order."
+  },
+  "summary": {
+    "title": "Order summary",
+    "fastDelivery": "Fast delivery",
+    "subtotal": "Subtotal",
+    "deliveryFee": "Delivery fee",
+    "total": "Total"
+  }
+}

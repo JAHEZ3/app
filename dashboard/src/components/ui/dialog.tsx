@@ -20,6 +20,9 @@ export function DialogContent({ children, className, title, description }: Dialo
     <RadixDialog.Portal>
       <RadixDialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 animate-fade-in-up" />
       <RadixDialog.Content
+        // Opt out of Radix's auto-linked description when none is provided,
+        // otherwise it warns about a missing aria-describedby target.
+        {...(description ? {} : { "aria-describedby": undefined })}
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
           "bg-white rounded-2xl shadow-lg z-50 w-full max-w-lg max-h-[90vh] overflow-y-auto",

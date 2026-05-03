@@ -20,6 +20,7 @@ export interface BankAccountPayment {
   accountNumber: string;
   iban: string;
   bankPhone?: string; // optional
+  qrImageUrl?: string; // S3 key on the database; presigned URL on responses
 }
 
 export interface WalletPayment {
@@ -27,60 +28,71 @@ export interface WalletPayment {
   walletType: WalletType;
   accountNumber: string;
   phone: string; // required for wallet
+  qrImageUrl?: string;
 }
 
 export type PaymentInfo = BankAccountPayment | WalletPayment;
 
-// ─── Validation helper (used by the service) ────────────────────────────────
+// ─── Validation helpers (used by the service) ──────────────────────────────
 
-export function parseAndValidatePaymentInfo(raw: string): PaymentInfo {
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('paymentInfo must be valid JSON');
+export function validatePaymentInfo(parsed: unknown): PaymentInfo {
+  const p = parsed as Record<string, any> | null;
+  if (!p || typeof p !== 'object') {
+    throw new Error('paymentInfo must be an object');
   }
 
-  if (parsed.type === PaymentMethodType.BANK_ACCOUNT) {
-    if (!Object.values(BankName).includes(parsed.bankName)) {
+  if (p.type === PaymentMethodType.BANK_ACCOUNT) {
+    if (!Object.values(BankName).includes(p.bankName)) {
       throw new Error(
         `bankName must be one of: ${Object.values(BankName).join(', ')}`,
       );
     }
-    if (!parsed.accountNumber?.trim())
+    if (!p.accountNumber?.trim())
       throw new Error('accountNumber is required for bank account');
-    if (!parsed.iban?.trim())
+    if (!p.iban?.trim())
       throw new Error('iban is required for bank account');
 
     return {
       type: PaymentMethodType.BANK_ACCOUNT,
-      bankName: parsed.bankName as BankName,
-      accountNumber: parsed.accountNumber,
-      iban: parsed.iban,
-      ...(parsed.bankPhone ? { bankPhone: parsed.bankPhone } : {}),
+      bankName: p.bankName as BankName,
+      accountNumber: p.accountNumber,
+      iban: p.iban,
+      ...(p.bankPhone ? { bankPhone: p.bankPhone } : {}),
+      ...(typeof p.qrImageUrl === 'string' && p.qrImageUrl ? { qrImageUrl: p.qrImageUrl } : {}),
     };
   }
 
-  if (parsed.type === PaymentMethodType.WALLET) {
-    if (!Object.values(WalletType).includes(parsed.walletType)) {
+  if (p.type === PaymentMethodType.WALLET) {
+    if (!Object.values(WalletType).includes(p.walletType)) {
       throw new Error(
         `walletType must be one of: ${Object.values(WalletType).join(', ')}`,
       );
     }
-    if (!parsed.accountNumber?.trim())
+    if (!p.accountNumber?.trim())
       throw new Error('accountNumber is required for wallet');
-    if (!parsed.phone?.trim())
+    if (!p.phone?.trim())
       throw new Error('phone is required for wallet');
 
     return {
       type: PaymentMethodType.WALLET,
-      walletType: parsed.walletType as WalletType,
-      accountNumber: parsed.accountNumber,
-      phone: parsed.phone,
+      walletType: p.walletType as WalletType,
+      accountNumber: p.accountNumber,
+      phone: p.phone,
+      ...(typeof p.qrImageUrl === 'string' && p.qrImageUrl ? { qrImageUrl: p.qrImageUrl } : {}),
     };
   }
 
   throw new Error(
     `paymentInfo.type must be '${PaymentMethodType.BANK_ACCOUNT}' or '${PaymentMethodType.WALLET}'`,
   );
+}
+
+export function parseAndValidatePaymentInfo(raw: string): PaymentInfo {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('paymentInfo must be valid JSON');
+  }
+  return validatePaymentInfo(parsed);
 }

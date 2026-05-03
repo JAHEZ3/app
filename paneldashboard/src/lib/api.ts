@@ -27,6 +27,22 @@ import type {
   RejectAgentApplicationPayload,
   UpdateAgentPayload,
 } from "@/types/delivery.types";
+import type {
+  CustomersAnalytics,
+  DeliveryAnalytics,
+  OrdersAnalytics,
+  OverviewAnalytics,
+  PaymentsAnalytics,
+  PublicStats,
+  RestaurantsAnalytics,
+  RevenueAnalytics,
+} from "@/types/analytics.types";
+import type {
+  BroadcastNotificationPayload,
+  BroadcastResult,
+  NotificationListResponse,
+  SendToPhonePayload,
+} from "@/types/notification.types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -202,6 +218,54 @@ export const settingsApi = {
   get: () => api.get("/admin/settings"),
   update: (data: object) => api.patch("/admin/settings", data),
 };
+
+// ─── Analytics (manager-service) ─────────────────────────────────────────────
+export const analyticsApi = {
+  /** Public landing-page stats — no auth required. */
+  publicStats: () =>
+    api.get<ApiResponse<PublicStats>>("/manager/public/stats"),
+  overview: () =>
+    api.get<ApiResponse<OverviewAnalytics>>("/manager/analytics"),
+  orders: () =>
+    api.get<ApiResponse<OrdersAnalytics>>("/manager/analytics/orders"),
+  revenue: () =>
+    api.get<ApiResponse<RevenueAnalytics>>("/manager/analytics/revenue"),
+  restaurants: () =>
+    api.get<ApiResponse<RestaurantsAnalytics>>("/manager/analytics/restaurants"),
+  customers: () =>
+    api.get<ApiResponse<CustomersAnalytics>>("/manager/analytics/customers"),
+  delivery: () =>
+    api.get<ApiResponse<DeliveryAnalytics>>("/manager/analytics/delivery"),
+  payments: () =>
+    api.get<ApiResponse<PaymentsAnalytics>>("/manager/analytics/payments"),
+};
+
+/** @deprecated use `analyticsApi.overview` */
 export const statsApi = {
-  overview: () => api.get("/admin/stats/overview"),
+  overview: () => analyticsApi.overview(),
+};
+
+// ─── Notifications (notification-service) ────────────────────────────────────
+export const notificationApi = {
+  list: (page = 1, limit = 20) =>
+    api.get<ApiResponse<NotificationListResponse>>(
+      "/notification/notifications",
+      { params: { page, limit } },
+    ),
+  markRead: (id: string) =>
+    api.patch<ApiResponse<null>>(`/notification/notifications/${id}/read`),
+  markAllRead: () =>
+    api.patch<ApiResponse<null>>("/notification/notifications/read-all"),
+
+  // Manager-only
+  broadcast: (payload: BroadcastNotificationPayload) =>
+    api.post<ApiResponse<BroadcastResult>>(
+      "/notification/notifications/broadcast",
+      payload,
+    ),
+  sendToPhone: (payload: SendToPhonePayload) =>
+    api.post<ApiResponse<null>>(
+      "/notification/notifications/send-to-phone",
+      payload,
+    ),
 };

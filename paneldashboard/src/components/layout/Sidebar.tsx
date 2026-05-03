@@ -11,16 +11,20 @@ import {
   LogOut,
   ChevronLeft,
   Shield,
+  Bell,
+  Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
 
 const navItems = [
-  { href: "/panel/overview",     icon: LayoutDashboard, label: "نظرة عامة"     },
-  { href: "/panel/users",        icon: Users,           label: "المستخدمون"    },
-  { href: "/panel/restaurants",  icon: Store,           label: "المطاعم"       },
-  { href: "/panel/orders",       icon: ShoppingBag,     label: "الطلبات"       },
-  { href: "/panel/settings",     icon: Settings,        label: "الإعدادات"     },
+  { href: "/panel/overview",        icon: LayoutDashboard, label: "نظرة عامة"      },
+  { href: "/panel/users",           icon: Users,           label: "المستخدمون"     },
+  { href: "/panel/restaurants",     icon: Store,           label: "المطاعم"        },
+  { href: "/panel/delivery-agents", icon: Truck,           label: "مندوبو التوصيل" },
+  { href: "/panel/orders",          icon: ShoppingBag,     label: "الطلبات"        },
+  { href: "/panel/notifications",   icon: Bell,            label: "الإشعارات"      },
+  { href: "/panel/settings",        icon: Settings,        label: "الإعدادات"      },
 ];
 
 export function Sidebar() {

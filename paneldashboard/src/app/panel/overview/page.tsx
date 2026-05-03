@@ -3,106 +3,67 @@
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import {
   Users, Store, ShoppingBag, TrendingUp,
-  CircleDollarSign, Bike, UserCheck, Clock,
+  CircleDollarSign, Bike, Clock,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { statsApi } from "@/lib/api";
-import { queryKeys } from "@/lib/queryClient";
+import {
+  useAnalyticsOverview,
+  useOrdersAnalytics,
+} from "@/hooks/useAnalytics";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from "recharts";
+import type { OverviewAnalytics, OrdersAnalytics } from "@/types/analytics.types";
 
-// ── Mock stats shape ──────────────────────────────────────
-interface OverviewStats {
-  totalUsers: number;
-  totalRestaurants: number;
-  totalOrders: number;
-  totalRevenue: number;
-  activeDelivery: number;
-  pendingOrders: number;
-  newUsersToday: number;
-  ordersToday: number;
-  revenueChart: { label: string; revenue: number; orders: number }[];
-  recentActivity: { id: string; text: string; time: string; type: "user" | "order" | "restaurant" }[];
-}
+const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
-// ── Mock fallback while API is not connected ──────────────
-const mockStats: OverviewStats = {
-  totalUsers: 52340,
-  totalRestaurants: 1283,
-  totalOrders: 214780,
-  totalRevenue: 4820000,
-  activeDelivery: 312,
-  pendingOrders: 84,
-  newUsersToday: 142,
-  ordersToday: 1820,
-  revenueChart: [
-    { label: "السبت",    revenue: 85000,  orders: 420 },
-    { label: "الأحد",   revenue: 92000,  orders: 460 },
-    { label: "الاثنين", revenue: 78000,  orders: 390 },
-    { label: "الثلاثاء",revenue: 110000, orders: 550 },
-    { label: "الأربعاء",revenue: 130000, orders: 650 },
-    { label: "الخميس",  revenue: 165000, orders: 820 },
-    { label: "الجمعة",  revenue: 198000, orders: 990 },
-  ],
-  recentActivity: [
-    { id: "1", text: "مطعم الأصالة طلب الانضمام للمنصة", time: "منذ 5 دقائق",  type: "restaurant" },
-    { id: "2", text: "تسجيل 28 مستخدم جديد",             time: "منذ 12 دقيقة", type: "user" },
-    { id: "3", text: "تجاوز الطلبات اليومية 1800 طلب",    time: "منذ 20 دقيقة", type: "order" },
-    { id: "4", text: "مستخدم جديد في منطقة الرياض",        time: "منذ 35 دقيقة", type: "user" },
-    { id: "5", text: "اكتمال 50 طلب توصيل في الساعة الأخيرة", time: "منذ 1 ساعة", type: "order" },
-  ],
-};
-
-const statCards = (s: OverviewStats) => [
+const buildCards = (o: OverviewAnalytics, pendingOrders: number) => [
   {
     title: "إجمالي المستخدمين",
-    value: formatNumber(s.totalUsers),
-    sub: `+${s.newUsersToday} اليوم`,
+    value: formatNumber(o.users.total),
+    sub: `${formatNumber(o.customers.newToday)} عميل جديد اليوم`,
     icon: Users,
     color: "#3b82f6",
     bg: "#eff6ff",
   },
   {
     title: "المطاعم المسجّلة",
-    value: formatNumber(s.totalRestaurants),
-    sub: "مطعم نشط على المنصة",
+    value: formatNumber(o.restaurants.total),
+    sub: `${formatNumber(o.restaurants.openNow)} مفتوح الآن`,
     icon: Store,
     color: "#f55905",
     bg: "#fef0e7",
   },
   {
     title: "إجمالي الطلبات",
-    value: formatNumber(s.totalOrders),
-    sub: `${formatNumber(s.ordersToday)} طلب اليوم`,
+    value: formatNumber(o.orders.total),
+    sub: `${formatNumber(o.orders.today)} طلب اليوم`,
     icon: ShoppingBag,
     color: "#10b981",
     bg: "#ecfdf5",
   },
   {
     title: "إجمالي الإيرادات",
-    value: formatCurrency(s.totalRevenue),
-    sub: "منذ بداية المنصة",
+    value: formatCurrency(o.revenue.total),
+    sub: `${formatCurrency(o.revenue.today)} اليوم`,
     icon: CircleDollarSign,
     color: "#8b5cf6",
     bg: "#f5f3ff",
   },
   {
     title: "سائقو التوصيل النشطون",
-    value: formatNumber(s.activeDelivery),
-    sub: "متاح الآن",
+    value: formatNumber(o.agents.active),
+    sub: `${formatNumber(o.agents.total)} إجمالي السائقين`,
     icon: Bike,
     color: "#f59e0b",
     bg: "#fffbeb",
   },
   {
     title: "الطلبات المعلّقة",
-    value: formatNumber(s.pendingOrders),
+    value: formatNumber(pendingOrders),
     sub: "بانتظار التأكيد",
     icon: Clock,
     color: "#ef4444",
@@ -110,24 +71,34 @@ const statCards = (s: OverviewStats) => [
   },
 ];
 
-export default function OverviewPage() {
-  const { data, isLoading } = useQuery<OverviewStats>({
-    queryKey: queryKeys.stats.overview,
-    queryFn: async () => {
-      const res = await statsApi.overview();
-      return res.data;
-    },
-    placeholderData: mockStats,
-    retry: false,
+const last7DaysChart = (orders: OrdersAnalytics | undefined) => {
+  if (!orders?.last30Days?.length) return [];
+  return orders.last30Days.slice(-7).map((p) => {
+    const d = new Date(p.day);
+    const label = Number.isNaN(d.getTime())
+      ? p.day
+      : WEEKDAYS_AR[d.getDay()];
+    return { label, revenue: p.revenue, orders: p.orders };
   });
+};
 
-  const stats = data ?? mockStats;
+const pendingFromOrders = (orders: OrdersAnalytics | undefined): number => {
+  if (!orders?.byStatus) return 0;
+  return orders.byStatus
+    .filter((b) => b.status === "pending" || b.status === "confirmed")
+    .reduce((sum, b) => sum + b.count, 0);
+};
 
-  const activityIcon = (type: "user" | "order" | "restaurant") => {
-    if (type === "user") return <UserCheck className="w-4 h-4 text-info" />;
-    if (type === "restaurant") return <Store className="w-4 h-4 text-primary" />;
-    return <ShoppingBag className="w-4 h-4 text-success" />;
-  };
+export default function OverviewPage() {
+  const overviewQ = useAnalyticsOverview();
+  const ordersQ = useOrdersAnalytics();
+
+  const isLoading = overviewQ.isLoading || ordersQ.isLoading;
+  const overview = overviewQ.data;
+  const orders = ordersQ.data;
+
+  const cards = overview ? buildCards(overview, pendingFromOrders(orders)) : [];
+  const chartData = last7DaysChart(orders);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -137,11 +108,11 @@ export default function OverviewPage() {
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {isLoading
+          {isLoading || !overview
             ? Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-28 rounded-xl" />
               ))
-            : statCards(stats).map((card) => (
+            : cards.map((card) => (
                 <Card key={card.title} className="hover:shadow-md transition-shadow">
                   <CardContent className="pt-5">
                     <div
@@ -158,10 +129,9 @@ export default function OverviewPage() {
               ))}
         </div>
 
-        {/* Chart + Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Revenue chart */}
-          <Card className="lg:col-span-2">
+        {/* Chart */}
+        <div className="grid grid-cols-1 gap-6">
+          <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>الإيرادات والطلبات – آخر 7 أيام</CardTitle>
@@ -169,11 +139,15 @@ export default function OverviewPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {ordersQ.isLoading ? (
                 <Skeleton className="h-52 rounded-xl" />
+              ) : chartData.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-12 text-center">
+                  لا توجد بيانات لعرضها بعد.
+                </p>
               ) : (
                 <ResponsiveContainer width="100%" height={210}>
-                  <AreaChart data={stats.revenueChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
                     <defs>
                       <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%"  stopColor="#F55905" stopOpacity={0.18} />
@@ -196,36 +170,6 @@ export default function OverviewPage() {
                     />
                   </AreaChart>
                 </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Recent activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle>النشاط الأخير</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Skeleton key={i} className="h-12 rounded-lg" />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {stats.recentActivity.map((item) => (
-                    <div key={item.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors">
-                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                        {activityIcon(item.type)}
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-foreground leading-snug">{item.text}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{item.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               )}
             </CardContent>
           </Card>

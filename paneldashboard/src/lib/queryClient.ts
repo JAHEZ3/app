@@ -48,8 +48,24 @@ export const queryKeys = {
     all: (params?: object) => ["orders", params] as const,
     one: (id: string) => ["orders", id] as const,
   },
+  notifications: {
+    root: ["notifications"] as const,
+    list: (page: number, limit: number) =>
+      ["notifications", "list", { page, limit }] as const,
+  },
   settings: ["settings"] as const,
   stats: {
     overview: ["stats", "overview"] as const,
+  },
+  analytics: {
+    root: ["analytics"] as const,
+    publicStats: ["analytics", "public-stats"] as const,
+    overview: ["analytics", "overview"] as const,
+    orders: ["analytics", "orders"] as const,
+    revenue: ["analytics", "revenue"] as const,
+    restaurants: ["analytics", "restaurants"] as const,
+    customers: ["analytics", "customers"] as const,
+    delivery: ["analytics", "delivery"] as const,
+    payments: ["analytics", "payments"] as const,
   },
 };

@@ -1,7 +1,13 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { menuApi, mealsApi, optionGroupsApi, optionsApi } from "@/lib/api";
+import {
+  menuApi,
+  mealsApi,
+  optionGroupsApi,
+  optionsApi,
+  aiMenuImportApi,
+} from "@/lib/api";
 import { queryKeys, queryClient } from "@/lib/queryClient";
 import type {
   Menu,
@@ -9,6 +15,8 @@ import type {
   Meal,
   MealOptionGroup,
   MealOption,
+  MenuExtraction,
+  MenuImportResult,
 } from "@/types/menu.types";
 import type {
   CreateMenuDto,
@@ -87,6 +95,13 @@ export function useDeleteMenu() {
   });
 }
 
+export function useReorderMenus() {
+  return useMutation({
+    mutationFn: (orderedIds: string[]) => menuApi.reorderMenus(orderedIds),
+    onSuccess: invalidateMenu,
+  });
+}
+
 // ── Sections ────────────────────────────────────────────────────────────────
 // menuId goes in the URL, NOT the body — backend rejects extra body keys.
 export function useCreateSection() {
@@ -117,17 +132,32 @@ export function useDeleteSection() {
   });
 }
 
+export function useReorderSections() {
+  return useMutation({
+    mutationFn: ({
+      menuId,
+      orderedIds,
+    }: {
+      menuId: string;
+      orderedIds: string[];
+    }) => menuApi.reorderSections(menuId, orderedIds),
+    onSuccess: invalidateMenu,
+  });
+}
+
 // ── Meals ───────────────────────────────────────────────────────────────────
+// Backend POST/PATCH /meals are multipart, so callers may pass FormData when
+// uploading an image. Plain DTO is still accepted for non-image updates.
 export function useCreateMeal() {
   return useMutation({
-    mutationFn: (data: CreateMealDto) => mealsApi.create(data),
+    mutationFn: (data: CreateMealDto | FormData) => mealsApi.create(data),
     onSuccess: invalidateMenu,
   });
 }
 
 export function useUpdateMeal() {
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateMealDto }) =>
+    mutationFn: ({ id, data }: { id: string; data: UpdateMealDto | FormData }) =>
       mealsApi.update(id, data),
     onSuccess: invalidateMenu,
   });
@@ -144,6 +174,19 @@ export function useDeleteMeal() {
 export function useToggleMealAvailability() {
   return useMutation({
     mutationFn: (id: string) => mealsApi.toggleAvailability(id),
+    onSuccess: invalidateMenu,
+  });
+}
+
+export function useReorderMeals() {
+  return useMutation({
+    mutationFn: ({
+      sectionId,
+      orderedIds,
+    }: {
+      sectionId: string;
+      orderedIds: string[];
+    }) => mealsApi.reorder(sectionId, orderedIds),
     onSuccess: invalidateMenu,
   });
 }
@@ -251,5 +294,29 @@ export function useDeleteOption(groupId?: string) {
         });
       }
     },
+  });
+}
+
+// ── AI Smart Menu Import ────────────────────────────────────────────────────
+export function useAnalyzeMenuImage() {
+  return useMutation({
+    mutationFn: async (image: File) => {
+      const res = await aiMenuImportApi.analyze(image);
+      return unwrap<MenuExtraction>(res);
+    },
+  });
+}
+
+export function useApplyMenuImport() {
+  return useMutation({
+    mutationFn: async (data: {
+      targetMenuId?: string;
+      menuName?: string;
+      extraction: MenuExtraction;
+    }) => {
+      const res = await aiMenuImportApi.apply(data);
+      return unwrap<MenuImportResult>(res);
+    },
+    onSuccess: invalidateMenu,
   });
 }

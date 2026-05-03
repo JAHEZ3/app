@@ -10,14 +10,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/providers/ToastProvider";
 import { authApi, getApiError } from "@/lib/api";
-import { Building2, Clock, Bell, Shield, ChevronLeft } from "lucide-react";
+import { Building2, Clock, Bell, Shield, ChevronLeft, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  PaymentMethodType, BankName, WalletType,
+  type PaymentInfo,
+} from "@/types/payment.types";
+import { PaymentMethodIcon } from "@/components/ui/payment-icon";
 
 const tabs = [
   { id: "restaurant", label: "بيانات المطعم",  icon: Building2 },
   { id: "hours",      label: "أوقات العمل",     icon: Clock     },
+  { id: "payment",    label: "معلومات الدفع",  icon: Wallet    },
   { id: "notifications", label: "الإشعارات",   icon: Bell      },
   { id: "security",   label: "الأمان",           icon: Shield    },
 ] as const;
@@ -309,6 +316,251 @@ function WorkingHoursTab() {
   );
 }
 
+function PaymentInfoTab() {
+  const { data: restaurant, isLoading } = useRestaurant();
+  const updateSettings = useUpdateSettings();
+  const { success, error } = useToast();
+
+  const [type, setType] = useState<PaymentMethodType>(PaymentMethodType.BANK_ACCOUNT);
+  const [bank, setBank] = useState({
+    bankName: BankName.BANK_OF_PALESTINE as BankName,
+    accountNumber: "",
+    iban: "",
+    bankPhone: "",
+  });
+  const [wallet, setWallet] = useState({
+    walletType: WalletType.PALPAY as WalletType,
+    accountNumber: "",
+    phone: "",
+  });
+
+  useEffect(() => {
+    const info = restaurant?.paymentInfo;
+    if (!info) return;
+    setType(info.type);
+    if (info.type === PaymentMethodType.BANK_ACCOUNT) {
+      setBank({
+        bankName: info.bankName,
+        accountNumber: info.accountNumber,
+        iban: info.iban,
+        bankPhone: info.bankPhone ?? "",
+      });
+    } else {
+      setWallet({
+        walletType: info.walletType,
+        accountNumber: info.accountNumber,
+        phone: info.phone,
+      });
+    }
+  }, [restaurant?.paymentInfo]);
+
+  const validate = (): { ok: true; payload: PaymentInfo } | { ok: false; msg: string } => {
+    if (type === PaymentMethodType.BANK_ACCOUNT) {
+      if (!bank.accountNumber.trim()) return { ok: false, msg: "رقم الحساب مطلوب" };
+      if (!bank.iban.trim()) return { ok: false, msg: "رقم الـ IBAN مطلوب" };
+      return {
+        ok: true,
+        payload: {
+          type: PaymentMethodType.BANK_ACCOUNT,
+          bankName: bank.bankName,
+          accountNumber: bank.accountNumber.trim(),
+          iban: bank.iban.trim(),
+          ...(bank.bankPhone.trim() ? { bankPhone: bank.bankPhone.trim() } : {}),
+        },
+      };
+    }
+    if (!wallet.accountNumber.trim()) return { ok: false, msg: "رقم الحساب مطلوب" };
+    if (!wallet.phone.trim()) return { ok: false, msg: "رقم الهاتف مطلوب" };
+    return {
+      ok: true,
+      payload: {
+        type: PaymentMethodType.WALLET,
+        walletType: wallet.walletType,
+        accountNumber: wallet.accountNumber.trim(),
+        phone: wallet.phone.trim(),
+      },
+    };
+  };
+
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const result = validate();
+    if (!result.ok) {
+      error("خطأ", result.msg);
+      return;
+    }
+    try {
+      await updateSettings.mutateAsync({ paymentInfo: result.payload });
+      success("تم حفظ معلومات الدفع");
+    } catch (err) {
+      error("خطأ", getApiError(err));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        {[1, 2, 3, 4].map((i) => <div key={i} className="h-10 bg-muted rounded-lg" />)}
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-white rounded-xl border border-border p-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-foreground">طريقة استلام المدفوعات</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            تُستخدم هذه البيانات لتحويل أرباحك من الطلبات.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setType(PaymentMethodType.BANK_ACCOUNT)}
+            className={cn(
+              "rounded-xl border p-4 text-right transition-all flex items-center gap-3",
+              type === PaymentMethodType.BANK_ACCOUNT
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground/40",
+            )}
+          >
+            <PaymentMethodIcon
+              type={PaymentMethodType.BANK_ACCOUNT}
+              bank={bank.bankName}
+              size={32}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-foreground">حساب بنكي</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                تحويل بنكي إلى حسابك المحلي
+              </p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setType(PaymentMethodType.WALLET)}
+            className={cn(
+              "rounded-xl border p-4 text-right transition-all flex items-center gap-3",
+              type === PaymentMethodType.WALLET
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground/40",
+            )}
+          >
+            <PaymentMethodIcon
+              type={PaymentMethodType.WALLET}
+              wallet={wallet.walletType}
+              size={32}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-foreground">محفظة إلكترونية</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                PalPay أو Jawwal Pay
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {type === PaymentMethodType.BANK_ACCOUNT ? (
+        <div className="bg-white rounded-xl border border-border p-6 space-y-4">
+          <h3 className="text-sm font-bold text-foreground">تفاصيل الحساب البنكي</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="البنك *"
+              value={bank.bankName}
+              onValueChange={(v) => setBank({ ...bank, bankName: v as BankName })}
+            >
+              {Object.values(BankName).map((b) => (
+                <SelectItem key={b} value={b}>
+                  <span className="inline-flex items-center gap-2">
+                    <PaymentMethodIcon
+                      type={PaymentMethodType.BANK_ACCOUNT}
+                      bank={b}
+                      size={18}
+                    />
+                    {b}
+                  </span>
+                </SelectItem>
+              ))}
+            </Select>
+            <Input
+              label="رقم الحساب *"
+              value={bank.accountNumber}
+              onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })}
+              placeholder="123456789"
+              dir="ltr"
+              required
+            />
+            <Input
+              label="IBAN *"
+              value={bank.iban}
+              onChange={(e) => setBank({ ...bank, iban: e.target.value })}
+              placeholder="PSXXXXXXXXXXXXXXXXXXXXXX"
+              dir="ltr"
+              required
+            />
+            <Input
+              label="هاتف البنك (اختياري)"
+              value={bank.bankPhone}
+              onChange={(e) => setBank({ ...bank, bankPhone: e.target.value })}
+              placeholder="+970XXXXXXXXX"
+              dir="ltr"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-border p-6 space-y-4">
+          <h3 className="text-sm font-bold text-foreground">تفاصيل المحفظة الإلكترونية</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="نوع المحفظة *"
+              value={wallet.walletType}
+              onValueChange={(v) => setWallet({ ...wallet, walletType: v as WalletType })}
+            >
+              {Object.values(WalletType).map((w) => (
+                <SelectItem key={w} value={w}>
+                  <span className="inline-flex items-center gap-2">
+                    <PaymentMethodIcon
+                      type={PaymentMethodType.WALLET}
+                      wallet={w}
+                      size={18}
+                    />
+                    {w}
+                  </span>
+                </SelectItem>
+              ))}
+            </Select>
+            <Input
+              label="رقم الحساب *"
+              value={wallet.accountNumber}
+              onChange={(e) => setWallet({ ...wallet, accountNumber: e.target.value })}
+              placeholder="رقم الحساب في المحفظة"
+              dir="ltr"
+              required
+            />
+            <Input
+              label="رقم الهاتف *"
+              value={wallet.phone}
+              onChange={(e) => setWallet({ ...wallet, phone: e.target.value })}
+              placeholder="+970XXXXXXXXX"
+              dir="ltr"
+              required
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button type="submit" loading={updateSettings.isPending} className="px-8">
+          حفظ معلومات الدفع
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function NotificationsTab() {
   const [settings, setSettings] = useState({
     newOrders: true,
@@ -551,6 +803,7 @@ export default function SettingsPage() {
   const tabContent: Record<Tab, React.ReactNode> = {
     restaurant:    <RestaurantSettingsTab />,
     hours:         <WorkingHoursTab />,
+    payment:       <PaymentInfoTab />,
     notifications: <NotificationsTab />,
     security:      <SecurityTab />,
   };

@@ -7,6 +7,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { redisStore } from 'cache-manager-redis-yet';
 import { RestaurantServiceController } from './restaurant-service.controller';
 import { RestaurantServiceService } from './restaurant-service.service';
+import { AiMenuImportService } from './ai-menu-import.service';
 import { S3Service } from './s3.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -20,6 +21,11 @@ import { MenuSection } from './entities/menu-section.entity';
 import { Meal } from './entities/meal.entity';
 import { MealOptionGroup } from './entities/meal-option-group.entity';
 import { MealOption } from './entities/meal-option.entity';
+import { RestaurantAnalyticsService } from './analytics/analytics.service';
+import { OrderRead } from './analytics/read-models/order.read';
+import { OrderItemRead } from './analytics/read-models/order-item.read';
+import { DeliveryRead } from './analytics/read-models/delivery.read';
+import { OrderRatingRead } from './analytics/read-models/order-rating.read';
 
 @Module({
   imports: [
@@ -43,6 +49,7 @@ import { MealOption } from './entities/meal-option.entity';
       Restaurant, RestaurantRequest, RestaurantHour,
       RestaurantCategory, RestaurantCategoryMap,
       Menu, MenuSection, Meal, MealOptionGroup, MealOption,
+      OrderRead, OrderItemRead, DeliveryRead, OrderRatingRead,
     ]),
 
     // JWT — secret is read inside JwtAuthGuard per-request
@@ -74,6 +81,6 @@ import { MealOption } from './entities/meal-option.entity';
     }),
   ],
   controllers: [RestaurantServiceController],
-  providers: [RestaurantServiceService, JwtAuthGuard, RolesGuard, S3Service],
+  providers: [RestaurantServiceService, AiMenuImportService, RestaurantAnalyticsService, JwtAuthGuard, RolesGuard, S3Service],
 })
 export class RestaurantServiceModule {}

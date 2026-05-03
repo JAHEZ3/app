@@ -56,6 +56,52 @@ export interface Menu {
   sections: MenuSection[];
 }
 
+// ── AI Smart Menu Import ─────────────────────────────────────────────────────
+export type MenuLanguage = "ar" | "en" | "mixed" | "unknown";
+
+export interface ExtractedSize {
+  label: string;
+  price?: number | null;
+}
+
+export interface ExtractedItem {
+  name: string;
+  description?: string | null;
+  price?: number | null;
+  currency?: string | null;
+  sizes?: ExtractedSize[];
+}
+
+export interface ExtractedCategory {
+  name: string;
+  items: ExtractedItem[];
+}
+
+export interface ExtractedOffer {
+  name: string;
+  description?: string | null;
+  price?: number | null;
+  currency?: string | null;
+  items?: string[];
+}
+
+export interface MenuExtraction {
+  restaurantName: string | null;
+  language: MenuLanguage;
+  currency: string | null;
+  categories: ExtractedCategory[];
+  offers: ExtractedOffer[];
+}
+
+export interface MenuImportResult {
+  createdMenu: boolean;
+  menuId: string;
+  sectionsCreated: number;
+  mealsCreated: number;
+  optionGroupsCreated: number;
+  optionsCreated: number;
+}
+
 export interface TopSellingMeal {
   mealId: string;
   mealName: string;

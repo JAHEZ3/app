@@ -13,6 +13,7 @@ export function useOrders(filters?: OrderFilters) {
       const res = await ordersApi.getAll(filters);
       return res.data;
     },
+    enabled: !!filters?.restaurantId,
     refetchInterval: 30 * 1000, // live updates every 30s
   });
 }
