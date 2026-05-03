@@ -1,0 +1,9 @@
+
+> jahez_mobile_app@1.0.0 start
+> expo start --port 8081 --host localhost
+
+env: load .env
+env: export EXPO_PUBLIC_API_URL_AUTH EXPO_PUBLIC_API_URL_CUSTOMER EXPO_PUBLIC_API_URL_DELIVERY EXPO_PUBLIC_API_URL_RESTAURANT EXPO_PUBLIC_API_URL_ORDER
+Starting project at C:\Users\tareq radi\Desktop\JAHEZ\app\mobile
+› Port 8081 is being used by another process
+› Skipping dev server
