@@ -48,6 +48,11 @@ export const queryKeys = {
     all: (params?: object) => ["orders", params] as const,
     one: (id: string) => ["orders", id] as const,
   },
+  notifications: {
+    root: ["notifications"] as const,
+    list: (page: number, limit: number) =>
+      ["notifications", "list", { page, limit }] as const,
+  },
   settings: ["settings"] as const,
   stats: {
     overview: ["stats", "overview"] as const,

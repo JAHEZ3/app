@@ -63,4 +63,5 @@ export interface OrderFilters {
   status?: OrderStatus;
   page?: number;
   limit?: number;
+  restaurantId?: string;
 }

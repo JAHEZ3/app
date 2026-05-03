@@ -28,6 +28,7 @@ export function normalizeTokens(
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 const RESTAURANT_URL = process.env.NEXT_PUBLIC_RESTAURANT_URL || "http://localhost:3003";
+const NOTIFICATION_URL = process.env.NEXT_PUBLIC_NOTIFICATION_URL || "http://localhost:3007";
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -36,6 +37,11 @@ export const api = axios.create({
 
 export const restaurantInstance = axios.create({
   baseURL: RESTAURANT_URL,
+  headers: { "Content-Type": "application/json" },
+});
+
+export const notificationInstance = axios.create({
+  baseURL: NOTIFICATION_URL,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -49,6 +55,7 @@ function attachToken(config: import("axios").InternalAxiosRequestConfig) {
 
 api.interceptors.request.use(attachToken);
 restaurantInstance.interceptors.request.use(attachToken);
+notificationInstance.interceptors.request.use(attachToken);
 
 // Token refresh state
 let isRefreshing = false;
@@ -117,6 +124,7 @@ async function handle401(
 
 api.interceptors.response.use((res) => res, (err) => handle401(err, api));
 restaurantInstance.interceptors.response.use((res) => res, (err) => handle401(err, restaurantInstance));
+notificationInstance.interceptors.response.use((res) => res, (err) => handle401(err, notificationInstance));
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
@@ -205,6 +213,18 @@ export const analyticsApi = {
     restaurantInstance.get("/api/restaurant/analytics/report", {
       params: { period },
     }),
+};
+
+// ── Notifications (port 3007) ────────────────────────────────────────────────
+export const notificationApi = {
+  list: (page = 1, limit = 20) =>
+    notificationInstance.get("/api/notification/notifications", {
+      params: { page, limit },
+    }),
+  markRead: (id: string) =>
+    notificationInstance.patch(`/api/notification/notifications/${id}/read`),
+  markAllRead: () =>
+    notificationInstance.patch("/api/notification/notifications/read-all"),
 };
 
 // ── Orders (port 3001) ────────────────────────────────────────────────────────

@@ -37,6 +37,12 @@ import type {
   RestaurantsAnalytics,
   RevenueAnalytics,
 } from "@/types/analytics.types";
+import type {
+  BroadcastNotificationPayload,
+  BroadcastResult,
+  NotificationListResponse,
+  SendToPhonePayload,
+} from "@/types/notification.types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -237,4 +243,29 @@ export const analyticsApi = {
 /** @deprecated use `analyticsApi.overview` */
 export const statsApi = {
   overview: () => analyticsApi.overview(),
+};
+
+// ─── Notifications (notification-service) ────────────────────────────────────
+export const notificationApi = {
+  list: (page = 1, limit = 20) =>
+    api.get<ApiResponse<NotificationListResponse>>(
+      "/notification/notifications",
+      { params: { page, limit } },
+    ),
+  markRead: (id: string) =>
+    api.patch<ApiResponse<null>>(`/notification/notifications/${id}/read`),
+  markAllRead: () =>
+    api.patch<ApiResponse<null>>("/notification/notifications/read-all"),
+
+  // Manager-only
+  broadcast: (payload: BroadcastNotificationPayload) =>
+    api.post<ApiResponse<BroadcastResult>>(
+      "/notification/notifications/broadcast",
+      payload,
+    ),
+  sendToPhone: (payload: SendToPhonePayload) =>
+    api.post<ApiResponse<null>>(
+      "/notification/notifications/send-to-phone",
+      payload,
+    ),
 };

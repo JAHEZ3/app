@@ -47,4 +47,9 @@ export const queryKeys = {
     payments: ["analytics", "payments"] as const,
     report: (period: string) => ["analytics", "report", period] as const,
   },
+  notifications: {
+    all: ["notifications"] as const,
+    list: (page: number, limit: number) =>
+      ["notifications", "list", page, limit] as const,
+  },
 };

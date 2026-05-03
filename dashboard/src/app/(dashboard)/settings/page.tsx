@@ -19,6 +19,7 @@ import {
   PaymentMethodType, BankName, WalletType,
   type PaymentInfo,
 } from "@/types/payment.types";
+import { PaymentMethodIcon } from "@/components/ui/payment-icon";
 
 const tabs = [
   { id: "restaurant", label: "بيانات المطعم",  icon: Building2 },
@@ -419,31 +420,45 @@ function PaymentInfoTab() {
             type="button"
             onClick={() => setType(PaymentMethodType.BANK_ACCOUNT)}
             className={cn(
-              "rounded-xl border p-4 text-right transition-all",
+              "rounded-xl border p-4 text-right transition-all flex items-center gap-3",
               type === PaymentMethodType.BANK_ACCOUNT
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-muted-foreground/40",
             )}
           >
-            <p className="text-sm font-bold text-foreground">حساب بنكي</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              تحويل بنكي إلى حسابك المحلي
-            </p>
+            <PaymentMethodIcon
+              type={PaymentMethodType.BANK_ACCOUNT}
+              bank={bank.bankName}
+              size={32}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-foreground">حساب بنكي</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                تحويل بنكي إلى حسابك المحلي
+              </p>
+            </div>
           </button>
           <button
             type="button"
             onClick={() => setType(PaymentMethodType.WALLET)}
             className={cn(
-              "rounded-xl border p-4 text-right transition-all",
+              "rounded-xl border p-4 text-right transition-all flex items-center gap-3",
               type === PaymentMethodType.WALLET
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-muted-foreground/40",
             )}
           >
-            <p className="text-sm font-bold text-foreground">محفظة إلكترونية</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              PalPay أو Jawwal Pay
-            </p>
+            <PaymentMethodIcon
+              type={PaymentMethodType.WALLET}
+              wallet={wallet.walletType}
+              size={32}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-foreground">محفظة إلكترونية</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                PalPay أو Jawwal Pay
+              </p>
+            </div>
           </button>
         </div>
       </div>
@@ -458,7 +473,16 @@ function PaymentInfoTab() {
               onValueChange={(v) => setBank({ ...bank, bankName: v as BankName })}
             >
               {Object.values(BankName).map((b) => (
-                <SelectItem key={b} value={b}>{b}</SelectItem>
+                <SelectItem key={b} value={b}>
+                  <span className="inline-flex items-center gap-2">
+                    <PaymentMethodIcon
+                      type={PaymentMethodType.BANK_ACCOUNT}
+                      bank={b}
+                      size={18}
+                    />
+                    {b}
+                  </span>
+                </SelectItem>
               ))}
             </Select>
             <Input
@@ -496,7 +520,16 @@ function PaymentInfoTab() {
               onValueChange={(v) => setWallet({ ...wallet, walletType: v as WalletType })}
             >
               {Object.values(WalletType).map((w) => (
-                <SelectItem key={w} value={w}>{w}</SelectItem>
+                <SelectItem key={w} value={w}>
+                  <span className="inline-flex items-center gap-2">
+                    <PaymentMethodIcon
+                      type={PaymentMethodType.WALLET}
+                      wallet={w}
+                      size={18}
+                    />
+                    {w}
+                  </span>
+                </SelectItem>
               ))}
             </Select>
             <Input
