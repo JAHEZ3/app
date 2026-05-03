@@ -365,6 +365,8 @@ const RestaurantDetailsScreen = () => {
           isError={sectionsError}
           onRetry={refetchSections}
           onAddToCart={addCartItem}
+          restaurantId={id}
+          restaurantName={name}
           showSectionHeaders={false}
         />
 

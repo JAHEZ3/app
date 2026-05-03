@@ -22,6 +22,11 @@ export const restaurantApi = axios.create({
     timeout: 10000,
 });
 
+export const orderApi = axios.create({
+    baseURL: process.env.EXPO_PUBLIC_API_URL_ORDER,
+    timeout: 10000,
+});
+
 // ─── Customer interceptors ───────────────────────────────────────────────────
 
 let isRefreshing = false;
@@ -84,6 +89,66 @@ customerApi.interceptors.response.use(
 
             original.headers.Authorization = `Bearer ${accessToken}`;
             return customerApi(original);
+        } catch (e) {
+            drainQueue(e, null);
+            useAuthStore.getState().clearTokens();
+            await SecureStore.deleteItemAsync('refreshToken');
+            return Promise.reject(e);
+        } finally {
+            isRefreshing = false;
+        }
+    }
+);
+
+// ─── Order interceptors (use customer auth) ─────────────────────────────────
+
+orderApi.interceptors.request.use((config) => {
+    const token = useAuthStore.getState().accessToken;
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+orderApi.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+        const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+        if (error.response?.status !== 401 || original._retry) {
+            return Promise.reject(error);
+        }
+
+        if (useAuthStore.getState().status === 'unauthenticated') {
+            return Promise.reject(error);
+        }
+
+        if (isRefreshing) {
+            return new Promise<string>((resolve, reject) => {
+                pendingQueue.push({ resolve, reject });
+            }).then((token) => {
+                original.headers.Authorization = `Bearer ${token}`;
+                return orderApi(original);
+            });
+        }
+
+        original._retry = true;
+        isRefreshing = true;
+
+        try {
+            const storedRefresh = await SecureStore.getItemAsync('refreshToken');
+            if (!storedRefresh) throw new Error('No refresh token');
+
+            const res = await authApi.post('/api/auth/refresh', { refreshToken: storedRefresh });
+            const { accessToken, refreshToken: newRefreshToken } = res.data.data;
+
+            await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+            useAuthStore.getState().setTokens(accessToken);
+
+            drainQueue(null, accessToken);
+
+            original.headers.Authorization = `Bearer ${accessToken}`;
+            return orderApi(original);
         } catch (e) {
             drainQueue(e, null);
             useAuthStore.getState().clearTokens();

@@ -3,6 +3,8 @@ import { View, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AnimatedPressable from '@/components/ui/AnimatedPressable';
 import { colors, radii, screen, shadows, typography } from '@/components/ui/theme';
+import { Toast, useToast } from '@/modules/delivery/components/Toast';
+import { useAddToCart, getAddToCartErrorMessage } from '@/modules/Cart/hooks/useAddToCart';
 import { Meal } from '../entities/Meal';
 import { MenuSection } from '../entities/MenuSection';
 import { MealSelectionResult } from '../hooks/useMealOptionsSelection';
@@ -15,6 +17,8 @@ interface MealsListProps {
     isError: boolean;
     onRetry?: () => void;
     onAddToCart?: (result: MealSelectionResult) => void;
+    restaurantId: string;
+    restaurantName: string;
     currency?: string;
     showSectionHeaders?: boolean;
 }
@@ -34,10 +38,15 @@ const MealsList = ({
     isError,
     onRetry,
     onAddToCart,
+    restaurantId,
+    restaurantName,
     currency = 'SAR',
     showSectionHeaders = true,
 }: MealsListProps) => {
     const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
+    const [pendingMealId, setPendingMealId] = useState<string | null>(null);
+    const { toast, show, hide } = useToast();
+    const addToCart = useAddToCart();
 
     const handleMealPress = useCallback((meal: Meal) => {
         if (meal.isAvailable) setActiveMeal(meal);
@@ -47,10 +56,37 @@ const MealsList = ({
 
     const handleConfirm = useCallback(
         (result: MealSelectionResult) => {
-            onAddToCart?.(result);
             setActiveMeal(null);
+            setPendingMealId(result.meal.id);
+            addToCart.mutate(
+                {
+                    restaurantId,
+                    restaurantName,
+                    mealId: result.meal.id,
+                    mealName: result.meal.name,
+                    mealImage: result.meal.imageUrl,
+                    basePrice: result.meal.price,
+                    quantity: result.quantity,
+                    options: result.selectedOptions.map(({ option }) => ({
+                        optionId: option.id,
+                        optionName: option.name,
+                        extraPrice: option.extraPrice,
+                    })),
+                },
+                {
+                    onSuccess: () => {
+                        onAddToCart?.(result);
+                        show('تمت إضافة الوجبة إلى السلة', 'success');
+                    },
+                    onError: (err) => {
+                        const msg = getAddToCartErrorMessage(err) ?? 'تعذر إضافة الوجبة إلى السلة';
+                        show(msg, 'error');
+                    },
+                    onSettled: () => setPendingMealId(null),
+                },
+            );
         },
-        [onAddToCart],
+        [addToCart, onAddToCart, restaurantId, restaurantName, show],
     );
 
     if (isLoading) {
@@ -106,6 +142,7 @@ const MealsList = ({
                                 meal={meal}
                                 onPress={handleMealPress}
                                 currency={currency}
+                                isAdding={pendingMealId === meal.id}
                             />
                         ))}
                     </View>
@@ -118,6 +155,13 @@ const MealsList = ({
                 onClose={handleModalClose}
                 onConfirm={handleConfirm}
                 currency={currency}
+            />
+
+            <Toast
+                message={toast.message}
+                type={toast.type}
+                visible={toast.visible}
+                onHide={hide}
             />
         </View>
     );

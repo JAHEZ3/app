@@ -4,6 +4,7 @@ import "@/lib/i18n";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { useFonts } from "expo-font";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useLanguageInit } from "@/hooks/useLanguageInit";
 import { useAuthInit } from "@/hooks/useAuthInit";
 import { useDeliveryInit } from "@/hooks/useDeliveryInit";
@@ -22,6 +23,7 @@ import { createAuthModule } from "@/modules/Auth/index";
 import { createProfileModule } from "@/modules/Profile/index";
 import { createDeliveryModule } from "@/modules/delivery/index";
 import { createRestaurantsModule } from "@/modules/Restaurants/index";
+import { createCartModule } from "@/modules/Cart/index";
 
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 
@@ -31,6 +33,7 @@ const { Provider: AuthProvider } = createAuthModule();
 const { Provider: ProfileProvider } = createProfileModule();
 const { Provider: DeliveryProvider } = createDeliveryModule();
 const { Provider: RestaurantsProvider } = createRestaurantsModule();
+const { Provider: CartProvider } = createCartModule();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,27 +67,32 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ProfileProvider>
-          <DeliveryProvider>
-            <RestaurantsProvider>
-              <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="onboarding" />
-                <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="auth/terms" />
-                <Stack.Screen name="auth/otp" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="auth/complete-profile" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="delivery" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="restaurants/index" />
-                <Stack.Screen name="restaurants/[id]" />
-                <Stack.Screen name="profile/index" />
-              </Stack>
-            </RestaurantsProvider>
-          </DeliveryProvider>
-        </ProfileProvider>
-      </AuthProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AuthProvider>
+          <ProfileProvider>
+            <DeliveryProvider>
+              <RestaurantsProvider>
+                <CartProvider>
+                  <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="onboarding" />
+                    <Stack.Screen name="auth/login" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="auth/terms" />
+                    <Stack.Screen name="auth/otp" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="auth/complete-profile" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="home/Home" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="delivery" options={{ gestureEnabled: false }} />
+                    <Stack.Screen name="restaurants/index" />
+                    <Stack.Screen name="restaurants/[id]" />
+                    <Stack.Screen name="cart" />
+                    <Stack.Screen name="profile/index" />
+                  </Stack>
+                </CartProvider>
+              </RestaurantsProvider>
+            </DeliveryProvider>
+          </ProfileProvider>
+        </AuthProvider>
+      </GestureHandlerRootView>
     </QueryClientProvider>
   );
 }
