@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { cn } from "@/lib/utils";
+import { NotificationsBell } from "@/components/notifications/NotificationsBell";
 
 function RestaurantAvatar({ logoUrl, fallback }: { logoUrl: string | null; fallback: string }) {
   const [failed, setFailed] = useState(false);
@@ -52,12 +53,7 @@ export function Header() {
       {/* Right side */}
       <div className="flex items-center gap-3 mr-auto">
         {/* Notifications */}
-        <button className="relative w-9 h-9 rounded-xl border border-border bg-white flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all duration-200">
-          <Bell className="w-[18px] h-[18px]" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-            3
-          </span>
-        </button>
+        <NotificationsBell />
 
         {/* Divider */}
         <div className="w-px h-7 bg-border" />

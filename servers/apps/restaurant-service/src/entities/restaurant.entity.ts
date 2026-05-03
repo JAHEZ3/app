@@ -98,6 +98,10 @@ export class Restaurant {
   @Column({ name: 'is_open', default: false })
   isOpen: boolean;
 
+  @Index()
+  @Column({ name: 'is_Futarta', default: false })
+  is_Futarta: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

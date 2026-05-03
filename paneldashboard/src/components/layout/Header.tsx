@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { Bell, Search } from "lucide-react";
 import { useMe } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 
 interface HeaderProps {
   title: string;
@@ -10,6 +12,8 @@ interface HeaderProps {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const { data: me } = useMe();
+  const { data: notifications } = useNotifications(1, 1);
+  const unread = notifications?.unread ?? 0;
   const displayName = me?.email?.split("@")[0] ?? "المدير";
   const initial = displayName.charAt(0).toUpperCase() || "A";
 
@@ -26,10 +30,18 @@ export function Header({ title, subtitle }: HeaderProps) {
         <button className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
           <Search className="w-4 h-4" />
         </button>
-        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors relative">
+        <Link
+          href="/panel/notifications"
+          aria-label="الإشعارات"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors relative"
+        >
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
-        </button>
+          {unread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center tabular-nums">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </Link>
 
         {/* Avatar */}
         <div className="flex items-center gap-2">

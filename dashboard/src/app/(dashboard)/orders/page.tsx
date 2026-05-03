@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useRestaurant } from "@/hooks/useRestaurant";
 import { OrderStatus, Order, PaymentMethod } from "@/types/order.types";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { ordersApi } from "@/lib/api";
 
 interface ChatMsg {
   id: string;
+  orderId: string;
   senderId: string;
   senderRole: string;
   senderName: string;
@@ -315,7 +317,9 @@ export default function OrdersPage() {
     return () => { offNew(); offStatus(); };
   }, [on, queryClient]);
 
+  const { data: restaurant } = useRestaurant();
   const { data, isLoading, refetch, isFetching } = useOrders({
+    restaurantId: restaurant?.id,
     status: statusFilter !== "all" ? (statusFilter as OrderStatus) : undefined,
     page,
     limit: 10,
