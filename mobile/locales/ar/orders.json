@@ -1,8 +1,35 @@
 {
   "title": "طلباتي",
+  "header": {
+    "eyebrow": "نشاطك"
+  },
+  "subtitle": {
+    "withCount_zero": "لا توجد طلبات",
+    "withCount_one": "طلب واحد",
+    "withCount_two": "طلبان",
+    "withCount_few": "{{count}} طلبات",
+    "withCount_many": "{{count}} طلبا",
+    "withCount_other": "{{count}} طلب",
+    "empty": ""
+  },
   "empty": {
     "title": "لا توجد طلبات بعد",
-    "subtitle": "ستظهر طلباتك هنا"
+    "subtitle": "ستظهر طلباتك هنا",
+    "action": "تصفح المطاعم"
+  },
+  "loading": {
+    "title": "جاري تحميل طلباتك",
+    "body": "لحظة من فضلك…"
+  },
+  "error": {
+    "title": "تعذر تحميل الطلبات",
+    "body": "يرجى المحاولة مجددا.",
+    "action": "إعادة المحاولة"
+  },
+  "signedOut": {
+    "title": "سجل الدخول لعرض طلباتك",
+    "body": "ستظهر طلباتك السابقة هنا بعد تسجيل الدخول.",
+    "action": "تسجيل الدخول"
   },
   "status": {
     "pending": "قيد الانتظار",
@@ -18,6 +45,24 @@
     "deliveryFee": "رسوم التوصيل",
     "subtotal": "المجموع الفرعي",
     "placedAt": "وقت الطلب"
+  },
+  "sections": {
+    "items": "العناصر",
+    "itemsEmpty": "لا توجد عناصر في هذا الطلب.",
+    "history": "سجل الحالة",
+    "delivery": "معلومات التوصيل"
+  },
+  "history": {
+    "empty": "لا توجد تحديثات للحالة بعد."
+  },
+  "delivery": {
+    "address": "العنوان",
+    "notes": "ملاحظات",
+    "contact": "جهة الاتصال",
+    "courier": "السائق",
+    "eta": "الوصول المتوقع",
+    "deliveredAt": "وقت التسليم",
+    "empty": "لا تتوفر تفاصيل توصيل بعد."
   },
   "reorder": "إعادة الطلب"
 }

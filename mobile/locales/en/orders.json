@@ -1,8 +1,31 @@
 {
   "title": "My Orders",
+  "header": {
+    "eyebrow": "Your activity"
+  },
+  "subtitle": {
+    "withCount_one": "{{count}} order",
+    "withCount_other": "{{count}} orders",
+    "empty": ""
+  },
   "empty": {
     "title": "No orders yet",
-    "subtitle": "Your orders will appear here"
+    "subtitle": "Your orders will appear here",
+    "action": "Browse restaurants"
+  },
+  "loading": {
+    "title": "Loading your orders",
+    "body": "Just a moment…"
+  },
+  "error": {
+    "title": "Could not load orders",
+    "body": "Please try again.",
+    "action": "Retry"
+  },
+  "signedOut": {
+    "title": "Sign in to view orders",
+    "body": "Your past orders will appear here after you sign in.",
+    "action": "Sign in"
   },
   "status": {
     "pending": "Pending",
@@ -18,6 +41,24 @@
     "deliveryFee": "Delivery Fee",
     "subtotal": "Subtotal",
     "placedAt": "Placed at"
+  },
+  "sections": {
+    "items": "Items",
+    "itemsEmpty": "No items in this order.",
+    "history": "Status history",
+    "delivery": "Delivery info"
+  },
+  "history": {
+    "empty": "No status updates yet."
+  },
+  "delivery": {
+    "address": "Address",
+    "notes": "Notes",
+    "contact": "Contact",
+    "courier": "Courier",
+    "eta": "Estimated arrival",
+    "deliveredAt": "Delivered at",
+    "empty": "No delivery details available yet."
   },
   "reorder": "Reorder"
 }
