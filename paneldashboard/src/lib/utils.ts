@@ -24,9 +24,9 @@ export function formatDateTime(date: string | Date) {
 }
 
 export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("ar-SA", {
+  return new Intl.NumberFormat("ar-PS", {
     style: "currency",
-    currency: "SAR",
+    currency: "ILS",
     minimumFractionDigits: 0,
   }).format(amount);
 }

@@ -154,3 +154,37 @@ export interface CityDTO {
   nameAr: string;
   isActive: boolean;
 }
+
+// ─── Contact DTOs ─────────────────────────────────────────────────────────────
+
+export type ContactSubject =
+  | "general"
+  | "order_issue"
+  | "restaurant_join"
+  | "driver_join"
+  | "complaint"
+  | "other";
+
+export interface ContactInfoDTO {
+  platformName: string;
+  supportEmail: string;
+  supportPhone: string;
+  supportWhatsapp: string | null;
+  supportAddress: string | null;
+  supportHours: string | null;
+  logoUrl: string | null;
+}
+
+export interface ContactSubmitDTO {
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: ContactSubject;
+  title: string;
+  message: string;
+}
+
+export interface ContactSubmitResponseDTO {
+  id: string;
+  createdAt: string;
+}

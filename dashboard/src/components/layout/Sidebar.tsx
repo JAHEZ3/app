@@ -7,6 +7,7 @@ import {
   ShoppingBag,
   UtensilsCrossed,
   BarChart3,
+  Star,
   Bell,
   Settings,
   LogOut,
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/orders", icon: ShoppingBag, label: "الطلبات" },
   { href: "/menu", icon: UtensilsCrossed, label: "القائمة" },
   { href: "/analytics", icon: BarChart3, label: "الإحصائيات" },
+  { href: "/ratings", icon: Star, label: "التقييمات" },
   { href: "/notifications", icon: Bell, label: "الإشعارات" },
   { href: "/settings", icon: Settings, label: "الإعدادات" },
 ];

@@ -3,8 +3,15 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { NOTIFICATION_QUEUE, JOBS } from './queue.constants';
 import { NotificationServiceService } from '../notification-service.service';
+import { UserRole } from '../entities/user.read';
 
-export type NotificationJobType = 'order.created' | 'order.status.changed' | 'order.delivery.assigned';
+export type NotificationJobType =
+  | 'order.created'
+  | 'order.status.changed'
+  | 'order.delivery.assigned'
+  | 'restaurant.application.submitted'
+  | 'delivery.application.submitted'
+  | 'restaurant.owner.approved';
 
 export interface NotificationJobData {
   type: NotificationJobType;
@@ -44,6 +51,15 @@ export class NotificationProcessor extends WorkerHost {
       case 'order.delivery.assigned':
         await this.handleDeliveryAssigned(payload);
         break;
+      case 'restaurant.application.submitted':
+        await this.handleRestaurantApplicationSubmitted(payload);
+        break;
+      case 'delivery.application.submitted':
+        await this.handleDeliveryApplicationSubmitted(payload);
+        break;
+      case 'restaurant.owner.approved':
+        await this.handleRestaurantOwnerApproved(payload);
+        break;
       default:
         this.logger.warn({ msg: 'notification_unknown_type', type, jobId: job.id });
     }
@@ -57,7 +73,7 @@ export class NotificationProcessor extends WorkerHost {
         data.ownerUserId,
         'order.new',
         'طلب جديد',
-        `طلب جديد #${data.orderNumber} بقيمة ${data.totalAmount} ر.س`,
+        `طلب جديد #${data.orderNumber} بقيمة ${data.totalAmount} شيكل`,
         { orderId: data.orderId, orderNumber: data.orderNumber },
       );
     }
@@ -105,5 +121,60 @@ export class NotificationProcessor extends WorkerHost {
         { orderId: data.orderId },
       );
     }
+  }
+
+  private async handleRestaurantApplicationSubmitted(data: Record<string, any>) {
+    const name = data.restaurantName?.trim() || 'مطعم جديد';
+    const cityPart = data.city ? ` — ${data.city}` : '';
+    await this.service.broadcast({
+      role: UserRole.MANAGER,
+      type: 'restaurant.application.submitted',
+      title: 'طلب انضمام مطعم جديد',
+      body: `${name}${cityPart} بانتظار المراجعة`,
+      data: {
+        requestId: data.requestId,
+        restaurantId: data.restaurantId,
+        restaurantName: data.restaurantName ?? null,
+        ownerName: data.ownerName ?? null,
+        city: data.city ?? null,
+      },
+    });
+  }
+
+  private async handleDeliveryApplicationSubmitted(data: Record<string, any>) {
+    const name = data.fullName?.trim() || 'مندوب جديد';
+    const cityPart = data.city ? ` — ${data.city}` : '';
+    await this.service.broadcast({
+      role: UserRole.MANAGER,
+      type: 'delivery.application.submitted',
+      title: 'طلب انضمام مندوب جديد',
+      body: `${name}${cityPart} بانتظار المراجعة`,
+      data: {
+        agentId: data.agentId,
+        userId: data.userId,
+        fullName: data.fullName ?? null,
+        city: data.city ?? null,
+        vehicleType: data.vehicleType ?? null,
+      },
+    });
+  }
+
+  private async handleRestaurantOwnerApproved(data: Record<string, any>) {
+    if (!data.userId) return;
+    const name = data.restaurantName?.trim();
+    const body = name
+      ? `تم تفعيل مطعمك "${name}" — يمكنك الآن استقبال الطلبات.`
+      : 'تم تفعيل مطعمك — يمكنك الآن استقبال الطلبات.';
+    await this.service.create(
+      data.userId,
+      'restaurant.welcome',
+      'مرحباً بك في جاهز',
+      body,
+      {
+        restaurantId: data.restaurantId ?? null,
+        restaurantName: data.restaurantName ?? null,
+        requestId: data.requestId ?? null,
+      },
+    );
   }
 }

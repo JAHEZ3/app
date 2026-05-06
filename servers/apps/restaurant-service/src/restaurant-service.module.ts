@@ -8,6 +8,7 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { RestaurantServiceController } from './restaurant-service.controller';
 import { RestaurantServiceService } from './restaurant-service.service';
 import { AiMenuImportService } from './ai-menu-import.service';
+import { AiCoverImageService } from './ai-cover-image.service';
 import { S3Service } from './s3.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -21,6 +22,7 @@ import { MenuSection } from './entities/menu-section.entity';
 import { Meal } from './entities/meal.entity';
 import { MealOptionGroup } from './entities/meal-option-group.entity';
 import { MealOption } from './entities/meal-option.entity';
+import { CategoriesService } from './categories/categories.service';
 import { RestaurantAnalyticsService } from './analytics/analytics.service';
 import { OrderRead } from './analytics/read-models/order.read';
 import { OrderItemRead } from './analytics/read-models/order-item.read';
@@ -81,6 +83,6 @@ import { OrderRatingRead } from './analytics/read-models/order-rating.read';
     }),
   ],
   controllers: [RestaurantServiceController],
-  providers: [RestaurantServiceService, AiMenuImportService, RestaurantAnalyticsService, JwtAuthGuard, RolesGuard, S3Service],
+  providers: [RestaurantServiceService, AiMenuImportService, AiCoverImageService, RestaurantAnalyticsService, CategoriesService, JwtAuthGuard, RolesGuard, S3Service],
 })
 export class RestaurantServiceModule {}

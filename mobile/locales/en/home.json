@@ -27,7 +27,7 @@
     "placesCount_other": "{{count}} places"
   },
   "price": {
-    "currency": "SAR"
+    "currency": "ILS"
   },
   "sections": {
     "categories": "Categories",

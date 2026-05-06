@@ -7,11 +7,23 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { ManagerServiceController } from './manager-service.controller';
 import { ManagerServiceService } from './manager-service.service';
 import { AnalyticsService } from './analytics/analytics.service';
+import { SettingsController } from './settings/settings.controller';
+import { SettingsService } from './settings/settings.service';
+import { SupportController } from './support/support.controller';
+import { PublicContactController } from './support/public-contact.controller';
+import { SupportService } from './support/support.service';
+import { S3Service } from './s3.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Manager } from './entities/manager.entity';
 import { AuditLog } from './entities/audit-log.entity';
-import { PlatformSetting } from './entities/platform-setting.entity';
+import { GeneralSettings } from './entities/general-settings.entity';
+import { FeesSettings } from './entities/fees-settings.entity';
+import { DeliverySettings } from './entities/delivery-settings.entity';
+import { NotificationSettings } from './entities/notification-settings.entity';
+import { SystemSettings } from './entities/system-settings.entity';
+import { PaymentSettings } from './entities/payment-settings.entity';
+import { SupportTicket } from './entities/support-ticket.entity';
 import { OrderRead } from './analytics/read-models/order.read';
 import { RestaurantRead } from './analytics/read-models/restaurant.read';
 import { CustomerRead } from './analytics/read-models/customer.read';
@@ -39,7 +51,13 @@ import { OrderTransactionRead } from './analytics/read-models/order-transaction.
     TypeOrmModule.forFeature([
       Manager,
       AuditLog,
-      PlatformSetting,
+      GeneralSettings,
+      FeesSettings,
+      DeliverySettings,
+      NotificationSettings,
+      SystemSettings,
+      PaymentSettings,
+      SupportTicket,
       OrderRead,
       RestaurantRead,
       CustomerRead,
@@ -63,7 +81,20 @@ import { OrderTransactionRead } from './analytics/read-models/order-transaction.
       }),
     }),
   ],
-  controllers: [ManagerServiceController],
-  providers: [ManagerServiceService, AnalyticsService, JwtAuthGuard, RolesGuard],
+  controllers: [
+    ManagerServiceController,
+    SettingsController,
+    SupportController,
+    PublicContactController,
+  ],
+  providers: [
+    ManagerServiceService,
+    AnalyticsService,
+    SettingsService,
+    SupportService,
+    S3Service,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
 })
 export class ManagerServiceModule {}

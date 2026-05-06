@@ -1,6 +1,5 @@
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CuisineType } from '../entities/restaurant.entity';
 
 export class MobileListRestaurantsDto {
   @IsOptional()
@@ -12,8 +11,8 @@ export class MobileListRestaurantsDto {
   search?: string;
 
   @IsOptional()
-  @IsEnum(CuisineType, { message: 'نوع المطبخ غير مدعوم.' })
-  cuisineType?: CuisineType;
+  @IsString({ message: 'نوع المطبخ يجب أن يكون نصاً.' })
+  cuisineType?: string;
 
   @IsOptional()
   @Type(() => Number)

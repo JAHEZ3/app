@@ -13,6 +13,9 @@ import {
   Shield,
   Bell,
   Truck,
+  Tag,
+  LifeBuoy,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
@@ -21,9 +24,12 @@ const navItems = [
   { href: "/panel/overview",        icon: LayoutDashboard, label: "نظرة عامة"      },
   { href: "/panel/users",           icon: Users,           label: "المستخدمون"     },
   { href: "/panel/restaurants",     icon: Store,           label: "المطاعم"        },
+  { href: "/panel/ratings",         icon: Star,            label: "التقييمات"      },
+  { href: "/panel/categories",      icon: Tag,             label: "التصنيفات"      },
   { href: "/panel/delivery-agents", icon: Truck,           label: "مندوبو التوصيل" },
   { href: "/panel/orders",          icon: ShoppingBag,     label: "الطلبات"        },
   { href: "/panel/notifications",   icon: Bell,            label: "الإشعارات"      },
+  { href: "/panel/support",         icon: LifeBuoy,        label: "الدعم الفني"    },
   { href: "/panel/settings",        icon: Settings,        label: "الإعدادات"      },
 ];
 

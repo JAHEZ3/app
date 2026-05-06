@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { restaurantsApi, unwrap } from "@/lib/api";
+import { restaurantsApi, unwrap, type RestaurantReviewsList } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
 import type {
   ChangeRestaurantStatusPayload,
@@ -9,6 +9,7 @@ import type {
   RejectApplicationPayload,
   UpdateRestaurantPayload,
 } from "@/types/restaurant.types";
+import type { RestaurantFull } from "@/types/restaurant-full.types";
 
 // ─── Applications ────────────────────────────────────────────────────────────
 
@@ -59,6 +60,17 @@ export function useRestaurant(id: string | undefined) {
   });
 }
 
+export function useRestaurantFull(id: string | undefined) {
+  return useQuery<RestaurantFull>({
+    queryKey: ["restaurants", "full", id ?? ""] as const,
+    queryFn: async () => {
+      const res = await restaurantsApi.getFull(id as string);
+      return unwrap(res) as RestaurantFull;
+    },
+    enabled: !!id,
+  });
+}
+
 export function useUpdateRestaurant(id: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -91,5 +103,19 @@ export function useDeleteRestaurant() {
       qc.removeQueries({ queryKey: queryKeys.restaurants.detail(id) });
       qc.invalidateQueries({ queryKey: queryKeys.restaurants.root });
     },
+  });
+}
+
+export function useRestaurantReviews(
+  id: string | undefined,
+  page = 1,
+  limit = 20,
+) {
+  return useQuery<RestaurantReviewsList>({
+    queryKey: queryKeys.restaurants.reviews(id ?? "", page, limit),
+    queryFn: () =>
+      restaurantsApi.listReviews(id as string, page, limit).then(unwrap),
+    enabled: !!id,
+    placeholderData: (prev) => prev,
   });
 }

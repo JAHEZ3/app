@@ -204,7 +204,7 @@ export default function DeliveryDashboardScreen() {
                 <View style={{ paddingHorizontal: 20, paddingTop: 48 }}>
                     <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
                         <StatCard icon="bicycle-outline" label={t('dashboard.stats.deliveries')} value={profile.totalDeliveries ?? 0} delay={200} />
-                        <StatCard icon="wallet-outline" label={t('dashboard.stats.balance')} value={`SAR ${(profile.walletBalance ?? 0).toFixed(0)}`} color="#1a7a4a" delay={280} />
+                        <StatCard icon="wallet-outline" label={t('dashboard.stats.balance')} value={`ILS ${(profile.walletBalance ?? 0).toFixed(0)}`} color="#1a7a4a" delay={280} />
                         <StatCard icon="star-outline" label={t('dashboard.stats.rating')} value={(profile.rating ?? 0).toFixed(1)} color="#c94400" delay={360} />
                     </View>
 

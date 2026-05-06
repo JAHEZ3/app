@@ -207,6 +207,10 @@ export const analyticsApi = {
   topMeals: () => restaurantInstance.get("/api/restaurant/analytics/top-meals"),
   customers: () => restaurantInstance.get("/api/restaurant/analytics/customers"),
   ratings: () => restaurantInstance.get("/api/restaurant/analytics/ratings"),
+  reviews: (page = 1, limit = 20) =>
+    restaurantInstance.get("/api/restaurant/analytics/reviews", {
+      params: { page, limit },
+    }),
   delivery: () => restaurantInstance.get("/api/restaurant/analytics/delivery"),
   payments: () => restaurantInstance.get("/api/restaurant/analytics/payments"),
   report: (period: "daily" | "weekly" | "monthly") =>
@@ -225,6 +229,11 @@ export const notificationApi = {
     notificationInstance.patch(`/api/notification/notifications/${id}/read`),
   markAllRead: () =>
     notificationInstance.patch("/api/notification/notifications/read-all"),
+};
+
+// ── Restaurant categories (public, restaurant-service) ───────────────────────
+export const categoriesApi = {
+  list: () => restaurantInstance.get("/api/restaurant/categories"),
 };
 
 // ── Orders (port 3001) ────────────────────────────────────────────────────────

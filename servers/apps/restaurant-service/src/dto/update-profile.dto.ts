@@ -1,12 +1,10 @@
 import {
-  IsEnum,
   IsOptional,
   IsString,
   IsNotEmpty,
   IsMobilePhone,
   MaxLength,
 } from 'class-validator';
-import { CuisineType } from '../entities/restaurant.entity';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -41,6 +39,8 @@ export class UpdateProfileDto {
   city?: string;
 
   @IsOptional()
-  @IsEnum(CuisineType, { message: 'نوع المطبخ غير مدعوم.' })
-  cuisineType?: CuisineType;
+  @IsString({ message: 'نوع المطبخ يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'نوع المطبخ لا يمكن أن يكون فارغاً.' })
+  @MaxLength(100, { message: 'نوع المطبخ لا يتجاوز 100 حرف.' })
+  cuisineType?: string;
 }
