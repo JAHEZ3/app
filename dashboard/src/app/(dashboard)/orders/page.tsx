@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
 import { useRestaurant } from "@/hooks/useRestaurant";
-import { OrderStatus, Order, PaymentMethod } from "@/types/order.types";
+import { OrderStatus, Order, PaymentMethod, PaginatedOrders } from "@/types/order.types";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -305,7 +305,7 @@ export default function OrdersPage() {
   useEffect(() => {
     const offNew = on("order:new", (data: any) => {
       playNotificationSound();
-      setNewOrderBanner(`طلب جديد #${data.orderNumber} — ${data.totalAmount} ر.س`);
+      setNewOrderBanner(`طلب جديد #${data.orderNumber} — ${data.totalAmount} شيكل`);
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       setTimeout(() => setNewOrderBanner(null), 6000);
     });
@@ -327,8 +327,13 @@ export default function OrdersPage() {
 
   const updateStatus = useUpdateOrderStatus();
 
-  const orders: Order[] = data?.data ?? [];
-  const total = data?.total ?? 0;
+  const raw = data as unknown;
+  const orders: Order[] = Array.isArray(raw)
+    ? (raw as Order[])
+    : Array.isArray((raw as PaginatedOrders | undefined)?.data)
+      ? ((raw as PaginatedOrders).data)
+      : [];
+  const total = (raw as PaginatedOrders | undefined)?.total ?? orders.length;
 
   const filtered = search
     ? orders.filter(

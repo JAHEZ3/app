@@ -106,6 +106,24 @@ export interface RatingsAnalytics extends RatingTotals {
   distribution: { stars: number; count: number }[];
 }
 
+export interface Review {
+  id: string;
+  orderId: string;
+  customerId: string;
+  foodRating: number;
+  deliveryRating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
+export interface ReviewsList {
+  items: Review[];
+  total: number;
+  page: number;
+  limit: number;
+  summary: RatingsAnalytics;
+}
+
 export interface DeliveryAnalytics {
   total: number;
   completed: number;

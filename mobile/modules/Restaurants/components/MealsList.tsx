@@ -40,7 +40,7 @@ const MealsList = ({
     onAddToCart,
     restaurantId,
     restaurantName,
-    currency = 'SAR',
+    currency = 'ILS',
     showSectionHeaders = true,
 }: MealsListProps) => {
     const [activeMeal, setActiveMeal] = useState<Meal | null>(null);

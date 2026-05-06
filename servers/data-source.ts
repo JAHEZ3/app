@@ -39,7 +39,12 @@ import { DeliveryLocationLog } from './apps/delivery-service/src/entities/delive
 // Manager
 import { Manager } from './apps/manager-service/src/entities/manager.entity';
 import { AuditLog } from './apps/manager-service/src/entities/audit-log.entity';
-import { PlatformSetting } from './apps/manager-service/src/entities/platform-setting.entity';
+import { GeneralSettings } from './apps/manager-service/src/entities/general-settings.entity';
+import { FeesSettings } from './apps/manager-service/src/entities/fees-settings.entity';
+import { DeliverySettings } from './apps/manager-service/src/entities/delivery-settings.entity';
+import { NotificationSettings } from './apps/manager-service/src/entities/notification-settings.entity';
+import { SystemSettings } from './apps/manager-service/src/entities/system-settings.entity';
+import { PaymentSettings } from './apps/manager-service/src/entities/payment-settings.entity';
 
 // Notification
 import { Notification } from './apps/notification-service/src/entities/notification.entity';
@@ -63,7 +68,8 @@ export const AppDataSource = new DataSource({
     Menu, MenuSection, Meal, MealOptionGroup, MealOption,
     PromoCode, Order, OrderItem, OrderItemOption, OrderStatusHistory, OrderRating,
     DeliveryCompany, DeliveryAgent, DeliveryRequest, Delivery, DeliveryLocationLog,
-    Manager, AuditLog, PlatformSetting,
+    Manager, AuditLog,
+    GeneralSettings, FeesSettings, DeliverySettings, NotificationSettings, SystemSettings, PaymentSettings,
     Notification,
     OrderTransaction,
   ],

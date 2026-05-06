@@ -683,6 +683,74 @@ export class RestaurantAnalyticsService {
     };
   }
 
+  async listReviews(restaurantId: string, page = 1, limit = 20) {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    const [rows, total] = await Promise.all([
+      this.ratingRepo
+        .createQueryBuilder('r')
+        .innerJoin(OrderRead, 'o', 'o.id = r.order_id')
+        .select([
+          'r.id AS id',
+          'r.order_id AS "orderId"',
+          'r.customer_id AS "customerId"',
+          'r.food_rating AS "foodRating"',
+          'r.delivery_rating AS "deliveryRating"',
+          'r.comment AS comment',
+          'r.created_at AS "createdAt"',
+        ])
+        .where('o.restaurant_id = :rid', { rid: restaurantId })
+        .orderBy('r.created_at', 'DESC')
+        .offset(skip)
+        .limit(safeLimit)
+        .getRawMany<{
+          id: string;
+          orderId: string;
+          customerId: string;
+          foodRating: number;
+          deliveryRating: number;
+          comment: string | null;
+          createdAt: Date;
+        }>(),
+      this.ratingRepo
+        .createQueryBuilder('r')
+        .innerJoin(OrderRead, 'o', 'o.id = r.order_id')
+        .where('o.restaurant_id = :rid', { rid: restaurantId })
+        .getCount(),
+    ]);
+
+    const [totals, distribution] = await Promise.all([
+      this.ratingTotals(restaurantId),
+      this.ratingDistribution(restaurantId),
+    ]);
+
+    return {
+      data: {
+        items: rows.map((r) => ({
+          id: r.id,
+          orderId: r.orderId,
+          customerId: r.customerId,
+          foodRating: Number(r.foodRating),
+          deliveryRating: Number(r.deliveryRating),
+          comment: r.comment ?? null,
+          createdAt: r.createdAt,
+        })),
+        total,
+        page: safePage,
+        limit: safeLimit,
+        summary: { ...totals, distribution },
+      },
+      message: 'تم استرجاع التقييمات.',
+    };
+  }
+
+  async listOwnerReviews(userId: string, page = 1, limit = 20) {
+    const restaurantId = await this.resolveRestaurantId(userId);
+    return this.listReviews(restaurantId, page, limit);
+  }
+
   private async ratingDistribution(restaurantId: string) {
     const rows = await this.ratingRepo
       .createQueryBuilder('r')

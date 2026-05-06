@@ -1,16 +1,15 @@
 import {
   IsBoolean,
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from "class-validator";
 import { Transform, Type } from "class-transformer";
-import { CuisineType } from "../entities/restaurant.entity";
 
 export class CompleteRestaurantProfileDto {
   @IsString({ message: 'كلمة المرور يجب أن تكون نصاً.' })
@@ -49,8 +48,10 @@ export class CompleteRestaurantProfileDto {
   @IsNotEmpty({ message: 'المدينة مطلوبة.' })
   city: string;
 
-  @IsEnum(CuisineType, { message: 'نوع المطبخ غير مدعوم.' })
-  cuisineType: CuisineType;
+  @IsString({ message: 'نوع المطبخ يجب أن يكون نصاً.' })
+  @IsNotEmpty({ message: 'نوع المطبخ مطلوب.' })
+  @MaxLength(100, { message: 'نوع المطبخ لا يتجاوز 100 حرف.' })
+  cuisineType: string;
 
   @IsOptional()
   @Type(() => Number)

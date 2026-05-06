@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Sparkles, Info } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,9 +68,10 @@ export function EditRestaurantDialog({
   const qc = useQueryClient();
   const { success, error } = useToast();
   const { data: r, isLoading } = useRestaurant(
-    open ? restaurantId ?? undefined : undefined,
+    open ? (restaurantId ?? undefined) : undefined,
   );
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [accentColor, setAccentColor] = useState("");
 
   useEffect(() => {
     if (r) {
@@ -86,6 +87,7 @@ export function EditRestaurantDialog({
       });
     } else if (!open) {
       setForm(emptyForm);
+      setAccentColor("");
     }
   }, [r, open]);
 
@@ -96,7 +98,9 @@ export function EditRestaurantDialog({
     },
     onSuccess: () => {
       if (restaurantId) {
-        qc.invalidateQueries({ queryKey: queryKeys.restaurants.detail(restaurantId) });
+        qc.invalidateQueries({
+          queryKey: queryKeys.restaurants.detail(restaurantId),
+        });
       }
       qc.invalidateQueries({ queryKey: queryKeys.restaurants.root });
       success("تم حفظ التعديلات");
@@ -106,12 +110,46 @@ export function EditRestaurantDialog({
       error("خطأ", extractApiErrorMessage(err, "تعذّر حفظ التعديلات")),
   });
 
+  const generateCover = useMutation({
+    mutationFn: () => {
+      if (!restaurantId) throw new Error("Missing restaurant id");
+      const trimmed = accentColor.trim();
+      const payload =
+        trimmed && /^#[0-9a-fA-F]{6}$/.test(trimmed)
+          ? { accentColor: trimmed }
+          : undefined;
+      return restaurantsApi.generateCover(restaurantId, payload);
+    },
+    onSuccess: (res) => {
+      const newUrl = res.data?.data?.coverUrl ?? "";
+      if (newUrl) {
+        setForm((prev) => ({ ...prev, coverUrl: newUrl }));
+      }
+      if (restaurantId) {
+        qc.invalidateQueries({
+          queryKey: queryKeys.restaurants.detail(restaurantId),
+        });
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.restaurants.root });
+      success("تم إنشاء صورة الغلاف", "تم تحديث الغلاف بنسخة مولّدة بالذكاء.");
+    },
+    onError: (err) =>
+      error(
+        "تعذّر إنشاء الغلاف",
+        extractApiErrorMessage(err, "حدث خطأ أثناء توليد الصورة. حاول لاحقاً."),
+      ),
+  });
+
+  const canGenerate =
+    !!restaurantId && form.name.trim().length > 0 && !generateCover.isPending;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!restaurantId || !r) return;
     const payload: UpdateRestaurantPayload = {};
     if (form.name !== (r.name ?? "")) payload.name = form.name;
-    if (form.description !== (r.description ?? "")) payload.description = form.description;
+    if (form.description !== (r.description ?? ""))
+      payload.description = form.description;
     if (form.phone !== (r.phone ?? "")) payload.phone = form.phone;
     if (form.street !== (r.street ?? "")) payload.street = form.street;
     if (form.city !== (r.city ?? "")) payload.city = form.city;
@@ -129,7 +167,7 @@ export function EditRestaurantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>تعديل بيانات المطعم</DialogTitle>
         </DialogHeader>
@@ -185,9 +223,55 @@ export function EditRestaurantDialog({
                     <Input
                       placeholder="https://…/cover.jpg"
                       value={form.coverUrl}
-                      onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
+                      onChange={(e) =>
+                        setForm({ ...form, coverUrl: e.target.value })
+                      }
                       dir="ltr"
                     />
+                  </div>
+
+                  <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 mt-2 space-y-2.5">
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-foreground">
+                          توليد غلاف بالذكاء الاصطناعي
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                          ينشئ صورة غلاف احترافية اعتماداً على اسم المطعم ووصفه
+                          ونوع المطبخ. كلما كان الوصف مفصّلاً كانت النتيجة أدقّ.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        placeholder="#E2552B (اختياري)"
+                        value={accentColor}
+                        onChange={(e) => setAccentColor(e.target.value)}
+                        dir="ltr"
+                        className="sm:max-w-[180px] h-9 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => generateCover.mutate()}
+                        loading={generateCover.isPending}
+                        disabled={!canGenerate}
+                        className="sm:mr-auto"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        {form.coverUrl ? "إعادة التوليد" : "توليد الغلاف"}
+                      </Button>
+                    </div>
+
+                    {!form.description.trim() && (
+                      <p className="flex items-center gap-1.5 text-[11px] text-warning">
+                        <Info className="w-3 h-3" />
+                        أضف وصفاً للمطعم أدناه ثم احفظ التعديلات قبل التوليد
+                        للحصول على نتيجة أفضل.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="sm:col-span-2">
@@ -195,7 +279,9 @@ export function EditRestaurantDialog({
                     label="رابط الشعار"
                     placeholder="https://…/logo.jpg"
                     value={form.logoUrl}
-                    onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, logoUrl: e.target.value })
+                    }
                     dir="ltr"
                   />
                 </div>

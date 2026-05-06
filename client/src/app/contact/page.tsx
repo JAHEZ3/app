@@ -1,54 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageHero } from "@/components/layout/PageHero";
-import { Phone, Mail, MapPin, Clock, MessageCircle, Send, CheckCircle } from "lucide-react";
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Clock,
+  MessageCircle,
+  Send,
+  CheckCircle,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
+import { useContactInfo, useSubmitContact } from "@/hooks/useContact";
+import type { ContactSubject } from "@/types/dto";
 
-const CONTACT_INFO = [
-  {
-    icon: Phone,
-    title: "اتصل بنا",
-    lines: ["+970 59 000 0000", "+970 59 111 1111"],
-    note: "متاح 24/7",
-    bg: "bg-[#FFF3E8]",
-    color: "text-[#FF6B00]",
-  },
-  {
-    icon: Mail,
-    title: "البريد الإلكتروني",
-    lines: ["info@jahez.ps", "support@jahez.ps"],
-    note: "نرد خلال ساعة",
-    bg: "bg-blue-50",
-    color: "text-blue-600",
-  },
-  {
-    icon: MapPin,
-    title: "موقعنا",
-    lines: ["غزة، فلسطين", "شارع الرشيد، المنطقة الغربية"],
-    note: "المقر الرئيسي",
-    bg: "bg-green-50",
-    color: "text-green-600",
-  },
-  {
-    icon: Clock,
-    title: "ساعات العمل",
-    lines: ["السبت – الخميس", "8:00 ص – 11:00 م"],
-    note: "دعم طوارئ 24/7",
-    bg: "bg-purple-50",
-    color: "text-purple-600",
-  },
+/** UI subject labels mapped to backend enum keys. */
+const SUBJECT_OPTIONS: { value: ContactSubject; label: string }[] = [
+  { value: "order_issue", label: "مشكلة في طلب" },
+  { value: "restaurant_join", label: "الانضمام كمطعم" },
+  { value: "driver_join", label: "الانضمام كسائق" },
+  { value: "general", label: "استفسار عام" },
+  { value: "complaint", label: "شكوى أو اقتراح" },
 ];
 
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
+  const { data: info } = useContactInfo();
+  const submit = useSubmitContact();
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    subject: ContactSubject | "";
+    message: string;
+  }>({ name: "", email: "", phone: "", subject: "", message: "" });
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  const contactCards = useMemo(() => {
+    return [
+      {
+        icon: Phone,
+        title: "اتصل بنا",
+        lines: [info?.supportPhone || "+970 59 000 0000"],
+        note: "متاح للدعم",
+        bg: "bg-[#FFF3E8]",
+        color: "text-[#FF6B00]",
+      },
+      {
+        icon: Mail,
+        title: "البريد الإلكتروني",
+        lines: [info?.supportEmail || "support@jahez.ps"],
+        note: "نرد خلال ساعة",
+        bg: "bg-blue-50",
+        color: "text-blue-600",
+      },
+      {
+        icon: MapPin,
+        title: "موقعنا",
+        lines: (info?.supportAddress || "غزة، فلسطين").split("\n").filter(Boolean),
+        note: "المقر الرئيسي",
+        bg: "bg-green-50",
+        color: "text-green-600",
+      },
+      {
+        icon: Clock,
+        title: "ساعات العمل",
+        lines: (info?.supportHours || "السبت – الخميس\n8:00 ص – 11:00 م")
+          .split("\n")
+          .filter(Boolean),
+        note: "دعم طوارئ 24/7",
+        bg: "bg-purple-50",
+        color: "text-purple-600",
+      },
+    ];
+  }, [info]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Placeholder: wire to API
-    setSent(true);
+    setError(null);
+    if (!form.subject) {
+      setError("يرجى اختيار الموضوع");
+      return;
+    }
+    try {
+      await submit.mutateAsync({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || undefined,
+        subject: form.subject,
+        title:
+          SUBJECT_OPTIONS.find((s) => s.value === form.subject)?.label ??
+          "تواصل من الموقع",
+        message: form.message.trim(),
+      });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذّر إرسال الرسالة");
+    }
   }
+
+  const whatsappNumber = (info?.supportWhatsapp || "").replace(/[^0-9]/g, "");
 
   return (
     <PageLayout>
@@ -62,7 +116,7 @@ export default function ContactPage() {
       <section className="py-20 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-            {CONTACT_INFO.map(({ icon: Icon, title, lines, note, bg, color }) => (
+            {contactCards.map(({ icon: Icon, title, lines, note, bg, color }) => (
               <div key={title} className="text-center p-6 rounded-2xl border border-gray-100 hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-shadow">
                 <div className={`w-14 h-14 ${bg} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
                   <Icon className={`w-7 h-7 ${color}`} />

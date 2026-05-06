@@ -110,7 +110,7 @@ const RestaurantCardComponent = ({ restaurant, onPress }: RestaurantCardProps) =
                     <View style={styles.minOrderPill}>
                         <Ionicons name="cart-outline" size={13} color="#F55905" />
                         <AppText variant="body-sm" align="left" style={styles.minOrderText}>
-                            Min {minOrderAmount.toFixed(0)} SAR
+                            Min {minOrderAmount.toFixed(0)} ILS
                         </AppText>
                     </View>
 

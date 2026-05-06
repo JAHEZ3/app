@@ -72,7 +72,7 @@ const defaultSettings: SystemSettings = {
     supportEmail: "support@jahaz.app",
     supportPhone: "920012345",
     defaultLanguage: "ar",
-    currency: "SAR",
+    currency: "ILS",
   },
   fees: {
     restaurantCommission: 15,
@@ -239,19 +239,19 @@ export default function SettingsPage() {
                         min={0} max={50}
                       />
                       <NumberInput
-                        label="رسوم التوصيل الأساسية (ريال)"
+                        label="رسوم التوصيل الأساسية (شيكل)"
                         value={local.fees.deliveryFeeBase}
                         onChange={(v) => set("fees", "deliveryFeeBase", v)}
                         min={0}
                       />
                       <NumberInput
-                        label="رسوم التوصيل لكل كيلومتر (ريال)"
+                        label="رسوم التوصيل لكل كيلومتر (شيكل)"
                         value={local.fees.deliveryFeePerKm}
                         onChange={(v) => set("fees", "deliveryFeePerKm", v)}
                         min={0}
                       />
                       <NumberInput
-                        label="الحد الأدنى للطلب (ريال)"
+                        label="الحد الأدنى للطلب (شيكل)"
                         value={local.fees.minOrderAmount}
                         onChange={(v) => set("fees", "minOrderAmount", v)}
                         min={0}
@@ -370,7 +370,7 @@ export default function SettingsPage() {
                       ))}
                       <div className="pt-2">
                         <NumberInput
-                          label="الحد الأقصى لرصيد المحفظة (ريال)"
+                          label="الحد الأقصى لرصيد المحفظة (شيكل)"
                           value={local.payment.maxWalletBalance}
                           onChange={(v) => set("payment", "maxWalletBalance", v)}
                           min={50}

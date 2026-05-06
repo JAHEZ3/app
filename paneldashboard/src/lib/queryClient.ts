@@ -32,6 +32,8 @@ export const queryKeys = {
       ["restaurants", "list", params ?? {}] as const,
     detail: (id: string) => ["restaurants", "detail", id] as const,
     applications: ["restaurants", "applications"] as const,
+    reviews: (id: string, page: number, limit: number) =>
+      ["restaurants", "reviews", id, page, limit] as const,
     /** @deprecated use `list` with typed params */
     all: (params?: object) => ["restaurants", "list", params ?? {}] as const,
     /** @deprecated use `detail` */
@@ -53,7 +55,17 @@ export const queryKeys = {
     list: (page: number, limit: number) =>
       ["notifications", "list", { page, limit }] as const,
   },
+  categories: {
+    root: ["categories"] as const,
+    list: ["categories", "list"] as const,
+  },
   settings: ["settings"] as const,
+  support: {
+    root: ["support"] as const,
+    list: (params?: { status?: string; page?: number; limit?: number }) =>
+      ["support", "list", params ?? {}] as const,
+    detail: (id: string) => ["support", "detail", id] as const,
+  },
   stats: {
     overview: ["stats", "overview"] as const,
   },
