@@ -1,0 +1,108 @@
+{
+  "header": {
+    "eyebrow": "مراجعة وتأكيد",
+    "title": "إتمام الطلب"
+  },
+  "accessibility": {
+    "goBack": "رجوع",
+    "placeOrder": "إرسال الطلب"
+  },
+  "actions": {
+    "signIn": "تسجيل الدخول"
+  },
+  "sections": {
+    "address": {
+      "title": "عنوان التوصيل",
+      "subtitle": "إلى أين نوصل طلبك؟"
+    },
+    "payment": {
+      "title": "طريقة الدفع",
+      "subtitle": "اختر الطريقة الأنسب لك"
+    },
+    "promo": {
+      "title": "كود الخصم",
+      "subtitle": "لديك كوبون؟ أضفه للحصول على خصم"
+    },
+    "notes": {
+      "title": "ملاحظات لمندوب التوصيل",
+      "subtitle": "هل هناك شيء يجب أن نعرفه؟ (اختياري)"
+    },
+    "summary": {
+      "title": "ملخص الطلب",
+      "subtitle_zero": "راجع الإجمالي",
+      "subtitle_one": "عنصر واحد · راجع الإجمالي",
+      "subtitle_two": "عنصران · راجع الإجمالي",
+      "subtitle_few": "{{count}} عناصر · راجع الإجمالي",
+      "subtitle_many": "{{count}} عنصرا · راجع الإجمالي",
+      "subtitle_other": "{{count}} عنصر · راجع الإجمالي"
+    }
+  },
+  "address": {
+    "placeholderLine": "الشارع، المبنى، الشقة…",
+    "placeholderCity": "المدينة",
+    "placeholderStreet": "الحي / المنطقة"
+  },
+  "payment": {
+    "cash": {
+      "label": "الدفع عند الاستلام",
+      "description": "ادفع نقدًا للمندوب عند وصول الطلب"
+    },
+    "card": {
+      "label": "بطاقة ائتمان / مدى",
+      "description": "ادفع بأمان باستخدام بطاقتك",
+      "badge": "الأكثر استخدامًا"
+    },
+    "online": {
+      "label": "محفظة إلكترونية",
+      "description": "Apple Pay أو Google Pay أو رصيد المحفظة"
+    }
+  },
+  "promo": {
+    "placeholder": "أدخل كود الخصم",
+    "apply": "تطبيق",
+    "applied": "مُطبَّق",
+    "remove": "إزالة",
+    "discount": "الخصم"
+  },
+  "notes": {
+    "placeholder": "اتركه عند الباب، اقرع الجرس مرتين، بدون بصل…"
+  },
+  "summary": {
+    "subtotal": "المجموع الفرعي",
+    "deliveryFee": "رسوم التوصيل",
+    "discount": "الخصم",
+    "total": "الإجمالي"
+  },
+  "secure": {
+    "note": "دفع آمن محمي بواسطة جاهز"
+  },
+  "cta": {
+    "placeOrder": "إرسال الطلب",
+    "placing": "جارٍ إرسال طلبك…"
+  },
+  "errors": {
+    "addressRequired": "الرجاء إدخال عنوان التوصيل"
+  },
+  "alerts": {
+    "conflictTitle": "قيد المعالجة",
+    "conflictMessage": "طلبك قيد المعالجة بالفعل، يرجى الانتظار لحظة.",
+    "unauthorizedTitle": "انتهت الجلسة",
+    "unauthorizedMessage": "يرجى تسجيل الدخول من جديد لإكمال الطلب.",
+    "businessTitle": "تعذر إتمام الطلب",
+    "businessMessage": "بعض العناصر في سلتك غير متاحة حاليًا.",
+    "networkTitle": "مشكلة في الاتصال",
+    "networkMessage": "تعذر الوصول إلى الخادم. تحقق من اتصالك وحاول مجددًا.",
+    "genericTitle": "تعذر إتمام الطلب",
+    "genericMessage": "حدث خطأ أثناء إرسال طلبك. حاول مرة أخرى."
+  },
+  "success": {
+    "title": "تم إرسال طلبك بنجاح!",
+    "subtitle": "طلبك في الطريق. سنوافيك بكل التحديثات أولًا بأول.",
+    "orderId": "رقم الطلب",
+    "payment": "طريقة الدفع",
+    "total": "الإجمالي المدفوع",
+    "eta": "يصل خلال 25-35 دقيقة",
+    "trackOrder": "تتبع طلبك",
+    "backHome": "العودة للرئيسية"
+  }
+}

@@ -21,7 +21,6 @@ import { colors, radii, screen, shadows, typography } from "@/components/ui/them
 import { useCartT } from "@/hooks/useAppTranslation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLanguageStore } from "@/store/useLanguageStore";
-import { isCheckoutConflict, useCheckout } from "@/modules/Order/hooks/useCheckout";
 import CartItem from "../components/CartItem";
 import CartSummary from "../components/CartSummary";
 import { getAddToCartErrorMessage } from "../hooks/useAddToCart";
@@ -255,11 +254,10 @@ function CartScreen() {
   const { mutate: updateCartItem, isPending: isUpdatingItem } = useUpdateCartItem();
   const { mutate: removeCartItem, isPending: isRemovingItem } = useRemoveCartItem();
   const { mutate: clearCart, isPending: isClearingCart } = useClearCart();
-  const { startCheckout, isPending: isCheckingOut } = useCheckout();
 
   const hasItems = !!cart?.items.length;
   const showSummary = isAuthed && !isLoading && !isError && hasItems;
-  const isMutating = isUpdatingItem || isRemovingItem || isClearingCart || isCheckingOut;
+  const isMutating = isUpdatingItem || isRemovingItem || isClearingCart;
   const itemCount = useMemo(
     () => cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0,
     [cart?.items],
@@ -307,26 +305,9 @@ function CartScreen() {
   }, [clearCart, hasItems, isMutating, t]);
 
   const handleCheckout = useCallback(() => {
-    if (isCheckingOut || !hasItems) return;
-
-    startCheckout(undefined, {
-      onSuccess: () => {
-        router.replace("/orders" as never);
-      },
-      onError: (err) => {
-        if (isCheckoutConflict(err)) {
-          Alert.alert(
-            t("alerts.checkoutProcessingTitle"),
-            t("alerts.checkoutProcessingMessage"),
-          );
-          return;
-        }
-        const message =
-          getAddToCartErrorMessage(err) ?? t("alerts.checkoutErrorMessage");
-        Alert.alert(t("alerts.checkoutErrorTitle"), message);
-      },
-    });
-  }, [hasItems, isCheckingOut, startCheckout, t]);
+    if (!hasItems) return;
+    router.push("/checkout" as never);
+  }, [hasItems]);
 
   const keyExtractor = useCallback((item: CartItemType) => {
     const optionsKey = item.options.map((option) => option.optionId).join("-");

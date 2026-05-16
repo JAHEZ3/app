@@ -95,8 +95,14 @@ export default function RootLayout() {
                       <Stack.Screen name="restaurants/index" />
                       <Stack.Screen name="restaurants/[id]" />
                       <Stack.Screen name="cart" />
+                      <Stack.Screen name="checkout/index" />
+                      <Stack.Screen name="checkout/success" options={{ gestureEnabled: false }} />
                       <Stack.Screen name="orders/index" />
-                      <Stack.Screen name="orders/[id]" />
+                      <Stack.Screen name="orders/[id]/index" />
+                      <Stack.Screen
+                        name="orders/[id]/track"
+                        options={{ animation: "fade", presentation: "modal" }}
+                      />
                       <Stack.Screen name="profile/index" />
                     </Stack>
                   </OrderProvider>

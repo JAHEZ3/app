@@ -2,15 +2,22 @@ import { AxiosError } from 'axios';
 import { orderApi } from '@/lib/api';
 import type {
     CheckoutOrder,
+    CheckoutPayload,
     CheckoutResponse,
     OrderDetails,
     OrderDetailsResponse,
     OrdersListResponse,
     OrdersPaginationMeta,
+    PromoValidatePayload,
+    PromoValidateResponse,
+    PromoValidationResult,
+    ReceiptUrlResponse,
 } from '../types';
 import { OrderRepository, OrdersPage } from './OrderRepository';
+import { adaptOrderDetails } from '../adapter/orderAdapter';
 
 const CHECKOUT_URL = '/api/order/checkout';
+const PROMO_VALIDATE_URL = '/api/order/promo/validate';
 const ORDERS_URL = '/api/order/orders';
 
 const DEFAULT_META = (page: number, limit: number, count: number): OrdersPaginationMeta => ({
@@ -37,18 +44,30 @@ const logError = (label: string, err: unknown) => {
 };
 
 export const restRepository = (): OrderRepository => ({
-    checkout: async (idempotencyKey): Promise<CheckoutOrder> => {
-        console.log(`[order] → POST ${CHECKOUT_URL}`, { idempotencyKey });
+    checkout: async (payload: CheckoutPayload, idempotencyKey: string): Promise<CheckoutOrder> => {
+        console.log(`[order] → POST ${CHECKOUT_URL}`, { idempotencyKey, payload });
         try {
             const res = await orderApi.post<CheckoutResponse>(
                 CHECKOUT_URL,
-                {},
+                payload,
                 { headers: { 'Idempotency-Key': idempotencyKey } },
             );
             console.log('[order] ← POST checkout response', res.data);
             return res.data.data;
         } catch (err) {
             logError('checkout', err);
+            throw err;
+        }
+    },
+
+    validatePromo: async (payload: PromoValidatePayload): Promise<PromoValidationResult> => {
+        console.log(`[order] → POST ${PROMO_VALIDATE_URL}`, payload);
+        try {
+            const res = await orderApi.post<PromoValidateResponse>(PROMO_VALIDATE_URL, payload);
+            console.log('[order] ← POST promo validate response', res.data);
+            return res.data.data;
+        } catch (err) {
+            logError('validatePromo', err);
             throw err;
         }
     },
@@ -77,9 +96,22 @@ export const restRepository = (): OrderRepository => ({
         try {
             const res = await orderApi.get<OrderDetailsResponse>(url);
             console.log('[order] ← GET order details response', res.data);
-            return res.data.data;
+            // Backend returns the raw Order entity; normalize through adapter.
+            return adaptOrderDetails(res.data.data as unknown as Parameters<typeof adaptOrderDetails>[0]);
         } catch (err) {
             logError('getOrderById', err);
+            throw err;
+        }
+    },
+
+    getReceiptUrl: async (id: string): Promise<string | null> => {
+        const url = `${ORDERS_URL}/${id}/receipt`;
+        console.log(`[order] → GET ${url}`);
+        try {
+            const res = await orderApi.get<ReceiptUrlResponse>(url);
+            return res.data?.data?.url ?? null;
+        } catch (err) {
+            logError('getReceiptUrl', err);
             throw err;
         }
     },

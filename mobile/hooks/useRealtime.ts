@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
-import { realtimeSocket } from '@/lib/socket';
+import { socketService } from '@/socket/socket.service';
 import {
     ORDERS_QUERY_KEY,
 } from '@/modules/Order/hooks/useOrders';
@@ -10,12 +10,14 @@ import {
 } from '@/modules/Order/hooks/useOrderDetails';
 import type {
     OrderDetails,
+    OrderDeliveryInfo,
     OrderListItem,
     OrderStatus,
     OrderStatusHistoryEntry,
 } from '@/modules/Order/types';
 import type { OrdersPage } from '@/modules/Order/repository/OrderRepository';
 
+/** order:status / order:status:updated payload (api-gateway → mobile). */
 export interface OrderStatusEvent {
     orderId: string;
     status: OrderStatus | string;
@@ -24,8 +26,29 @@ export interface OrderStatusEvent {
     actor?: string;
 }
 
+/** order:delivery:assigned payload. */
+export interface OrderDeliveryAssignedEvent {
+    orderId: string;
+    deliveryAgentId: string;
+    deliveryAgentName?: string;
+    deliveryAgentPhone?: string;
+    estimatedDeliveryAt?: string;
+}
+
+/** delivery:location payload. */
+export interface DeliveryLocationEvent {
+    eventId?: string;
+    agentId: string;
+    orderId?: string;
+    lat: number;
+    lng: number;
+    timestamp: number;
+}
+
+/** chat:new / chat:message payload. */
 export interface ChatMessageEvent {
-    roomId: string;
+    roomId?: string;
+    orderId?: string;
     messageId: string;
     senderId: string;
     senderName?: string;
@@ -44,21 +67,43 @@ export interface ChatMessage {
 export const chatRoomQueryKey = (roomId: string) =>
     ['chat', 'room', roomId, 'messages'] as const;
 
+// ─── Type guards ────────────────────────────────────────────────────────────
+
+const asObject = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+
 const isOrderStatusEvent = (data: unknown): data is OrderStatusEvent => {
-    if (!data || typeof data !== 'object') return false;
-    const o = data as Record<string, unknown>;
-    return typeof o.orderId === 'string' && typeof o.status === 'string';
+    const o = asObject(data);
+    return !!o && typeof o.orderId === 'string' && typeof o.status === 'string';
+};
+
+const isDeliveryAssignedEvent = (data: unknown): data is OrderDeliveryAssignedEvent => {
+    const o = asObject(data);
+    return !!o && typeof o.orderId === 'string' && typeof o.deliveryAgentId === 'string';
+};
+
+const isDeliveryLocationEvent = (data: unknown): data is DeliveryLocationEvent => {
+    const o = asObject(data);
+    return (
+        !!o &&
+        typeof o.agentId === 'string' &&
+        typeof o.lat === 'number' &&
+        typeof o.lng === 'number'
+    );
 };
 
 const isChatMessageEvent = (data: unknown): data is ChatMessageEvent => {
-    if (!data || typeof data !== 'object') return false;
-    const o = data as Record<string, unknown>;
+    const o = asObject(data);
+    if (!o) return false;
+    const room = typeof o.roomId === 'string' ? o.roomId : (o.orderId as string | undefined);
     return (
-        typeof o.roomId === 'string' &&
+        typeof room === 'string' &&
         typeof o.messageId === 'string' &&
         typeof o.body === 'string'
     );
 };
+
+// ─── Hook ───────────────────────────────────────────────────────────────────
 
 export const useRealtime = () => {
     const queryClient = useQueryClient();
@@ -67,40 +112,60 @@ export const useRealtime = () => {
 
     useEffect(() => {
         if (status !== 'authenticated' || !accessToken) {
-            realtimeSocket.disconnect();
+            socketService.disconnect();
             return;
         }
 
-        realtimeSocket.connect(accessToken);
+        socketService.connect(accessToken);
 
-        const offOrderStatus = realtimeSocket.addListener('order:status', (payload) => {
+        const offStatus = socketService.on('order:status', (payload) => {
             if (!isOrderStatusEvent(payload)) {
-                console.log('[ws] order:status — invalid payload', payload);
+                console.log('[realtime] order:status — invalid payload', payload);
                 return;
             }
             patchOrderStatus(queryClient, payload);
         });
 
-        const offChatMessage = realtimeSocket.addListener('chat:message', (payload) => {
+        const offAssigned = socketService.on('order:delivery:assigned', (payload) => {
+            if (!isDeliveryAssignedEvent(payload)) {
+                console.log('[realtime] order:delivery:assigned — invalid payload', payload);
+                return;
+            }
+            patchDeliveryAssigned(queryClient, payload);
+        });
+
+        const offLocation = socketService.on('delivery:location', (payload) => {
+            if (!isDeliveryLocationEvent(payload)) {
+                console.log('[realtime] delivery:location — invalid payload', payload);
+                return;
+            }
+            patchDeliveryLocation(queryClient, payload);
+        });
+
+        const offChat = socketService.on('chat:message', (payload) => {
             if (!isChatMessageEvent(payload)) {
-                console.log('[ws] chat:message — invalid payload', payload);
+                console.log('[realtime] chat:message — invalid payload', payload);
                 return;
             }
             appendChatMessage(queryClient, payload);
         });
 
         return () => {
-            offOrderStatus();
-            offChatMessage();
+            offStatus();
+            offAssigned();
+            offLocation();
+            offChat();
         };
     }, [accessToken, queryClient, status]);
 
     useEffect(() => {
         return () => {
-            realtimeSocket.disconnect();
+            socketService.disconnect();
         };
     }, []);
 };
+
+// ─── Cache patchers ─────────────────────────────────────────────────────────
 
 const patchOrderStatus = (
     queryClient: ReturnType<typeof useQueryClient>,
@@ -151,12 +216,53 @@ const patchOrderStatus = (
     );
 };
 
+const patchDeliveryAssigned = (
+    queryClient: ReturnType<typeof useQueryClient>,
+    event: OrderDeliveryAssignedEvent,
+) => {
+    queryClient.setQueryData<OrderDetails | undefined>(
+        [...ORDER_DETAILS_QUERY_KEY, event.orderId],
+        (current) => {
+            if (!current) return current;
+            const nextDelivery: OrderDeliveryInfo = {
+                ...(current.delivery ?? {}),
+                courierName: event.deliveryAgentName ?? current.delivery?.courierName,
+                courierPhone: event.deliveryAgentPhone ?? current.delivery?.courierPhone,
+                estimatedArrival:
+                    event.estimatedDeliveryAt ?? current.delivery?.estimatedArrival,
+            };
+            return { ...current, delivery: nextDelivery };
+        },
+    );
+};
+
+const patchDeliveryLocation = (
+    queryClient: ReturnType<typeof useQueryClient>,
+    event: DeliveryLocationEvent,
+) => {
+    if (!event.orderId) return;
+    queryClient.setQueryData<OrderDetails | undefined>(
+        [...ORDER_DETAILS_QUERY_KEY, event.orderId],
+        (current) => {
+            if (!current) return current;
+            const nextDelivery: OrderDeliveryInfo = {
+                ...(current.delivery ?? {}),
+                latitude: event.lat,
+                longitude: event.lng,
+            };
+            return { ...current, delivery: nextDelivery };
+        },
+    );
+};
+
 const appendChatMessage = (
     queryClient: ReturnType<typeof useQueryClient>,
     event: ChatMessageEvent,
 ) => {
+    const roomId = event.roomId ?? event.orderId;
+    if (!roomId) return;
     queryClient.setQueryData<ChatMessage[]>(
-        chatRoomQueryKey(event.roomId),
+        chatRoomQueryKey(roomId),
         (current) => {
             const message: ChatMessage = {
                 messageId: event.messageId,

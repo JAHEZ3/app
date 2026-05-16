@@ -3,6 +3,9 @@
   "header": {
     "eyebrow": "نشاطك"
   },
+  "accessibility": {
+    "goBack": "رجوع"
+  },
   "subtitle": {
     "withCount_zero": "لا توجد طلبات",
     "withCount_one": "طلب واحد",
@@ -14,17 +17,36 @@
   },
   "empty": {
     "title": "لا توجد طلبات بعد",
-    "subtitle": "ستظهر طلباتك هنا",
+    "subtitle": "ستظهر طلباتك هنا بمجرد بدء الطلب.",
     "action": "تصفح المطاعم"
   },
   "loading": {
     "title": "جاري تحميل طلباتك",
-    "body": "لحظة من فضلك…"
+    "body": "لحظة من فضلك…",
+    "more": "جاري تحميل المزيد…"
+  },
+  "endOfList": "وصلت إلى النهاية",
+  "relativeTime": {
+    "justNow": "الآن",
+    "minutes_zero": "قبل قليل",
+    "minutes_one": "قبل دقيقة",
+    "minutes_two": "قبل دقيقتين",
+    "minutes_few": "قبل {{count}} دقائق",
+    "minutes_many": "قبل {{count}} دقيقة",
+    "minutes_other": "قبل {{count}} دقيقة",
+    "hours_one": "قبل ساعة",
+    "hours_two": "قبل ساعتين",
+    "hours_few": "قبل {{count}} ساعات",
+    "hours_many": "قبل {{count}} ساعة",
+    "hours_other": "قبل {{count}} ساعة",
+    "yesterday": "أمس"
   },
   "error": {
     "title": "تعذر تحميل الطلبات",
     "body": "يرجى المحاولة مجددا.",
-    "action": "إعادة المحاولة"
+    "action": "إعادة المحاولة",
+    "missingId": "تعذر العثور على هذا الطلب.",
+    "back": "رجوع"
   },
   "signedOut": {
     "title": "سجل الدخول لعرض طلباتك",
@@ -44,16 +66,22 @@
     "total": "المجموع",
     "deliveryFee": "رسوم التوصيل",
     "subtotal": "المجموع الفرعي",
-    "placedAt": "وقت الطلب"
+    "discount": "الخصم",
+    "placedAt": "وقت الطلب",
+    "copyId": "عرض رقم الطلب كاملاً"
   },
   "sections": {
     "items": "العناصر",
     "itemsEmpty": "لا توجد عناصر في هذا الطلب.",
-    "history": "سجل الحالة",
-    "delivery": "معلومات التوصيل"
+    "history": "حالة الطلب",
+    "delivery": "معلومات التوصيل",
+    "payment": "طريقة الدفع",
+    "notes": "ملاحظاتك"
   },
   "history": {
-    "empty": "لا توجد تحديثات للحالة بعد."
+    "empty": "لا توجد تحديثات للحالة بعد.",
+    "inProgress": "قيد التنفيذ…",
+    "upcoming": "قادم"
   },
   "delivery": {
     "address": "العنوان",
@@ -63,6 +91,39 @@
     "eta": "الوصول المتوقع",
     "deliveredAt": "وقت التسليم",
     "empty": "لا تتوفر تفاصيل توصيل بعد."
+  },
+  "payment": {
+    "cash_on_delivery": "الدفع عند الاستلام",
+    "card": "بطاقة ائتمان / مدى",
+    "online": "محفظة إلكترونية"
+  },
+  "paymentStatus": {
+    "unpaid": "غير مدفوع",
+    "paid": "مدفوع",
+    "refunded": "تم الاسترجاع"
+  },
+  "receipt": {
+    "viewReceipt": "عرض الإيصال",
+    "notReadyTitle": "الإيصال غير جاهز",
+    "notReadyBody": "سيصبح الإيصال متاحًا بعد معالجة الطلب.",
+    "errorTitle": "تعذر فتح الإيصال",
+    "errorBody": "حاول مرة أخرى لاحقاً."
+  },
+  "realtime": {
+    "live": "مباشر",
+    "offline": "غير متصل"
+  },
+  "tracking": {
+    "title": "التتبع المباشر",
+    "openTracking": "تتبع التوصيل مباشرة",
+    "openTrackingBody": "شاهد السائق على الخريطة",
+    "waiting": "بانتظار أن يبدأ السائق بمشاركة موقعه…",
+    "recenter": "إعادة توسيط الخريطة",
+    "call": "اتصل بالسائق",
+    "message": "مراسلة السائق",
+    "etaMinutes": "~ {{count}} دقيقة",
+    "etaUnknown": "جارٍ تقدير الوقت…",
+    "distance": "يبعد {{km}}"
   },
   "reorder": "إعادة الطلب"
 }
