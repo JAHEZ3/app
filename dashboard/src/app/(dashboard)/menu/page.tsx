@@ -13,6 +13,7 @@ import {
   useUpdateMeal,
   useDeleteMeal,
   useToggleMealAvailability,
+  useGenerateMealAiImage,
   useCreateSection,
   useUpdateSection,
   useDeleteSection,
@@ -279,6 +280,7 @@ function MealCard({
 }) {
   const deleteMeal = useDeleteMeal();
   const toggleAvail = useToggleMealAvailability();
+  const generateImage = useGenerateMealAiImage();
   const reorderMeals = useReorderMeals();
   const { success, error } = useToast();
   const [editOpen, setEditOpen] = useState(false);
@@ -365,6 +367,24 @@ function MealCard({
             title={meal.isAvailable ? "إيقاف" : "تفعيل"}
           >
             {meal.isAvailable ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() =>
+              generateImage.mutate(meal.id, {
+                onSuccess: () => success("تم توليد الصورة بالذكاء الاصطناعي"),
+                onError: (e) => error("خطأ", e instanceof Error ? e.message : "فشل توليد الصورة"),
+              })
+            }
+            disabled={generateImage.isPending}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            title="توليد صورة بالذكاء الاصطناعي"
+          >
+            {generateImage.isPending ? (
+              <Sparkles className="w-4 h-4 animate-pulse" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
           </button>
 
           <Dialog>

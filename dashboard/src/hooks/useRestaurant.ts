@@ -23,7 +23,8 @@ export function useDashboardStats() {
     queryKey: queryKeys.restaurant.stats,
     queryFn: async () => {
       const res = await restaurantApi.getDashboardStats();
-      return res.data;
+      // Backend wraps responses in `{ data, message }` — unwrap defensively.
+      return (res.data?.data ?? res.data) as DashboardStats;
     },
     refetchInterval: 60 * 1000, // refetch every minute
   });
@@ -34,7 +35,7 @@ export function useSalesData(period: "daily" | "weekly" | "monthly" = "daily") {
     queryKey: queryKeys.restaurant.sales(period),
     queryFn: async () => {
       const res = await restaurantApi.getSalesData(period);
-      return res.data;
+      return (res.data?.data ?? res.data ?? []) as SalesDataPoint[];
     },
   });
 }
@@ -44,7 +45,7 @@ export function useTopMeals() {
     queryKey: queryKeys.restaurant.topMeals,
     queryFn: async () => {
       const res = await restaurantApi.getTopMeals();
-      return res.data;
+      return (res.data?.data ?? res.data ?? []) as TopSellingMeal[];
     },
   });
 }

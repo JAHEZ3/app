@@ -1,29 +1,57 @@
 "use client";
 
-import { useOrders } from "@/hooks/useOrders";
-import { useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useEffect } from "react";
+import { useOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useRestaurant } from "@/hooks/useRestaurant";
+import { useSocket } from "@/hooks/useSocket";
+import { useQueryClient } from "@tanstack/react-query";
 import { OrderStatus } from "@/types/order.types";
 import { OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { getApiError } from "@/lib/api";
 import { Check, X, Clock } from "lucide-react";
 import { useToast } from "@/providers/ToastProvider";
 import Link from "next/link";
 
 export function LiveOrders() {
+  const { data: restaurant } = useRestaurant();
   const { data, isLoading } = useOrders({
+    restaurantId: restaurant?.id,
     status: OrderStatus.PENDING,
     limit: 5,
   });
   const updateStatus = useUpdateOrderStatus();
   const { success, error } = useToast();
 
+  // Realtime: react to new orders / status changes pushed from the gateway.
+  const { on, connected, registerRestaurant } = useSocket();
+  const queryClient = useQueryClient();
+
+  // Join the restaurant room on (re)connect so we get `order:new` broadcasts.
+  // Personal-room delivery covers the owner already, but registering is required
+  // for managers and survives reconnects without an extra page load.
+  useEffect(() => {
+    if (connected && restaurant?.id) registerRestaurant(restaurant.id);
+  }, [connected, restaurant?.id, registerRestaurant]);
+
+  useEffect(() => {
+    const offNew = on("order:new", () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["restaurant", "stats"] });
+    });
+    const offStatus = on("order:status", () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    });
+    return () => { offNew(); offStatus(); };
+  }, [on, queryClient]);
+
   const handleAccept = (id: string) => {
     updateStatus.mutate(
       { id, data: { status: OrderStatus.CONFIRMED } },
       {
         onSuccess: () => success("تم قبول الطلب", "سيتم إشعار العميل"),
-        onError: () => error("خطأ", "فشل تحديث حالة الطلب"),
+        onError: (err) => error("خطأ", getApiError(err)),
       }
     );
   };
@@ -33,34 +61,12 @@ export function LiveOrders() {
       { id, data: { status: OrderStatus.CANCELLED } },
       {
         onSuccess: () => success("تم رفض الطلب"),
-        onError: () => error("خطأ", "فشل تحديث حالة الطلب"),
+        onError: (err) => error("خطأ", getApiError(err)),
       }
     );
   };
 
-  // Mock data for display
-  const mockOrders = [
-    {
-      id: "1", orderNumber: "#KHz2", customerName: "Ahmed Khalil",
-      totalAmount: 164.00, status: OrderStatus.PENDING,
-      createdAt: new Date(Date.now() - 2 * 60000).toISOString(),
-      items: [{ mealName: "واجو برجر مميز", quantity: 1, totalPrice: 164 }],
-    },
-    {
-      id: "2", orderNumber: "#Khs1", customerName: "Sarah Al-Dosari",
-      totalAmount: 68.00, status: OrderStatus.PREPARING,
-      createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
-      items: [{ mealName: "كلاسيك ماك باربيكيو", quantity: 2, totalPrice: 68 }],
-    },
-    {
-      id: "3", orderNumber: "#333", customerName: "Omar Falak",
-      totalAmount: 219.00, status: OrderStatus.READY_FOR_PICKUP,
-      createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
-      items: [{ mealName: "جاردن كينوا بول", quantity: 3, totalPrice: 219 }],
-    },
-  ];
-
-  const orders = (data?.data?.length ? data.data : mockOrders) as typeof mockOrders;
+  const orders = data?.data ?? [];
 
   return (
     <div className="bg-white rounded-xl border border-border h-full">

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,6 +13,10 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
+  Receipt,
+  QrCode,
+  Wallet,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
@@ -20,8 +25,12 @@ import { useNotifications } from "@/hooks/useNotifications";
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "الرئيسية" },
   { href: "/orders", icon: ShoppingBag, label: "الطلبات" },
+  { href: "/pos", icon: Receipt, label: "نقطة البيع" },
+  { href: "/tables", icon: QrCode, label: "الطاولات" },
   { href: "/menu", icon: UtensilsCrossed, label: "القائمة" },
   { href: "/analytics", icon: BarChart3, label: "الإحصائيات" },
+  { href: "/accounting", icon: Wallet, label: "المحاسبة" },
+  { href: "/inventory", icon: Package, label: "المخزون" },
   { href: "/ratings", icon: Star, label: "التقييمات" },
   { href: "/notifications", icon: Bell, label: "الإشعارات" },
   { href: "/settings", icon: Settings, label: "الإعدادات" },
@@ -42,15 +51,20 @@ export function Sidebar() {
       }}
     >
       {/* Logo */}
-      <div className="flex items-center justify-center h-16 border-b border-border/60 px-4">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg"
-            style={{ background: "linear-gradient(135deg,#FF6B00,#FF8C38)" }}
-          >
-            ج
+      <div className="flex items-center justify-center h-20 border-b border-border/60 px-4 py-2">
+        <div className="flex items-center p-1 group cursor-pointer">
+          <Image
+            src="/jahez-mark.png"
+            alt="جاهز"
+            width={48}
+            height={48}
+            priority
+            unoptimized
+            className="object-contain transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_8px_20px_rgba(245,89,5,0.55)]"
+          />
+          <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+            <span className="block whitespace-nowrap ps-3 text-2xl font-black text-[#F55905] opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200">جاهز</span>
           </div>
-          <span className="text-xl font-black text-foreground">جاهز</span>
         </div>
       </div>
 

@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack -p 3010 -H 0.0.0.0",
+    "dev:lan": "next dev --webpack -p 3010 -H 10.30.0.75",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3010 -H 0.0.0.0",
     "lint": "eslint"
   },
   "dependencies": {

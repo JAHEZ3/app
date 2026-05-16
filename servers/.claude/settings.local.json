@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(grep -E '\"\\(qr|qrcode|react-qr\\)\"' \"c:/Users/xtrem/Desktop/JAHAZ/app/dashboard/package.json\" 2>&1)",
+      "Read(//c/Users/xtrem/Desktop/JAHAZ/app/dashboard/**)",
+      "Bash(npm install *)"
+    ]
+  }
+}

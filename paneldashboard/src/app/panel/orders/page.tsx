@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { adminOrdersApi } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
 import { formatDateTime, formatCurrency } from "@/lib/utils";
+import { OrderDetailsDialog } from "@/components/orders/OrderDetailsDialog";
 
 type OrderStatus = "all" | "pending" | "confirmed" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
 
@@ -63,20 +64,34 @@ const filterLabels: Record<OrderStatus, string> = {
 export default function OrdersPage() {
   const [activeStatus, setActiveStatus] = useState<OrderStatus>("all");
   const [search, setSearch] = useState("");
+  const [detailsOrderId, setDetailsOrderId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<AdminOrder[]>({
     queryKey: queryKeys.orders.all({ status: activeStatus }),
     queryFn: async () => {
-      const res = await adminOrdersApi.getAll({
+      const res = await adminOrdersApi.list({
         status: activeStatus === "all" ? undefined : activeStatus,
+        limit: 100,
       });
-      return res.data;
+      const items = res.data?.data?.items ?? [];
+      return items.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        customerName: o.customerName,
+        restaurantName: o.restaurantName,
+        driverName: o.driverName ?? undefined,
+        status: o.status as AdminOrder["status"],
+        totalAmount: o.totalAmount,
+        itemsCount: o.itemsCount,
+        city: o.city,
+        createdAt: o.createdAt,
+      }));
     },
     placeholderData: mockOrders,
     retry: false,
   });
 
-  const orders = data ?? mockOrders;
+  const orders = Array.isArray(data) ? data : mockOrders;
 
   const filtered = orders.filter((o) => {
     const matchStatus = activeStatus === "all" || o.status === activeStatus;
@@ -204,7 +219,11 @@ export default function OrdersPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                          <button
+                            onClick={() => setDetailsOrderId(order.id)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
+                            aria-label="عرض التفاصيل"
+                          >
                             <Eye className="w-4 h-4" />
                           </button>
                         </td>
@@ -227,6 +246,14 @@ export default function OrdersPage() {
           </div>
         </Card>
       </div>
+
+      <OrderDetailsDialog
+        orderId={detailsOrderId}
+        open={detailsOrderId !== null}
+        onOpenChange={(o) => {
+          if (!o) setDetailsOrderId(null);
+        }}
+      />
     </div>
   );
 }

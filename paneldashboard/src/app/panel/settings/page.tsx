@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -5,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +27,9 @@ interface SystemSettings {
     platformName: string;
     supportEmail: string;
     supportPhone: string;
+    supportWhatsapp: string | null;
+    supportAddress: string | null;
+    supportHours: string | null;
     defaultLanguage: string;
     currency: string;
   };
@@ -71,6 +76,9 @@ const defaultSettings: SystemSettings = {
     platformName: "جاهز",
     supportEmail: "support@jahaz.app",
     supportPhone: "920012345",
+    supportWhatsapp: null,
+    supportAddress: null,
+    supportHours: null,
     defaultLanguage: "ar",
     currency: "ILS",
   },
@@ -215,6 +223,44 @@ export default function SettingsPage() {
                         onChange={(e) => set("general", "supportPhone", e.target.value)} />
                       <Input label="العملة الافتراضية" value={local.general.currency}
                         onChange={(e) => set("general", "currency", e.target.value)} />
+
+                      {/* ── Public contact info (shown on the website's "Contact us" page) ── */}
+                      <div className="sm:col-span-2 mt-2 pt-5 border-t border-border">
+                        <h3 className="text-sm font-bold text-foreground mb-1">
+                          بيانات التواصل (تظهر على صفحة «اتصل بنا» في الموقع)
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          سيتم عرض هذه المعلومات للعملاء على الموقع العام. اتركها فارغة لإخفائها.
+                        </p>
+                      </div>
+                      <Input
+                        label="رقم واتساب"
+                        placeholder="+970 59 000 0000"
+                        dir="ltr"
+                        value={local.general.supportWhatsapp ?? ""}
+                        onChange={(e) =>
+                          set("general", "supportWhatsapp", e.target.value || null)
+                        }
+                      />
+                      <Input
+                        label="ساعات العمل"
+                        placeholder="السبت – الخميس، 8:00 ص – 11:00 م"
+                        value={local.general.supportHours ?? ""}
+                        onChange={(e) =>
+                          set("general", "supportHours", e.target.value || null)
+                        }
+                      />
+                      <div className="sm:col-span-2">
+                        <Textarea
+                          label="العنوان (يدعم أسطراً متعدّدة)"
+                          rows={3}
+                          placeholder={"غزة، فلسطين\nشارع الرشيد، المنطقة الغربية"}
+                          value={local.general.supportAddress ?? ""}
+                          onChange={(e) =>
+                            set("general", "supportAddress", e.target.value || null)
+                          }
+                        />
+                      </div>
                     </div>
                   )}
                 </CardContent>

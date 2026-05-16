@@ -252,6 +252,96 @@ export const ordersApi = {
     orderInstance.patch(`/api/order/orders/${orderId}/delivery`, { deliveryAgentId }),
 };
 
+// ── POS (port 3001) ───────────────────────────────────────────────────────────
+export const posApi = {
+  listOpen: (restaurantId: string) =>
+    orderInstance.get("/api/order/pos/orders", { params: { restaurantId } }),
+  create: (data: object) => orderInstance.post("/api/order/pos/orders", data),
+  addItem: (id: string, data: object) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/items`, data),
+  updateItem: (id: string, itemId: string, data: object) =>
+    orderInstance.patch(`/api/order/pos/orders/${id}/items/${itemId}`, data),
+  removeItem: (id: string, itemId: string) =>
+    orderInstance.delete(`/api/order/pos/orders/${id}/items/${itemId}`),
+  setDiscount: (id: string, discountAmount: number) =>
+    orderInstance.patch(`/api/order/pos/orders/${id}/discount`, { discountAmount }),
+  addPayment: (id: string, data: object) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/payments`, data),
+  close: (id: string, data: object) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/close`, data),
+  reopen: (id: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/reopen`),
+  accept: (id: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/accept`),
+  reject: (id: string, reason?: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/reject`, { reason }),
+  finish: (id: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/finish`),
+  void: (id: string, data: { reason?: string } = {}) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/void`, data),
+  updatePayment: (
+    id: string,
+    splitId: string,
+    data: { reference?: string; payerName?: string; paidAt?: string },
+  ) => orderInstance.patch(`/api/order/pos/orders/${id}/payments/${splitId}`, data),
+  print: (id: string, target: "kitchen" | "cashier" | "both" = "both") =>
+    orderInstance.post(`/api/order/pos/orders/${id}/print`, undefined, {
+      params: { target },
+    }),
+};
+
+// ── Accounting (Tier 1: expenses + revenue + net profit) ─────────────────────
+export const accountingApi = {
+  summary: (params: { period?: "today" | "week" | "month" | "custom"; from?: string; to?: string } = {}) =>
+    restaurantInstance.get("/api/restaurant/accounting/summary", { params }),
+  listExpenses: (params: { category?: string; from?: string; to?: string } = {}) =>
+    restaurantInstance.get("/api/restaurant/expenses", { params }),
+  createExpense: (data: { amount: number; category: string; description?: string; occurredAt?: string }) =>
+    restaurantInstance.post("/api/restaurant/expenses", data),
+  updateExpense: (id: string, data: object) =>
+    restaurantInstance.patch(`/api/restaurant/expenses/${id}`, data),
+  deleteExpense: (id: string) =>
+    restaurantInstance.delete(`/api/restaurant/expenses/${id}`),
+};
+
+// ── Inventory (Tier 1: items + movements + low-stock alerts) ─────────────────
+export const inventoryApi = {
+  summary: () => restaurantInstance.get("/api/restaurant/inventory/summary"),
+  listItems: () => restaurantInstance.get("/api/restaurant/inventory/items"),
+  createItem: (data: {
+    name: string;
+    sku?: string;
+    unit: string;
+    currentQuantity?: number;
+    reorderThreshold?: number;
+    unitCost?: number;
+    isActive?: boolean;
+  }) => restaurantInstance.post("/api/restaurant/inventory/items", data),
+  updateItem: (id: string, data: object) =>
+    restaurantInstance.patch(`/api/restaurant/inventory/items/${id}`, data),
+  deleteItem: (id: string) =>
+    restaurantInstance.delete(`/api/restaurant/inventory/items/${id}`),
+  recordMovement: (
+    itemId: string,
+    data: { type: "in" | "out" | "adjustment"; quantity: number; unitCost?: number; note?: string },
+  ) => restaurantInstance.post(`/api/restaurant/inventory/items/${itemId}/movements`, data),
+  listMovements: (params: { itemId?: string; limit?: number } = {}) =>
+    restaurantInstance.get("/api/restaurant/inventory/movements", { params }),
+};
+
+// ── Restaurant tables (POS QR-ordering) ───────────────────────────────────────
+export const tablesApi = {
+  list: () => restaurantInstance.get("/api/restaurant/tables"),
+  create: (data: { number: string; capacity?: number; section?: string; isActive?: boolean }) =>
+    restaurantInstance.post("/api/restaurant/tables", data),
+  update: (id: string, data: object) =>
+    restaurantInstance.patch(`/api/restaurant/tables/${id}`, data),
+  remove: (id: string) =>
+    restaurantInstance.delete(`/api/restaurant/tables/${id}`),
+  regenerateQr: (id: string) =>
+    restaurantInstance.post(`/api/restaurant/tables/${id}/regenerate-qr`),
+};
+
 // ── Menus / Sections / Meals / Option groups / Options (restaurant-service) ───
 // All live under the restaurant service on port 3003.
 export const menuApi = {
@@ -302,6 +392,8 @@ export const mealsApi = {
       `/api/restaurant/sections/${sectionId}/meals/reorder`,
       { orderedIds },
     ),
+  generateAiImage: (mealId: string) =>
+    restaurantInstance.post(`/api/restaurant/meals/${mealId}/ai-image`),
 };
 
 export const optionGroupsApi = {

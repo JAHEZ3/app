@@ -120,6 +120,23 @@ export class Restaurant {
   @Column({ name: "is_Futarta", default: false })
   is_Futarta: boolean;
 
+  // ─── Thermal printer config (LAN/IP — ESC/POS over TCP 9100) ───────────
+  // Two printers: one in the kitchen for tickets (items only), one at the
+  // cashier counter for priced receipts. Both optional — when unset, that
+  // print target is silently skipped.
+
+  @Column({ name: "kitchen_printer_ip", length: 64, nullable: true })
+  kitchenPrinterIp: string | null;
+
+  @Column({ name: "kitchen_printer_port", type: "int", default: 9100 })
+  kitchenPrinterPort: number;
+
+  @Column({ name: "cashier_printer_ip", length: 64, nullable: true })
+  cashierPrinterIp: string | null;
+
+  @Column({ name: "cashier_printer_port", type: "int", default: 9100 })
+  cashierPrinterPort: number;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 }

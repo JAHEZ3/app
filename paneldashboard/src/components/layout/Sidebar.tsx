@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,6 +17,7 @@ import {
   Tag,
   LifeBuoy,
   Star,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
@@ -29,6 +31,7 @@ const navItems = [
   { href: "/panel/delivery-agents", icon: Truck,           label: "مندوبو التوصيل" },
   { href: "/panel/orders",          icon: ShoppingBag,     label: "الطلبات"        },
   { href: "/panel/notifications",   icon: Bell,            label: "الإشعارات"      },
+  { href: "/panel/contact",         icon: Mail,            label: "رسائل التواصل"  },
   { href: "/panel/support",         icon: LifeBuoy,        label: "الدعم الفني"    },
   { href: "/panel/settings",        icon: Settings,        label: "الإعدادات"      },
 ];
@@ -43,19 +46,24 @@ export function Sidebar() {
       style={{ width: "var(--sidebar-width, 240px)", boxShadow: "-2px 0 16px rgba(0,0,0,0.07)" }}
     >
       {/* Logo */}
-      <div className="flex items-center justify-center h-16 border-b border-border/60 px-4">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg"
-            style={{ background: "linear-gradient(135deg,#FF6B00,#FF8C38)" }}
-          >
-            ج
-          </div>
-          <div>
-            <span className="text-xl font-black text-foreground leading-none block">جاهز</span>
-            <span className="text-[10px] text-muted-foreground font-medium leading-none flex items-center gap-0.5">
-              <Shield className="w-2.5 h-2.5" /> لوحة الإدارة
-            </span>
+      <div className="flex items-center justify-center h-20 border-b border-border/60 px-4 py-2">
+        <div className="flex items-center p-1 group cursor-pointer">
+          <Image
+            src="/jahez-mark.png"
+            alt="جاهز"
+            width={48}
+            height={48}
+            priority
+            unoptimized
+            className="object-contain transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_8px_20px_rgba(245,89,5,0.55)]"
+          />
+          <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+            <div className="whitespace-nowrap ps-3 opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200">
+              <span className="text-2xl font-black text-[#F55905] leading-none block">جاهز</span>
+              <span className="text-[10px] text-muted-foreground font-medium leading-none flex items-center gap-0.5 mt-0.5">
+                <Shield className="w-2.5 h-2.5" /> لوحة الإدارة
+              </span>
+            </div>
           </div>
         </div>
       </div>

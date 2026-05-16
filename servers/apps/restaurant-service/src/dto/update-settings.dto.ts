@@ -1,4 +1,14 @@
-import { IsOptional, IsNumber, IsPositive, Min, IsObject } from 'class-validator';
+import {
+  IsIP,
+  IsInt,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsPositive,
+  Max,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateSettingsDto {
@@ -36,4 +46,31 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsObject({ message: 'بيانات الدفع غير صحيحة.' })
   paymentInfo?: Record<string, unknown>;
+
+  // ─── Thermal printers (ESC/POS over TCP) ─────────────────────────────
+  // Empty string clears the IP (disables that printer). Validate as IP
+  // only when the value is a non-empty string.
+  @IsOptional()
+  @ValidateIf((_, v) => typeof v === "string" && v.length > 0)
+  @IsIP(undefined, { message: 'عنوان IP لطابعة المطبخ غير صحيح.' })
+  kitchenPrinterIp?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  @Type(() => Number)
+  kitchenPrinterPort?: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => typeof v === "string" && v.length > 0)
+  @IsIP(undefined, { message: 'عنوان IP لطابعة الكاشير غير صحيح.' })
+  cashierPrinterIp?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  @Type(() => Number)
+  cashierPrinterPort?: number;
 }

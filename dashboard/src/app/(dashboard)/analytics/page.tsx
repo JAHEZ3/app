@@ -608,13 +608,13 @@ export default function AnalyticsPage() {
             ) : (
               <div className="space-y-3">
                 {customers.top.slice(0, 10).map((c, i) => (
-                  <div key={c.customerId} className="flex items-center gap-3">
+                  <div key={c.customerId ?? `row-${i}`} className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">
-                        \u200F{c.customerId.slice(0, 8)}…
+                        {c.customerId ? `${c.customerId.slice(0, 8)}…` : "—"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {c.orders} طلب
