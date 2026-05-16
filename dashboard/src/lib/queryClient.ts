@@ -43,6 +43,8 @@ export const queryKeys = {
     topMeals: ["analytics", "top-meals"] as const,
     customers: ["analytics", "customers"] as const,
     ratings: ["analytics", "ratings"] as const,
+    reviews: (page: number, limit: number) =>
+      ["analytics", "reviews", page, limit] as const,
     delivery: ["analytics", "delivery"] as const,
     payments: ["analytics", "payments"] as const,
     report: (period: string) => ["analytics", "report", period] as const,
@@ -51,5 +53,8 @@ export const queryKeys = {
     all: ["notifications"] as const,
     list: (page: number, limit: number) =>
       ["notifications", "list", page, limit] as const,
+  },
+  categories: {
+    list: ["categories", "list"] as const,
   },
 };

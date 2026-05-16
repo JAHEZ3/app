@@ -305,8 +305,9 @@ function CartScreen() {
   }, [clearCart, hasItems, isMutating, t]);
 
   const handleCheckout = useCallback(() => {
-    Alert.alert(t("alerts.checkoutTitle"), t("alerts.checkoutMessage"));
-  }, [t]);
+    if (!hasItems) return;
+    router.push("/checkout" as never);
+  }, [hasItems]);
 
   const keyExtractor = useCallback((item: CartItemType) => {
     const optionsKey = item.options.map((option) => option.optionId).join("-");

@@ -628,8 +628,8 @@ function Separator() {
 
 function formatPrice(value: number | null | undefined, currency: string | null | undefined) {
   if (value == null || !Number.isFinite(Number(value))) return "—";
-  const code = currency || "SAR";
-  return `${Number(value).toLocaleString("ar-SA", {
+  const code = currency || "ILS";
+  return `${Number(value).toLocaleString("ar-PS", {
     minimumFractionDigits: Number.isInteger(Number(value)) ? 0 : 2,
     maximumFractionDigits: 2,
   })} ${code}`;

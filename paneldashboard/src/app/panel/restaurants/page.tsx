@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, Filter, MoreVertical, CheckCircle,
   XCircle, Trash2, Eye, Pencil, Store, MapPin, Phone,
-  Star, Ban, PlayCircle,
+  Star, Ban, PlayCircle, BookOpen,
 } from "lucide-react";
 import {
   useRestaurantApplications,
@@ -28,6 +28,7 @@ import {
 import { RestaurantDetailsDialog } from "@/components/restaurants/RestaurantDetailsDialog";
 import { EditRestaurantDialog } from "@/components/restaurants/EditRestaurantDialog";
 import { DeleteRestaurantDialog } from "@/components/restaurants/DeleteRestaurantDialog";
+import { RestaurantMenuDialog } from "@/components/restaurants/RestaurantMenuDialog";
 import { ApplicationsPanel } from "@/components/restaurants/ApplicationsPanel";
 import {
   cuisineLabel,
@@ -58,6 +59,7 @@ export default function RestaurantsPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<
     { id: string; name: string | null } | null
   >(null);
@@ -183,6 +185,10 @@ export default function RestaurantsPage() {
                       setEditId(r.id);
                       setOpenMenuId(null);
                     }}
+                    onShowMenu={() => {
+                      setMenuId(r.id);
+                      setOpenMenuId(null);
+                    }}
                     onDelete={() => {
                       setDeleteTarget({ id: r.id, name: r.name });
                       setOpenMenuId(null);
@@ -213,6 +219,13 @@ export default function RestaurantsPage() {
         open={!!editId}
         onOpenChange={(o) => {
           if (!o) setEditId(null);
+        }}
+      />
+      <RestaurantMenuDialog
+        restaurantId={menuId}
+        open={!!menuId}
+        onOpenChange={(o) => {
+          if (!o) setMenuId(null);
         }}
       />
       <DeleteRestaurantDialog
@@ -282,6 +295,7 @@ interface RestaurantCardProps {
   onCloseMenu: () => void;
   onViewDetails: () => void;
   onEdit: () => void;
+  onShowMenu: () => void;
   onDelete: () => void;
   onChangeStatus: (status: RestaurantStatus) => void;
   statusChanging: boolean;
@@ -293,6 +307,7 @@ function RestaurantCard({
   onToggleMenu,
   onViewDetails,
   onEdit,
+  onShowMenu,
   onDelete,
   onChangeStatus,
   statusChanging,
@@ -328,6 +343,9 @@ function RestaurantCard({
             <div className="absolute left-0 top-9 z-20 bg-white rounded-xl border border-border shadow-lg py-1 w-48 animate-scale-in">
               <MenuItem icon={<Eye className="w-4 h-4 text-info" />} onClick={onViewDetails}>
                 عرض التفاصيل
+              </MenuItem>
+              <MenuItem icon={<BookOpen className="w-4 h-4 text-primary" />} onClick={onShowMenu}>
+                عرض القائمة
               </MenuItem>
               <MenuItem icon={<Pencil className="w-4 h-4 text-muted-foreground" />} onClick={onEdit}>
                 تعديل

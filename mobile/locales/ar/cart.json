@@ -27,7 +27,11 @@
     "clearTitle": "إفراغ السلة",
     "clearMessage": "هل تريد إزالة كل العناصر من السلة؟",
     "checkoutTitle": "إتمام الطلب",
-    "checkoutMessage": "سلتك جاهزة للانتقال إلى خطوة الدفع التالية."
+    "checkoutMessage": "سلتك جاهزة للانتقال إلى خطوة الدفع التالية.",
+    "checkoutProcessingTitle": "قيد المعالجة",
+    "checkoutProcessingMessage": "طلبك قيد المعالجة بالفعل، يرجى الانتظار لحظة.",
+    "checkoutErrorTitle": "تعذر إتمام الطلب",
+    "checkoutErrorMessage": "حدث خطأ أثناء إتمام طلبك. حاول مرة أخرى."
   },
   "banner": {
     "deliveringFrom": "التوصيل من",

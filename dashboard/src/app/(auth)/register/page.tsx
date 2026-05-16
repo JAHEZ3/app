@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import { Phone, CheckCircle, ArrowRight, Store, Bell, BadgeCheck } from "lucide-react";
 import { useRegister, useVerifyOtp, useResendOtp } from "@/hooks/useAuth";
 import { getApiError } from "@/lib/api";
@@ -46,7 +47,7 @@ function StepBar({ current }: { current: 1 | 2 | 3 }) {
               </span>
             </div>
             {i < arr.length - 1 && (
-              <div className={`flex-1 h-0.5 mx-3 mb-5 rounded-full transition-all duration-500 ${current > s.n ? "bg-success" : "bg-border"}`} />
+              <div className={`flex-1 h-0.5 mx-3 mb-5 rounded-full transition-all duration-700 ${current > s.n ? "bg-success" : "bg-border"}`} />
             )}
           </div>
         );
@@ -237,9 +238,19 @@ export default function RegisterPage() {
         <div className="w-full max-w-100">
 
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg bg-primary">ج</div>
-            <span className="text-xl font-black">جاهز</span>
+          <div className="flex items-center mb-8 lg:hidden p-1 group cursor-pointer">
+            <Image
+              src="/jahez-mark.png"
+              alt="جاهز"
+              width={48}
+              height={48}
+              priority
+              unoptimized
+              className="object-contain transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_8px_20px_rgba(245,89,5,0.55)]"
+            />
+            <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+              <span className="block whitespace-nowrap ps-3 text-2xl font-black text-[#F55905] opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200">جاهز</span>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-border shadow-sm p-7">

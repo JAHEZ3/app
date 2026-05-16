@@ -1,5 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
-import { ShoppingBag, Phone, Mail, MapPin } from "lucide-react";
+import { Phone, Mail, MapPin } from "lucide-react";
 
 const FOOTER_LINKS = {
   company: [
@@ -70,11 +71,16 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-[#FF6B00] to-[#E55A00] flex items-center justify-center shadow-[0_4px_16px_rgba(255,107,0,0.4)]">
-                <ShoppingBag className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-3xl font-black text-[#FF6B00]">جاهز</span>
+            <div className="flex items-center gap-3 mb-5 p-2 group cursor-pointer w-fit bg-white/5 rounded-2xl backdrop-blur-sm transition-all duration-700 ease-out hover:bg-white/10">
+              <Image
+                src="/jahez-mark.png"
+                alt="جاهز"
+                width={60}
+                height={60}
+                unoptimized
+                className="object-contain drop-shadow-[0_4px_16px_rgba(255,107,0,0.4)] transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_10px_28px_rgba(245,89,5,0.7)]"
+              />
+              <span className="text-4xl font-black text-[#FF6B00] transition-all duration-700 ease-out group-hover:tracking-wider">جاهز</span>
             </div>
             <p className="text-white/60 leading-relaxed text-sm mb-6">
               أكبر منصة لتوصيل الطعام في فلسطين. نربط بين أفضل المطاعم

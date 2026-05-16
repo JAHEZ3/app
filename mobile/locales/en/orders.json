@@ -1,23 +1,118 @@
 {
   "title": "My Orders",
+  "header": {
+    "eyebrow": "Your activity"
+  },
+  "accessibility": {
+    "goBack": "Go back"
+  },
+  "subtitle": {
+    "withCount_one": "{{count}} order",
+    "withCount_other": "{{count}} orders",
+    "empty": ""
+  },
   "empty": {
     "title": "No orders yet",
-    "subtitle": "Your orders will appear here"
+    "subtitle": "Your orders will appear here once you start ordering.",
+    "action": "Browse restaurants"
+  },
+  "loading": {
+    "title": "Loading your orders",
+    "body": "Just a moment…",
+    "more": "Loading more…"
+  },
+  "endOfList": "You're all caught up",
+  "relativeTime": {
+    "justNow": "Just now",
+    "minutes_one": "{{count}}m ago",
+    "minutes_other": "{{count}}m ago",
+    "hours_one": "{{count}}h ago",
+    "hours_other": "{{count}}h ago",
+    "yesterday": "Yesterday"
+  },
+  "error": {
+    "title": "Could not load orders",
+    "body": "Please try again.",
+    "action": "Retry",
+    "missingId": "We couldn't find this order.",
+    "back": "Go back"
+  },
+  "signedOut": {
+    "title": "Sign in to view orders",
+    "body": "Your past orders will appear here after you sign in.",
+    "action": "Sign in"
   },
   "status": {
     "pending": "Pending",
     "confirmed": "Confirmed",
     "preparing": "Preparing",
-    "onTheWay": "On the Way",
+    "onTheWay": "On the way",
     "delivered": "Delivered",
     "cancelled": "Cancelled"
   },
   "details": {
-    "title": "Order Details",
+    "title": "Order details",
     "total": "Total",
-    "deliveryFee": "Delivery Fee",
+    "deliveryFee": "Delivery fee",
     "subtotal": "Subtotal",
-    "placedAt": "Placed at"
+    "discount": "Discount",
+    "placedAt": "Placed at",
+    "copyId": "Show full order ID"
+  },
+  "sections": {
+    "items": "Items",
+    "itemsEmpty": "No items in this order.",
+    "history": "Order status",
+    "delivery": "Delivery info",
+    "payment": "Payment method",
+    "notes": "Your notes"
+  },
+  "history": {
+    "empty": "No status updates yet.",
+    "inProgress": "In progress…",
+    "upcoming": "Upcoming"
+  },
+  "delivery": {
+    "address": "Address",
+    "notes": "Notes",
+    "contact": "Contact",
+    "courier": "Courier",
+    "eta": "Estimated arrival",
+    "deliveredAt": "Delivered at",
+    "empty": "No delivery details available yet."
+  },
+  "payment": {
+    "cash_on_delivery": "Cash on delivery",
+    "card": "Credit / Debit card",
+    "online": "Online wallet"
+  },
+  "paymentStatus": {
+    "unpaid": "Unpaid",
+    "paid": "Paid",
+    "refunded": "Refunded"
+  },
+  "receipt": {
+    "viewReceipt": "View receipt",
+    "notReadyTitle": "Receipt not ready",
+    "notReadyBody": "The receipt will be available once the order is processed.",
+    "errorTitle": "Could not open receipt",
+    "errorBody": "Please try again later."
+  },
+  "realtime": {
+    "live": "Live",
+    "offline": "Offline"
+  },
+  "tracking": {
+    "title": "Live tracking",
+    "openTracking": "Track delivery live",
+    "openTrackingBody": "See the driver on the map",
+    "waiting": "Waiting for the driver to start sharing location…",
+    "recenter": "Recenter map",
+    "call": "Call driver",
+    "message": "Message driver",
+    "etaMinutes": "~ {{count}} min",
+    "etaUnknown": "ETA pending…",
+    "distance": "{{km}} away"
   },
   "reorder": "Reorder"
 }

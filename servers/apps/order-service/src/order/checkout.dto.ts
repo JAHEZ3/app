@@ -1,5 +1,5 @@
 import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
-import { PaymentMethod } from '../entities/order-enums';
+import { OrderKind, PaymentMethod } from '../entities/order-enums';
 
 export class CheckoutDto {
   // Client-generated UUID. The server uses it to detect duplicate submissions
@@ -87,6 +87,12 @@ export class RateOrderDto {
 }
 
 export class OrderFilterDto {
+  // 'online' (delivery) or 'local' (POS). Defaults to 'online' so existing
+  // callers see no behavior change.
+  @IsOptional()
+  @IsEnum(OrderKind)
+  kind?: OrderKind;
+
   @IsOptional()
   @IsString()
   status?: string;

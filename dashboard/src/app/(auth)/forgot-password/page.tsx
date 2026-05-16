@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Phone, ArrowRight, KeyRound, MessageSquare, Lock } from "lucide-react";
 import { useForgotPassword } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -95,9 +96,19 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-100">
 
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg bg-primary">ج</div>
-            <span className="text-xl font-black">جاهز</span>
+          <div className="flex items-center mb-8 lg:hidden p-1 group cursor-pointer">
+            <Image
+              src="/jahez-mark.png"
+              alt="جاهز"
+              width={48}
+              height={48}
+              priority
+              unoptimized
+              className="object-contain transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_8px_20px_rgba(245,89,5,0.55)]"
+            />
+            <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+              <span className="block whitespace-nowrap ps-3 text-2xl font-black text-[#F55905] opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200">جاهز</span>
+            </div>
           </div>
 
           {/* Icon */}

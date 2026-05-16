@@ -35,7 +35,7 @@ const formatAddress = (restaurant: RestaurantDetails) => {
   return parts.length ? parts.join(", ") : restaurant.city;
 };
 
-const formatPrice = (value: number) => `${value.toFixed(value % 1 === 0 ? 0 : 2)} SAR`;
+const formatPrice = (value: number) => `${value.toFixed(value % 1 === 0 ? 0 : 2)} ILS`;
 
 function StatChip({
   icon,

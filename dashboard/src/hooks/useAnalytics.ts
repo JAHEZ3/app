@@ -10,6 +10,7 @@ import type {
   TopMeal,
   CustomersAnalytics,
   RatingsAnalytics,
+  ReviewsList,
   DeliveryAnalytics,
   PaymentsAnalytics,
   PerformanceReport,
@@ -64,6 +65,15 @@ export function useAnalyticsRatings() {
   return useQuery<RatingsAnalytics>({
     queryKey: queryKeys.analytics.ratings,
     queryFn: async () => unwrap<RatingsAnalytics>((await analyticsApi.ratings()).data),
+  });
+}
+
+export function useAnalyticsReviews(page = 1, limit = 20) {
+  return useQuery<ReviewsList>({
+    queryKey: queryKeys.analytics.reviews(page, limit),
+    queryFn: async () =>
+      unwrap<ReviewsList>((await analyticsApi.reviews(page, limit)).data),
+    placeholderData: (prev) => prev,
   });
 }
 

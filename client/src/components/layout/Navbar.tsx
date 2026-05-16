@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Menu, X, ShoppingBag } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -35,18 +36,26 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF6B00] to-[#E55A00] flex items-center justify-center shadow-[0_4px_12px_rgba(255,107,0,0.35)] group-hover:shadow-[0_6px_16px_rgba(255,107,0,0.45)] transition-shadow">
-              <ShoppingBag className="w-5 h-5 text-white" />
+          <Link href="/" className="flex items-center p-1 group">
+            <Image
+              src="/jahez-mark.png"
+              alt="جاهز"
+              width={52}
+              height={52}
+              priority
+              unoptimized
+              className="object-contain drop-shadow-[0_4px_12px_rgba(255,107,0,0.35)] transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_10px_24px_rgba(245,89,5,0.6)]"
+            />
+            <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+              <span
+                className={cn(
+                  "block whitespace-nowrap ps-2.5 text-3xl font-black tracking-tight opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200",
+                  isScrolled ? "text-[#FF6B00]" : "text-white",
+                )}
+              >
+                جاهز
+              </span>
             </div>
-            <span
-              className={cn(
-                "text-2xl font-black tracking-tight transition-colors",
-                isScrolled ? "text-[#FF6B00]" : "text-white",
-              )}
-            >
-              جاهز
-            </span>
           </Link>
 
           {/* Desktop Nav */}

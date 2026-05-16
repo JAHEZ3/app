@@ -44,7 +44,7 @@ export class PromoService {
       throw new BadRequestException('كود الخصم غير متاح لهذا المطعم');
     if (Number(promo.minOrderAmount) > 0 && orderAmount < Number(promo.minOrderAmount))
       throw new BadRequestException(
-        `الحد الأدنى للطلب هو ${promo.minOrderAmount} ريال لاستخدام هذا الكود`,
+        `الحد الأدنى للطلب هو ${promo.minOrderAmount} شيكل لاستخدام هذا الكود`,
       );
 
     const userUsageCount = await this.usageRepo.count({

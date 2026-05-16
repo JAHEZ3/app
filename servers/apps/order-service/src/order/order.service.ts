@@ -13,16 +13,23 @@ import { ClientProxy } from '@nestjs/microservices';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
-import { Order } from '../entities/order.entity';
+import { OnlineOrder } from '../entities/online-order.entity';
+import { LocalOrder } from '../entities/local-order.entity';
 import { OrderItem } from '../entities/order-item.entity';
 import { OrderItemOption } from '../entities/order-item-option.entity';
 import { OrderStatusHistory } from '../entities/order-status-history.entity';
 import { OrderRating } from '../entities/order-rating.entity';
-import { OrderStatus, PaymentStatus } from '../entities/order-enums';
+import { OrderKind, OrderStatus, PaymentStatus } from '../entities/order-enums';
 import { CartService } from '../cart/cart.service';
 import { PromoService } from '../promo/promo.service';
 import { RedisLockService } from '../shared/redis-lock.service';
-import { RECEIPT_QUEUE, JOBS } from '../queue/queue.constants';
+import { S3Service } from '../shared/s3.service';
+import {
+  JOBS,
+  ONLINE_AUTO_READY_QUEUE,
+  ONLINE_PREPARING_AUTO_READY_MS,
+  RECEIPT_QUEUE,
+} from '../queue/queue.constants';
 import {
   CheckoutDto,
   UpdateOrderStatusDto,
@@ -37,7 +44,8 @@ const ALLOWED_TRANSITIONS: Record<string, Partial<Record<OrderStatus, OrderStatu
   restaurant_owner: {
     [OrderStatus.PENDING]:   [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
     [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
-    [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP],
+    // Cancel-during-prep is allowed too (e.g. ingredient ran out after starting).
+    [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
     // "done" in the spec = READY_FOR_PICKUP (restaurant signals meal is ready)
   },
   delivery: {
@@ -62,7 +70,8 @@ export class OrderService {
   private readonly logger = new Logger(OrderService.name);
 
   constructor(
-    @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
+    @InjectRepository(OnlineOrder) private readonly orderRepo: Repository<OnlineOrder>,
+    @InjectRepository(LocalOrder) private readonly localOrderRepo: Repository<LocalOrder>,
     @InjectRepository(OrderItem) private readonly itemRepo: Repository<OrderItem>,
     @InjectRepository(OrderItemOption) private readonly optionRepo: Repository<OrderItemOption>,
     @InjectRepository(OrderStatusHistory) private readonly historyRepo: Repository<OrderStatusHistory>,
@@ -71,7 +80,9 @@ export class OrderService {
     private readonly cartService: CartService,
     private readonly promoService: PromoService,
     private readonly lockService: RedisLockService,
+    private readonly s3: S3Service,
     @InjectQueue(RECEIPT_QUEUE) private readonly receiptQueue: Queue,
+    @InjectQueue(ONLINE_AUTO_READY_QUEUE) private readonly autoReadyQueue: Queue,
     @Inject('NATS_SERVICE') private readonly nats: ClientProxy,
   ) {}
 
@@ -81,7 +92,7 @@ export class OrderService {
     userId: string,
     userInfo: { name: string; phone: string; role: string },
     dto: CheckoutDto,
-  ): Promise<Order & { _idempotent?: true }> {
+  ): Promise<OnlineOrder & { _idempotent?: true }> {
 
     // ── 1. Idempotency fast path ──────────────────────────────────────────
     // If the client sent a key, check for an existing order BEFORE acquiring
@@ -155,15 +166,24 @@ export class OrderService {
       // Collision-resistant order number: prefix + timestamp (ms) + 4 random hex chars
       const orderNumber = `ORD${Date.now().toString(36).toUpperCase()}${randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase()}`;
 
-      let order: Order;
+      // Resolve restaurant owner authoritatively from the restaurants table.
+      // Trusting the client-provided dto.ownerUserId leaves orders unscoped to
+      // the owning restaurant_owner, which breaks dashboard listing + socket push.
+      const ownerRow = await this.dataSource.query(
+        'SELECT owner_user_id FROM restaurants WHERE id = $1',
+        [cart.restaurantId],
+      );
+      const resolvedOwnerUserId = ownerRow?.[0]?.owner_user_id ?? dto.ownerUserId ?? null;
+
+      let order: OnlineOrder;
       try {
         order = await this.dataSource.transaction(async (em) => {
-          const newOrder = em.create(Order, {
+          const newOrder = em.create(OnlineOrder, {
             orderNumber,
             customerId: userId,
             idempotencyKey: dto.idempotencyKey ?? null,
             restaurantId: cart.restaurantId,
-            ownerUserId: dto.ownerUserId,
+            ownerUserId: resolvedOwnerUserId,
             deliveryAddressId: dto.addressId,
             deliveryAddressSnapshot: dto.addressSnapshot,
             restaurantNameSnapshot: dto.restaurantName ?? cart.restaurantName,
@@ -180,7 +200,7 @@ export class OrderService {
             customerNotes: dto.customerNotes,
           });
 
-          const savedOrder = await em.save(Order, newOrder);
+          const savedOrder = await em.save(OnlineOrder, newOrder);
 
           for (const cartItem of cart.items) {
             const item = await em.save(OrderItem, em.create(OrderItem, {
@@ -249,7 +269,7 @@ export class OrderService {
           customerId: userId,
           items: cart.items,
         },
-        { jobId: `receipt:${order.id}` },
+        { jobId: `receipt-${order.id}` },
       );
 
       this.emitSafe('order.created', {
@@ -291,8 +311,12 @@ export class OrderService {
     const page  = Math.max(1, dto.page ?? 1);
     const limit = Math.min(50, Math.max(1, dto.limit ?? 20));
     const skip  = (page - 1) * limit;
+    const kind  = dto.kind ?? OrderKind.ONLINE;
 
-    const qb = this.orderRepo
+    // Pick the right child repo so TypeORM filters by kind automatically and
+    // each row is returned with its kind-specific columns populated.
+    const repo = kind === OrderKind.LOCAL ? this.localOrderRepo : this.orderRepo;
+    const qb = repo
       .createQueryBuilder('o')
       .leftJoinAndSelect('o.items', 'items')
       .orderBy('o.createdAt', 'DESC')
@@ -302,6 +326,10 @@ export class OrderService {
     // Strict role-based scoping
     switch (role) {
       case 'customer':
+        // POS orders have no customer; customers can only browse online orders
+        if (kind === OrderKind.LOCAL) {
+          return { data: [], total: 0, page, limit, pages: 0 };
+        }
         qb.andWhere('o.customerId = :userId', { userId });
         break;
       case 'restaurant_owner':
@@ -313,12 +341,23 @@ export class OrderService {
         });
         break;
       case 'delivery':
+        // Delivery agents don't see POS orders
+        if (kind === OrderKind.LOCAL) {
+          return { data: [], total: 0, page, limit, pages: 0 };
+        }
         qb.andWhere('o.deliveryAgentId = :userId', { userId });
         break;
       // manager: no filter — sees all
     }
 
-    if (dto.status) qb.andWhere('o.status = :status', { status: dto.status });
+    if (dto.status) {
+      // OnlineOrder.status (order_status enum) vs LocalOrder.localStatus (local_order_status)
+      if (kind === OrderKind.LOCAL) {
+        qb.andWhere('o.localStatus = :status', { status: dto.status });
+      } else {
+        qb.andWhere('o.status = :status', { status: dto.status });
+      }
+    }
     if (dto.search)
       qb.andWhere(
         '(o.orderNumber ILIKE :q OR o.customerNameSnapshot ILIKE :q)',
@@ -358,7 +397,7 @@ export class OrderService {
     const newStatus = dto.status as OrderStatus;
     this.validateTransition(order.status, newStatus, role);
 
-    const updates: Partial<Order> = { status: newStatus };
+    const updates: Partial<OnlineOrder> = { status: newStatus };
 
     if (LOCKING_STATUSES.has(newStatus)) {
       updates.isLocked = true;
@@ -366,8 +405,29 @@ export class OrderService {
     if (newStatus === OrderStatus.DELIVERED) {
       updates.deliveredAt = new Date();
     }
+    if (newStatus === OrderStatus.PREPARING) {
+      // Stamp the moment we enter PREPARING so the dashboard can render the
+      // 15-min countdown that matches the BullMQ auto-ready timer below.
+      updates.preparingStartedAt = new Date();
+    }
 
     await this.orderRepo.update(orderId, updates);
+
+    // ── Auto-ready timer: PREPARING → READY_FOR_PICKUP after 15 minutes ──
+    // Schedule when entering PREPARING; cancel when leaving it (manager
+    // moves to READY_FOR_PICKUP / CANCELLED / etc. before the timer fires).
+    const autoReadyJobId = `online-auto-ready-${orderId}`;
+    if (newStatus === OrderStatus.PREPARING) {
+      await this.autoReadyQueue
+        .add(
+          JOBS.ONLINE_AUTO_READY,
+          { orderId },
+          { delay: ONLINE_PREPARING_AUTO_READY_MS, jobId: autoReadyJobId },
+        )
+        .catch((err) => this.logger.warn({ msg: 'auto_ready_schedule_failed', orderId, err }));
+    } else if (order.status === OrderStatus.PREPARING) {
+      await this.autoReadyQueue.remove(autoReadyJobId).catch(() => undefined);
+    }
     await this.historyRepo.save(
       this.historyRepo.create({ orderId, status: newStatus, changedByUserId: userId, note: dto.note }),
     );
@@ -474,13 +534,35 @@ export class OrderService {
     return rating;
   }
 
+  // ─── Payment proof upload ─────────────────────────────────────────────────
+
+  async uploadPaymentProof(
+    orderId: string,
+    userId: string,
+    role: string,
+    file: Express.Multer.File,
+  ): Promise<{ paymentProofKey: string }> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+    this.assertAccess(order, userId, role);
+
+    if (!file) throw new BadRequestException('لم يتم إرفاق ملف');
+    if (!file.mimetype?.startsWith('image/'))
+      throw new BadRequestException('يجب أن يكون الملف صورة');
+
+    const key = await this.s3.upload(file, `payment-proofs/${orderId}`);
+    await this.orderRepo.update(orderId, { paymentProofKey: key });
+
+    return { paymentProofKey: key };
+  }
+
   // ─── Access guards ─────────────────────────────────────────────────────────
 
   /**
    * Returns true if the user has read/write access to the order.
    * Throws ForbiddenException otherwise.
    */
-  assertAccess(order: Order, userId: string, role: string): void {
+  assertAccess(order: OnlineOrder, userId: string, role: string): void {
     if (role === 'manager') return;
 
     if (role === 'customer') {

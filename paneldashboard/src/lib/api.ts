@@ -28,6 +28,11 @@ import type {
   UpdateAgentPayload,
 } from "@/types/delivery.types";
 import type {
+  CreateCategoryPayload,
+  RestaurantCategory,
+  UpdateCategoryPayload,
+} from "@/types/category.types";
+import type {
   CustomersAnalytics,
   DeliveryAnalytics,
   OrdersAnalytics,
@@ -43,6 +48,12 @@ import type {
   NotificationListResponse,
   SendToPhonePayload,
 } from "@/types/notification.types";
+import type {
+  CreateSupportTicketPayload,
+  ListSupportTicketsParams,
+  SupportTicket,
+  UpdateSupportTicketStatusPayload,
+} from "@/types/support.types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -146,6 +157,9 @@ export const restaurantsApi = {
     ),
   getOne: (id: string) =>
     api.get<ApiResponse<Restaurant>>(`/restaurant/manager/restaurants/${id}`),
+  /** Full restaurant view: profile + hours + menus → sections → meals → option groups → options. */
+  getFull: (id: string) =>
+    api.get<ApiResponse<unknown>>(`/restaurant/manager/restaurants/${id}/full`),
   update: (id: string, payload: UpdateRestaurantPayload) =>
     api.patch<ApiResponse<Restaurant>>(
       `/restaurant/manager/restaurants/${id}`,
@@ -158,7 +172,42 @@ export const restaurantsApi = {
     ),
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/restaurant/manager/restaurants/${id}`),
+  /** AI-generate a branded cover image. Optional accentColor overrides the logo-sampled color. */
+  generateCover: (id: string, payload?: { accentColor?: string }) =>
+    api.post<
+      ApiResponse<{ coverUrl: string; coverKey: string; accentColor: string }>
+    >(`/restaurant/manager/restaurants/${id}/cover/ai`, payload ?? {}),
+
+  /** Paginated reviews for a restaurant + summary totals. */
+  listReviews: (id: string, page = 1, limit = 20) =>
+    api.get<ApiResponse<RestaurantReviewsList>>(
+      `/restaurant/manager/restaurants/${id}/reviews`,
+      { params: { page, limit } },
+    ),
 };
+
+export interface RestaurantReview {
+  id: string;
+  orderId: string;
+  customerId: string;
+  foodRating: number;
+  deliveryRating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
+export interface RestaurantReviewsList {
+  items: RestaurantReview[];
+  total: number;
+  page: number;
+  limit: number;
+  summary: {
+    avgFoodRating: number;
+    avgDeliveryRating: number;
+    totalRatings: number;
+    distribution: { stars: number; count: number }[];
+  };
+}
 
 // ─── Delivery agents (delivery-service) ──────────────────────────────────────
 export const deliveryApi = {
@@ -199,6 +248,26 @@ export const deliveryApi = {
     api.delete<ApiResponse<null>>(`/delivery/manager/agents/${id}`),
 };
 
+// ─── Restaurant categories (restaurant-service) ──────────────────────────────
+export const categoriesApi = {
+  list: () =>
+    api.get<ApiResponse<RestaurantCategory[]>>("/restaurant/categories"),
+  create: (payload: CreateCategoryPayload) =>
+    api.post<ApiResponse<RestaurantCategory>>(
+      "/restaurant/manager/categories",
+      payload,
+    ),
+  update: (id: string, payload: UpdateCategoryPayload) =>
+    api.patch<ApiResponse<RestaurantCategory>>(
+      `/restaurant/manager/categories/${id}`,
+      payload,
+    ),
+  delete: (id: string) =>
+    api.delete<ApiResponse<{ id: string }>>(
+      `/restaurant/manager/categories/${id}`,
+    ),
+};
+
 // ─── Legacy aliases kept for existing pages ──────────────────────────────────
 /** @deprecated prototype shim — use `restaurantsApi` instead */
 export const adminRestaurantsApi = {
@@ -210,13 +279,122 @@ export const adminRestaurantsApi = {
     api.patch(`/restaurant/manager/applications/${id}/reject`, { reason }),
 };
 
+export interface AdminOrderRow {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  restaurantName: string;
+  driverName: string | null;
+  status:
+    | "pending"
+    | "confirmed"
+    | "preparing"
+    | "ready_for_pickup"
+    | "out_for_delivery"
+    | "delivered"
+    | "cancelled"
+    | "refunded";
+  totalAmount: number;
+  itemsCount: number;
+  city: string;
+  createdAt: string;
+}
+
+export interface AdminOrdersList {
+  items: AdminOrderRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ListAdminOrdersParams {
+  status?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminOrderDeliveryAddress {
+  street?: string;
+  city?: string;
+  lat?: number;
+  lng?: number;
+  label?: string;
+}
+
+export interface AdminOrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  specialInstructions: string | null;
+}
+
+export interface AdminOrderDetails {
+  order: {
+    id: string;
+    orderNumber: string;
+    status: AdminOrderRow["status"];
+    createdAt: string;
+    deliveredAt: string | null;
+    estimatedDeliveryAt: string | null;
+    customerNotes: string | null;
+  };
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    address: AdminOrderDeliveryAddress | null;
+  };
+  restaurant: {
+    id: string;
+    name: string;
+    city: string | null;
+  };
+  delivery: {
+    status: string;
+    distanceKm: number | null;
+    agentEarnings: number | null;
+    deliveredAt: string | null;
+    agent: { id: string; name: string; city: string | null } | null;
+  } | null;
+  payment: {
+    method: "cash_on_delivery" | "card" | "online";
+    status: "unpaid" | "paid" | "refunded";
+    subtotal: number;
+    deliveryFee: number;
+    discountAmount: number;
+    totalAmount: number;
+  };
+  items: AdminOrderItem[];
+}
+
 export const adminOrdersApi = {
-  getAll: (params?: object) => api.get("/admin/orders", { params }),
-  getOne: (id: string) => api.get(`/admin/orders/${id}`),
+  list: (params?: ListAdminOrdersParams) =>
+    api.get<ApiResponse<AdminOrdersList>>("/manager/orders", { params }),
+  /** @deprecated prototype shim — use `list` and read `data.items` */
+  getAll: (params?: ListAdminOrdersParams) =>
+    api.get<ApiResponse<AdminOrdersList>>("/manager/orders", { params }),
+  getOne: (id: string) =>
+    api.get<ApiResponse<AdminOrderDetails>>(`/manager/orders/${id}`),
 };
 export const settingsApi = {
-  get: () => api.get("/admin/settings"),
-  update: (data: object) => api.patch("/admin/settings", data),
+  get: () => api.get("/manager/admin/settings"),
+  /** Replace any sections provided in `data` (full overwrite per section). */
+  replace: (data: object) => api.post("/manager/admin/settings", data),
+  /** Shallow-merge any sections provided in `data`. */
+  update: (data: object) => api.patch("/manager/admin/settings", data),
+  /** Upload a new platform logo. Returns the resolved (presigned) URL. */
+  uploadLogo: (image: File) => {
+    const form = new FormData();
+    form.append("image", image);
+    return api.patch<ApiResponse<{ logoUrl: string | null }>>(
+      "/manager/admin/settings/logo",
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+  },
 };
 
 // ─── Analytics (manager-service) ─────────────────────────────────────────────
@@ -244,6 +422,38 @@ export const analyticsApi = {
 export const statsApi = {
   overview: () => analyticsApi.overview(),
 };
+
+// ─── Support tickets (manager-service) ───────────────────────────────────────
+export const supportApi = {
+  create: (payload: CreateSupportTicketPayload) =>
+    api.post<ApiResponse<SupportTicket> | SupportTicket>(
+      "/manager/admin/support/tickets",
+      payload,
+    ),
+  list: (params?: ListSupportTicketsParams) =>
+    api.get<ApiResponse<Paginated<SupportTicket>> | Paginated<SupportTicket>>(
+      "/manager/admin/support/tickets",
+      { params },
+    ),
+  getOne: (id: string) =>
+    api.get<ApiResponse<SupportTicket> | SupportTicket>(
+      `/manager/admin/support/tickets/${id}`,
+    ),
+  updateStatus: (id: string, payload: UpdateSupportTicketStatusPayload) =>
+    api.patch<ApiResponse<SupportTicket> | SupportTicket>(
+      `/manager/admin/support/tickets/${id}/status`,
+      payload,
+    ),
+};
+
+/** Unwraps a manager-service response that may be either `{data, message}` or raw. */
+export function unwrapManager<T>(body: unknown): T {
+  if (body && typeof body === "object" && "data" in (body as object)) {
+    const root = body as { data: T };
+    return root.data;
+  }
+  return body as T;
+}
 
 // ─── Notifications (notification-service) ────────────────────────────────────
 export const notificationApi = {

@@ -1,6 +1,6 @@
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 import { Type } from "class-transformer";
-import { CuisineType, RestaurantStatus } from "../entities/restaurant.entity";
+import { RestaurantStatus } from "../entities/restaurant.entity";
 
 export class AdminListRestaurantsDto {
   @IsOptional()
@@ -8,8 +8,8 @@ export class AdminListRestaurantsDto {
   status?: RestaurantStatus;
 
   @IsOptional()
-  @IsEnum(CuisineType, { message: "نوع المطبخ غير مدعوم." })
-  cuisineType?: CuisineType;
+  @IsString({ message: "نوع المطبخ يجب أن يكون نصاً." })
+  cuisineType?: string;
 
   @IsOptional()
   @IsString()

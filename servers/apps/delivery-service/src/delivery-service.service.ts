@@ -192,6 +192,19 @@ export class DeliveryServiceService {
       this.logger.error("NATS emit delivery.profile.completed failed", err);
     }
 
+    // Notify managers that a new delivery application is awaiting review.
+    try {
+      this.natsClient.emit("delivery.application.submitted", {
+        agentId: agent.id,
+        userId,
+        fullName: `${profileData.firstName} ${profileData.lastName}`,
+        city: profileData.city ?? null,
+        vehicleType: profileData.vehicleType ?? null,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit delivery.application.submitted failed", err);
+    }
+
     this.logger.log(`Agent ${userId} submitted application for review`);
     return {
       data: { agentId: agent.id },
