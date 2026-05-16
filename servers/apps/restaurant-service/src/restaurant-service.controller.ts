@@ -20,9 +20,25 @@ import { EventPattern, Payload } from "@nestjs/microservices";
 import { RestaurantServiceService } from "./restaurant-service.service";
 import { AiMenuImportService } from "./ai-menu-import.service";
 import { AiCoverImageService } from "./ai-cover-image.service";
+import { AiMealImageService } from "./ai-meal-image.service";
 import { GenerateCoverDto } from "./dto/generate-cover.dto";
 import { RestaurantAnalyticsService } from "./analytics/analytics.service";
 import { CategoriesService } from "./categories/categories.service";
+import { TablesService } from "./tables/tables.service";
+import { CreateTableDto, UpdateTableDto } from "./dto/restaurant-table.dto";
+import { AccountingService } from "./accounting/accounting.service";
+import {
+  AccountingSummaryDto,
+  CreateExpenseDto,
+  ListExpensesDto,
+  UpdateExpenseDto,
+} from "./dto/expense.dto";
+import { InventoryService } from "./inventory/inventory.service";
+import {
+  CreateInventoryItemDto,
+  RecordMovementDto,
+  UpdateInventoryItemDto,
+} from "./dto/inventory.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { ApplyMenuImportDto } from "./dto/ai-menu-import.dto";
@@ -74,8 +90,12 @@ export class RestaurantServiceController {
     private readonly service: RestaurantServiceService,
     private readonly aiMenuImport: AiMenuImportService,
     private readonly aiCoverImage: AiCoverImageService,
+    private readonly aiMealImage: AiMealImageService,
     private readonly analytics: RestaurantAnalyticsService,
     private readonly categories: CategoriesService,
+    private readonly tables: TablesService,
+    private readonly accounting: AccountingService,
+    private readonly inventory: InventoryService,
   ) {}
 
   // ─── NATS: create profile stub on registration ────────────────────────────────
@@ -389,6 +409,21 @@ export class RestaurantServiceController {
   }
 
   /**
+   * POST /api/restaurant/meals/:mealId/ai-image
+   * Generate an AI photo for this meal based on its name + description.
+   * Saves to S3, updates meal.imageUrl, returns a presigned URL.
+   */
+  @Post("meals/:mealId/ai-image")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  generateMealAiImage(
+    @CurrentUser("sub") userId: string,
+    @Param("mealId", ParseUUIDPipe) mealId: string,
+  ) {
+    return this.aiMealImage.generateForMeal(userId, mealId);
+  }
+
+  /**
    * PATCH /api/restaurant/meals/:mealId
    * Multipart/form-data. Any UpdateMealDto field + optional `image` file.
    */
@@ -620,6 +655,37 @@ export class RestaurantServiceController {
     return this.analytics.getOverview(userId);
   }
 
+  // ─── Legacy /me/* shapes used by the dashboard widgets ────────────────────
+
+  /** GET /api/restaurant/me/stats — flat KPI snapshot for dashboard cards. */
+  @Get("me/stats")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getOwnerDashboardStats(@CurrentUser("sub") userId: string) {
+    return this.analytics.getOwnerDashboardStats(userId);
+  }
+
+  /** GET /api/restaurant/me/sales?period=daily|weekly|monthly */
+  @Get("me/sales")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getOwnerSales(
+    @CurrentUser("sub") userId: string,
+    @Query("period") period?: string,
+  ) {
+    const safe: "daily" | "weekly" | "monthly" =
+      period === "weekly" || period === "monthly" ? period : "daily";
+    return this.analytics.getOwnerSales(userId, safe);
+  }
+
+  /** GET /api/restaurant/me/top-meals — top sellers shaped for the dashboard widget. */
+  @Get("me/top-meals")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  getOwnerTopMeals(@CurrentUser("sub") userId: string) {
+    return this.analytics.getOwnerTopMeals(userId);
+  }
+
   /**
    * GET /api/restaurant/analytics/report?period=daily|weekly|monthly
    * Statistics & Reports — performance for the selected period with growth vs. previous period.
@@ -829,6 +895,206 @@ export class RestaurantServiceController {
     @Query() query: ListReviewsDto,
   ) {
     return this.analytics.listReviews(id, query.page, query.limit);
+  }
+
+  // ─── Tables (POS QR-ordering) ─────────────────────────────────────────────
+  // Service is mounted under the `api/restaurant` global prefix, so these
+  // resolve to e.g. `/api/restaurant/tables`.
+
+  /** GET /api/restaurant/tables — list tables for the caller's restaurant */
+  @Get("tables")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  listTables(@CurrentUser() user: { sub: string; role: string }) {
+    return this.tables.list(user.sub, user.role);
+  }
+
+  /** POST /api/restaurant/tables — create a table */
+  @Post("tables")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  createTable(
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: CreateTableDto,
+  ) {
+    return this.tables.create(user.sub, user.role, dto);
+  }
+
+  /** PATCH /api/restaurant/tables/:id — update */
+  @Patch("tables/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  updateTable(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: UpdateTableDto,
+  ) {
+    return this.tables.update(id, user.sub, user.role, dto);
+  }
+
+  /** DELETE /api/restaurant/tables/:id */
+  @Delete("tables/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  async deleteTable(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+  ) {
+    await this.tables.remove(id, user.sub, user.role);
+    return { id };
+  }
+
+  /** POST /api/restaurant/tables/:id/regenerate-qr — rotate the QR token */
+  @Post("tables/:id/regenerate-qr")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  regenerateTableQr(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+  ) {
+    return this.tables.regenerateQr(id, user.sub, user.role);
+  }
+
+  /** GET /api/restaurant/public/tables/by-qr/:token — public QR landing */
+  @Get("public/tables/by-qr/:token")
+  resolveTableByQr(@Param("token") token: string) {
+    return this.tables.findByQrToken(token);
+  }
+
+  // ─── Accounting (Tier 1: expenses + revenue + net profit) ───────────────
+
+  /** GET /api/restaurant/accounting/summary?period=today|week|month|custom */
+  @Get("accounting/summary")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  accountingSummary(
+    @CurrentUser() user: { sub: string; role: string },
+    @Query() query: AccountingSummaryDto,
+  ) {
+    return this.accounting.getSummary(user.sub, user.role, query);
+  }
+
+  /** GET /api/restaurant/expenses?category=&from=&to= */
+  @Get("expenses")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  listExpenses(
+    @CurrentUser() user: { sub: string; role: string },
+    @Query() query: ListExpensesDto,
+  ) {
+    return this.accounting.listExpenses(user.sub, user.role, query);
+  }
+
+  /** POST /api/restaurant/expenses */
+  @Post("expenses")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  createExpense(
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: CreateExpenseDto,
+  ) {
+    return this.accounting.createExpense(user.sub, user.role, dto);
+  }
+
+  /** PATCH /api/restaurant/expenses/:id */
+  @Patch("expenses/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  updateExpense(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: UpdateExpenseDto,
+  ) {
+    return this.accounting.updateExpense(id, user.sub, user.role, dto);
+  }
+
+  /** DELETE /api/restaurant/expenses/:id */
+  @Delete("expenses/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  async deleteExpense(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+  ) {
+    await this.accounting.deleteExpense(id, user.sub, user.role);
+    return { id };
+  }
+
+  // ─── Inventory (Tier 1: items + movements + low-stock alerts) ───────────
+
+  /** GET /api/restaurant/inventory/summary — totals + low-stock list */
+  @Get("inventory/summary")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  inventorySummary(@CurrentUser() user: { sub: string; role: string }) {
+    return this.inventory.getSummary(user.sub, user.role);
+  }
+
+  /** GET /api/restaurant/inventory/items */
+  @Get("inventory/items")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  listInventoryItems(@CurrentUser() user: { sub: string; role: string }) {
+    return this.inventory.listItems(user.sub, user.role);
+  }
+
+  /** POST /api/restaurant/inventory/items */
+  @Post("inventory/items")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  createInventoryItem(
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: CreateInventoryItemDto,
+  ) {
+    return this.inventory.createItem(user.sub, user.role, dto);
+  }
+
+  /** PATCH /api/restaurant/inventory/items/:id */
+  @Patch("inventory/items/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  updateInventoryItem(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: UpdateInventoryItemDto,
+  ) {
+    return this.inventory.updateItem(id, user.sub, user.role, dto);
+  }
+
+  /** DELETE /api/restaurant/inventory/items/:id */
+  @Delete("inventory/items/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  async deleteInventoryItem(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+  ) {
+    await this.inventory.deleteItem(id, user.sub, user.role);
+    return { id };
+  }
+
+  /** POST /api/restaurant/inventory/items/:id/movements — IN / OUT / ADJUSTMENT */
+  @Post("inventory/items/:id/movements")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  recordInventoryMovement(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: { sub: string; role: string },
+    @Body() dto: RecordMovementDto,
+  ) {
+    return this.inventory.recordMovement(id, user.sub, user.role, dto);
+  }
+
+  /** GET /api/restaurant/inventory/movements?itemId=&limit= */
+  @Get("inventory/movements")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  listInventoryMovements(
+    @CurrentUser() user: { sub: string; role: string },
+    @Query("itemId") itemId?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.inventory.listMovements(itemId, user.sub, user.role, Number(limit) || 100);
   }
 
   // ─── Must be last: wildcard catches any GET /:id not matched above ────────────

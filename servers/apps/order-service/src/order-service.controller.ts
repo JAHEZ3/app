@@ -10,8 +10,11 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -31,6 +34,19 @@ import { SendMessageDto } from './chat/chat.dto';
 import { PromoService } from './promo/promo.service';
 import { CreatePromoCodeDto, UpdatePromoCodeDto, ValidatePromoDto } from './promo/promo.dto';
 import { ReceiptService } from './receipt/receipt.service';
+import { PosService } from './pos/pos.service';
+import { PrinterService } from './printer/printer.service';
+import {
+  AddPaymentDto,
+  ClosePosOrderDto,
+  CreatePosOrderDto,
+  PosItemDto,
+  ScanOrderDto,
+  SetDiscountDto,
+  UpdatePaymentSplitDto,
+  UpdatePosItemDto,
+  VoidPosOrderDto,
+} from './pos/pos.dto';
 
 @Controller()
 export class OrderServiceController {
@@ -40,6 +56,8 @@ export class OrderServiceController {
     private readonly chatService: ChatService,
     private readonly promoService: PromoService,
     private readonly receiptService: ReceiptService,
+    private readonly posService: PosService,
+    private readonly printerService: PrinterService,
   ) {}
 
   // ─────────────────────────────────────────────
@@ -183,6 +201,32 @@ export class OrderServiceController {
     return { data: { url }, message: null };
   }
 
+  @Post('orders/:id/payment-proof')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  async uploadPaymentProof(
+    @Req() req: any,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const result = await this.orderService.uploadPaymentProof(
+      id,
+      req.user.sub,
+      req.user.role,
+      file,
+    );
+    return { data: result, message: 'تم رفع إيصال الدفع' };
+  }
+
+  @Get('orders/:id/payment-proof')
+  @UseGuards(JwtAuthGuard)
+  async getPaymentProof(@Req() req: any, @Param('id') id: string) {
+    const order = await this.orderService.findOne(id, req.user.sub, req.user.role);
+    if (!order.paymentProofKey) return { data: null, message: 'لم يتم رفع إيصال الدفع بعد' };
+    const url = await this.receiptService.getPresignedUrl(order.paymentProofKey);
+    return { data: { url }, message: null };
+  }
+
   // ─────────────────────────────────────────────
   // CHAT
   // ─────────────────────────────────────────────
@@ -253,6 +297,166 @@ export class OrderServiceController {
   async deletePromoCode(@Param('id') id: string) {
     await this.promoService.remove(id);
     return { data: null, message: 'تم حذف كود الخصم' };
+  }
+
+  // ─────────────────────────────────────────────
+  // POS (restaurant_owner / manager only)
+  // ─────────────────────────────────────────────
+
+  @Post('pos/orders')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async createPosOrder(@Req() req: any, @Body() dto: CreatePosOrderDto) {
+    const order = await this.posService.create(req.user.sub, dto);
+    return { data: order, message: 'تم فتح طلب جديد' };
+  }
+
+  // Public — no JwtAuthGuard. Customer scans the table QR and submits an
+  // anonymous order. Restaurant + table are resolved from the qrToken.
+  @Post('pos/scan-order')
+  async createPosOrderFromQrScan(@Body() dto: ScanOrderDto) {
+    const order = await this.posService.createFromQrScan(dto);
+    return { data: order, message: 'تم إرسال الطلب للمطعم' };
+  }
+
+  @Get('pos/orders')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async listOpenPosOrders(@Req() req: any, @Query('restaurantId') restaurantId: string) {
+    if (!restaurantId) throw new BadRequestException('restaurantId مطلوب');
+    const data = await this.posService.listOpen(restaurantId, req.user.sub, req.user.role);
+    return { data, message: null };
+  }
+
+  @Post('pos/orders/:id/items')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async addPosItem(@Req() req: any, @Param('id') id: string, @Body() dto: PosItemDto) {
+    const order = await this.posService.addItem(id, req.user.sub, req.user.role, dto);
+    return { data: order, message: 'تمت إضافة الصنف' };
+  }
+
+  @Patch('pos/orders/:id/items/:itemId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async updatePosItem(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdatePosItemDto,
+  ) {
+    const order = await this.posService.updateItem(id, itemId, req.user.sub, req.user.role, dto);
+    return { data: order, message: 'تم تحديث الصنف' };
+  }
+
+  @Delete('pos/orders/:id/items/:itemId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async removePosItem(@Req() req: any, @Param('id') id: string, @Param('itemId') itemId: string) {
+    const order = await this.posService.removeItem(id, itemId, req.user.sub, req.user.role);
+    return { data: order, message: 'تم حذف الصنف' };
+  }
+
+  @Patch('pos/orders/:id/discount')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async setPosDiscount(@Req() req: any, @Param('id') id: string, @Body() dto: SetDiscountDto) {
+    const order = await this.posService.setDiscount(id, req.user.sub, req.user.role, dto);
+    return { data: order, message: 'تم تطبيق الخصم' };
+  }
+
+  @Post('pos/orders/:id/payments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async addPosPayment(@Req() req: any, @Param('id') id: string, @Body() dto: AddPaymentDto) {
+    const order = await this.posService.addPayment(id, req.user.sub, req.user.role, dto);
+    return { data: order, message: 'تم تسجيل الدفعة' };
+  }
+
+  @Post('pos/orders/:id/close')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async closePosOrder(@Req() req: any, @Param('id') id: string, @Body() dto: ClosePosOrderDto) {
+    const order = await this.posService.close(id, req.user.sub, req.user.role, dto);
+    return { data: order, message: 'تم إقفال الطلب' };
+  }
+
+  @Post('pos/orders/:id/accept')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async acceptPosOrder(@Req() req: any, @Param('id') id: string) {
+    const order = await this.posService.acceptScanOrder(id, req.user.sub, req.user.role);
+    return { data: order, message: 'تم قبول الطلب' };
+  }
+
+  @Post('pos/orders/:id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async rejectPosOrder(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    const order = await this.posService.rejectScanOrder(id, req.user.sub, req.user.role, body?.reason);
+    return { data: order, message: 'تم رفض الطلب' };
+  }
+
+  @Post('pos/orders/:id/reopen')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async reopenPosOrder(@Req() req: any, @Param('id') id: string) {
+    const order = await this.posService.reopen(id, req.user.sub, req.user.role);
+    return { data: order, message: 'تم إعادة فتح الطلب' };
+  }
+
+  @Post('pos/orders/:id/finish')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async finishPosOrder(@Req() req: any, @Param('id') id: string) {
+    const order = await this.posService.finishEarly(id, req.user.sub, req.user.role);
+    return { data: order, message: 'تم إنهاء الطلب' };
+  }
+
+  @Post('pos/orders/:id/void')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async voidPosOrder(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: VoidPosOrderDto,
+  ) {
+    const order = await this.posService.voidOrder(id, req.user.sub, req.user.role, dto);
+    return { data: order, message: 'تم إلغاء الطلب' };
+  }
+
+  @Post('pos/orders/:id/print')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async printPosOrder(
+    @Param('id') id: string,
+    @Query('target') target?: 'kitchen' | 'cashier' | 'both',
+  ) {
+    const results = await this.printerService.printForOrder(id, target ?? 'both');
+    return { data: results, message: 'تم إرسال الطلب للطباعة' };
+  }
+
+  @Patch('pos/orders/:id/payments/:splitId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async updatePosPayment(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('splitId') splitId: string,
+    @Body() dto: UpdatePaymentSplitDto,
+  ) {
+    const order = await this.posService.updatePaymentSplit(
+      id,
+      splitId,
+      req.user.sub,
+      req.user.role,
+      dto,
+    );
+    return { data: order, message: 'تم تحديث الدفعة' };
   }
 
   // ─────────────────────────────────────────────

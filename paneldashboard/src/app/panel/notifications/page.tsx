@@ -33,7 +33,25 @@ function colorForType(type: string) {
 
 function hrefForNotification(n: AppNotification): string | null {
   const orderId = n.data?.orderId;
-  if (typeof orderId === "string" && orderId) return `/panel/orders/${orderId}`;
+  if (typeof orderId === "string" && orderId) return `/panel/orders?id=${orderId}`;
+  if (n.type.startsWith("order.")) return "/panel/orders";
+
+  if (n.type.startsWith("restaurant.application")) {
+    const rid = n.data?.restaurantId;
+    const reqId = n.data?.requestId;
+    if (typeof reqId === "string" && reqId) return `/panel/restaurants?requestId=${reqId}`;
+    if (typeof rid === "string" && rid) return `/panel/restaurants?id=${rid}`;
+    return "/panel/restaurants";
+  }
+
+  if (n.type.startsWith("delivery.application")) {
+    const aid = n.data?.agentId;
+    if (typeof aid === "string" && aid) return `/panel/delivery-agents?id=${aid}`;
+    return "/panel/delivery-agents";
+  }
+
+  if (n.type.startsWith("restaurant.")) return "/panel/restaurants";
+
   return null;
 }
 

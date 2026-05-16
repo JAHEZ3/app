@@ -12,6 +12,8 @@ import { OrderServiceService } from './order-service.service';
 
 // Entities
 import { Order } from './entities/order.entity';
+import { OnlineOrder } from './entities/online-order.entity';
+import { LocalOrder } from './entities/local-order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemOption } from './entities/order-item-option.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
@@ -27,14 +29,22 @@ import { ChatService } from './chat/chat.service';
 import { PromoService } from './promo/promo.service';
 import { ReceiptService } from './receipt/receipt.service';
 import { S3Service } from './shared/s3.service';
+import { PosService } from './pos/pos.service';
+import { PrinterService } from './printer/printer.service';
 
 // Guards
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 
 // Queue
-import { RECEIPT_QUEUE } from './queue/queue.constants';
+import {
+  ONLINE_AUTO_READY_QUEUE,
+  POS_FINALIZE_QUEUE,
+  RECEIPT_QUEUE,
+} from './queue/queue.constants';
 import { ReceiptProcessor } from './queue/receipt.processor';
+import { PosProcessor } from './queue/pos.processor';
+import { OnlineAutoReadyProcessor } from './queue/online-auto-ready.processor';
 
 // Shared
 import { RedisLockService } from './shared/redis-lock.service';
@@ -61,6 +71,8 @@ import { RedisLockService } from './shared/redis-lock.service';
 
     TypeOrmModule.forFeature([
       Order,
+      OnlineOrder,
+      LocalOrder,
       OrderItem,
       OrderItemOption,
       OrderStatusHistory,
@@ -113,6 +125,8 @@ import { RedisLockService } from './shared/redis-lock.service';
     }),
 
     BullModule.registerQueue({ name: RECEIPT_QUEUE }),
+    BullModule.registerQueue({ name: POS_FINALIZE_QUEUE }),
+    BullModule.registerQueue({ name: ONLINE_AUTO_READY_QUEUE }),
   ],
   controllers: [OrderServiceController],
   providers: [
@@ -123,9 +137,13 @@ import { RedisLockService } from './shared/redis-lock.service';
     PromoService,
     ReceiptService,
     S3Service,
+    PosService,
+    PrinterService,
     JwtAuthGuard,
     RolesGuard,
     ReceiptProcessor,
+    PosProcessor,
+    OnlineAutoReadyProcessor,
     RedisLockService,
   ],
 })

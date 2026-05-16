@@ -27,6 +27,11 @@ export interface Restaurant {
   status: RestaurantStatus;
   isOpen: boolean;
   paymentInfo: PaymentInfo | null;
+  // ESC/POS thermal printers (LAN). Null IP disables that target.
+  kitchenPrinterIp: string | null;
+  kitchenPrinterPort: number | null;
+  cashierPrinterIp: string | null;
+  cashierPrinterPort: number | null;
   createdAt: string;
 }
 

@@ -178,6 +178,13 @@ export function useToggleMealAvailability() {
   });
 }
 
+export function useGenerateMealAiImage() {
+  return useMutation({
+    mutationFn: (mealId: string) => mealsApi.generateAiImage(mealId),
+    onSuccess: invalidateMenu,
+  });
+}
+
 export function useReorderMeals() {
   return useMutation({
     mutationFn: ({

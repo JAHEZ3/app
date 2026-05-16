@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Restaurant, RestaurantStatus } from '../entities/restaurant.entity';
 import { Menu } from '../entities/menu.entity';
 import { MenuSection } from '../entities/menu-section.entity';
@@ -330,6 +330,74 @@ export class RestaurantAnalyticsService {
       avgFoodRating: Number(num(row?.avgFood).toFixed(2)),
       avgDeliveryRating: Number(num(row?.avgDelivery).toFixed(2)),
       totalRatings: num(row?.count),
+    };
+  }
+
+  // ─── Legacy "me" shapes (used by the owner dashboard widgets) ──────────────
+
+  /** GET /api/restaurant/me/stats — flat KPI snapshot for dashboard cards. */
+  async getOwnerDashboardStats(userId: string) {
+    const restaurantId = await this.resolveRestaurantId(userId);
+    const restaurant = await this.restaurantRepo.findOne({
+      where: { id: restaurantId },
+      select: ['id', 'rating', 'totalRatings'],
+    });
+    const [orders, revenue] = await Promise.all([
+      this.orderCounts(restaurantId),
+      this.revenueTotals(restaurantId),
+    ]);
+    return {
+      data: {
+        totalOrders: orders.total,
+        totalRevenue: revenue.total,
+        rating: Number(restaurant?.rating ?? 0),
+        totalRatings: restaurant?.totalRatings ?? 0,
+        todayOrders: orders.today,
+        todayRevenue: revenue.today,
+        pendingOrders: orders.pending,
+      },
+      message: 'تم استرجاع إحصائيات لوحة التحكم.',
+    };
+  }
+
+  /** GET /api/restaurant/me/sales — daily/weekly/monthly time-series. */
+  async getOwnerSales(userId: string, period: 'daily' | 'weekly' | 'monthly') {
+    const restaurantId = await this.resolveRestaurantId(userId);
+    const days = period === 'daily' ? 1 : period === 'weekly' ? 7 : 30;
+    const series = await this.orderTimeSeries(restaurantId, days);
+    return {
+      data: series.map((p) => ({
+        date: p.day,
+        revenue: p.revenue,
+        orders: p.orders,
+      })),
+      message: 'تم استرجاع بيانات المبيعات.',
+    };
+  }
+
+  /** GET /api/restaurant/me/top-meals — top sellers shaped for the widget. */
+  async getOwnerTopMeals(userId: string) {
+    const restaurantId = await this.resolveRestaurantId(userId);
+    const top = await this.topMeals(restaurantId, 10);
+    const totalRevenue = top.reduce((sum, m) => sum + (m.revenue || 0), 0);
+    const meals = await this.mealRepo.find({
+      where: { id: In(top.map((m) => m.mealId)) },
+      select: ['id', 'imageUrl'],
+    });
+    const imageById = new Map(meals.map((m) => [m.id, m.imageUrl ?? null]));
+    return {
+      data: top.map((m) => ({
+        mealId: m.mealId,
+        mealName: m.name,
+        imageUrl: imageById.get(m.mealId) ?? null,
+        totalOrders: m.orders,
+        revenue: m.revenue,
+        percentageOfTotal:
+          totalRevenue > 0
+            ? Number(((m.revenue / totalRevenue) * 100).toFixed(2))
+            : 0,
+      })),
+      message: 'تم استرجاع الوجبات الأكثر مبيعًا.',
     };
   }
 

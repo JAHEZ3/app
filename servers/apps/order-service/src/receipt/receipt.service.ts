@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { CartItem } from '../cart/cart.service';
-import { Order } from '../entities/order.entity';
+import { OnlineOrder as Order } from '../entities/online-order.entity';
 
 @Injectable()
 export class ReceiptService {

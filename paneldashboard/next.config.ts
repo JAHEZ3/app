@@ -5,6 +5,7 @@ const RESTAURANT_TARGET = process.env.API_RESTAURANT_TARGET || "http://localhost
 const DELIVERY_TARGET = process.env.API_DELIVERY_TARGET || "http://localhost:3002";
 const MANAGER_TARGET = process.env.API_MANAGER_TARGET || "http://localhost:3006";
 const NOTIFICATION_TARGET = process.env.API_NOTIFICATION_TARGET || "http://localhost:3007";
+const ORDER_TARGET = process.env.API_ORDER_TARGET || "http://localhost:3001";
 
 const nextConfig: NextConfig = {
   images: {
@@ -19,6 +20,7 @@ const nextConfig: NextConfig = {
       { source: "/api/delivery/:path*", destination: `${DELIVERY_TARGET}/api/delivery/:path*` },
       { source: "/api/manager/:path*", destination: `${MANAGER_TARGET}/api/manager/:path*` },
       { source: "/api/notification/:path*", destination: `${NOTIFICATION_TARGET}/api/notification/:path*` },
+      { source: "/api/order/:path*", destination: `${ORDER_TARGET}/api/order/:path*` },
     ];
   },
 };

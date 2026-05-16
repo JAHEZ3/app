@@ -9,7 +9,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { ChatMessage, ChatSenderRole } from '../entities/chat-message.entity';
-import { Order } from '../entities/order.entity';
+// Chat is online-only (POS bills never need customer chat). Use OnlineOrder so
+// access checks against deliveryAgentId/customerId are type-safe.
+import { OnlineOrder as Order } from '../entities/online-order.entity';
 import { OrderStatus } from '../entities/order-enums';
 import { SendMessageDto } from './chat.dto';
 

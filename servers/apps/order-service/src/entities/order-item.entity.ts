@@ -34,6 +34,6 @@ export class OrderItem {
   @JoinColumn({ name: 'order_id' })
   order: Order;
 
-  @OneToMany(() => OrderItemOption, (opt) => opt.orderItemId)
+  @OneToMany(() => OrderItemOption, (opt) => opt.orderItem)
   options: OrderItemOption[];
 }

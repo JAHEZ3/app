@@ -82,6 +82,10 @@ function RestaurantSettingsTab() {
     minOrderAmount: "",
     avgDeliveryMinutes: "",
     deliveryRadiusKm: "",
+    kitchenPrinterIp: "",
+    kitchenPrinterPort: "",
+    cashierPrinterIp: "",
+    cashierPrinterPort: "",
   });
 
   useEffect(() => {
@@ -95,6 +99,10 @@ function RestaurantSettingsTab() {
         minOrderAmount: restaurant.minOrderAmount?.toString() ?? "",
         avgDeliveryMinutes: restaurant.avgDeliveryMinutes?.toString() ?? "",
         deliveryRadiusKm: restaurant.deliveryRadiusKm?.toString() ?? "",
+        kitchenPrinterIp: restaurant.kitchenPrinterIp ?? "",
+        kitchenPrinterPort: restaurant.kitchenPrinterPort?.toString() ?? "",
+        cashierPrinterIp: restaurant.cashierPrinterIp ?? "",
+        cashierPrinterPort: restaurant.cashierPrinterPort?.toString() ?? "",
       });
     }
   }, [restaurant]);
@@ -114,6 +122,11 @@ function RestaurantSettingsTab() {
           minOrderAmount: parseFloat(form.minOrderAmount) || 0,
           avgDeliveryMinutes: parseInt(form.avgDeliveryMinutes) || undefined,
           deliveryRadiusKm: parseFloat(form.deliveryRadiusKm) || undefined,
+          // Empty string clears the IP server-side (disables that printer).
+          kitchenPrinterIp: form.kitchenPrinterIp.trim() || null,
+          kitchenPrinterPort: parseInt(form.kitchenPrinterPort) || undefined,
+          cashierPrinterIp: form.cashierPrinterIp.trim() || null,
+          cashierPrinterPort: parseInt(form.cashierPrinterPort) || undefined,
         }),
       ]);
       success("تم حفظ البيانات");
@@ -196,6 +209,47 @@ function RestaurantSettingsTab() {
             value={form.deliveryRadiusKm}
             onChange={(e) => setForm({ ...form, deliveryRadiusKm: e.target.value })}
             placeholder="5"
+          />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-border p-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-foreground">الطابعات الحرارية</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            عناوين IP للطابعات على شبكة المطعم (ESC/POS عبر TCP). اتركها فارغة لتعطيل الطباعة التلقائية.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="IP طابعة المطبخ"
+            value={form.kitchenPrinterIp}
+            onChange={(e) => setForm({ ...form, kitchenPrinterIp: e.target.value })}
+            placeholder="192.168.1.50"
+            dir="ltr"
+          />
+          <Input
+            label="منفذ طابعة المطبخ"
+            type="number"
+            value={form.kitchenPrinterPort}
+            onChange={(e) => setForm({ ...form, kitchenPrinterPort: e.target.value })}
+            placeholder="9100"
+            dir="ltr"
+          />
+          <Input
+            label="IP طابعة الكاشير"
+            value={form.cashierPrinterIp}
+            onChange={(e) => setForm({ ...form, cashierPrinterIp: e.target.value })}
+            placeholder="192.168.1.51"
+            dir="ltr"
+          />
+          <Input
+            label="منفذ طابعة الكاشير"
+            type="number"
+            value={form.cashierPrinterPort}
+            onChange={(e) => setForm({ ...form, cashierPrinterPort: e.target.value })}
+            placeholder="9100"
+            dir="ltr"
           />
         </div>
       </div>

@@ -51,8 +51,8 @@ export function TopSellingItems() {
             <div key={item.mealId} className="flex items-center gap-3">
               {/* Image / placeholder */}
               <div className="w-12 h-12 rounded-xl bg-muted shrink-0 overflow-hidden flex items-center justify-center">
-                {item.imageUrl ? (
-                  <Image src={item.imageUrl} alt={item.mealName} width={48} height={48} className="object-cover w-full h-full" />
+                {item.imageUrl && /^https?:\/\//i.test(item.imageUrl) ? (
+                  <Image src={item.imageUrl} alt={item.mealName} width={48} height={48} className="object-cover w-full h-full" unoptimized />
                 ) : (
                   <span className="text-xl">🍔</span>
                 )}

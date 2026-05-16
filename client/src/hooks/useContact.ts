@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/axios";
+import { managerClient } from "@/lib/axios";
 import type {
   ApiResponse,
   ContactInfoDTO,
@@ -13,7 +13,7 @@ const CONTACT_KEYS = {
 };
 
 async function fetchContactInfo(): Promise<ContactInfoDTO> {
-  const { data } = await apiClient.get<ApiResponse<ContactInfoDTO>>(
+  const { data } = await managerClient.get<ApiResponse<ContactInfoDTO>>(
     "/public/contact/info"
   );
   return data.data;
@@ -32,7 +32,7 @@ export function useSubmitContact() {
     mutationFn: async (
       payload: ContactSubmitDTO
     ): Promise<ContactSubmitResponseDTO> => {
-      const { data } = await apiClient.post<
+      const { data } = await managerClient.post<
         ApiResponse<ContactSubmitResponseDTO>
       >("/public/contact", payload);
       return data.data;

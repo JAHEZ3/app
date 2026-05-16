@@ -33,7 +33,10 @@ function colorForType(type: string) {
 
 function hrefForNotification(n: AppNotification): string | null {
   const orderId = n.data?.orderId;
-  if (typeof orderId === "string" && orderId) return `/orders/${orderId}`;
+  if (typeof orderId === "string" && orderId) return `/orders?id=${orderId}`;
+  if (n.type.startsWith("order.")) return "/orders";
+  if (n.type === "restaurant.welcome") return "/dashboard";
+  if (n.type.startsWith("restaurant.")) return "/settings";
   return null;
 }
 

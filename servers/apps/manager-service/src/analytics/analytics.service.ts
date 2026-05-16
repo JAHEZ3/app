@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderRead, OrderStatus, PaymentStatus } from './read-models/order.read';
@@ -85,6 +85,204 @@ export class AnalyticsService {
   }
 
   // ─── Orders ────────────────────────────────────────────────────────────────
+
+  /**
+   * Manager-facing listing of every order on the platform with the snapshot
+   * fields (order number, customer / restaurant names, city, item count, driver).
+   * Reads directly from `orders` since the read-model deliberately omits
+   * snapshot columns — `orderRepo.query` is the cheapest path here.
+   */
+  async listOrders(params: {
+    status?: OrderStatus;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(params.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    const where: string[] = [];
+    const args: (string | number)[] = [];
+    if (params.status) {
+      args.push(params.status);
+      where.push(`o.status = $${args.length}`);
+    }
+    if (params.search && params.search.trim().length) {
+      args.push(`%${params.search.trim()}%`);
+      const i = args.length;
+      where.push(
+        `(o.order_number ILIKE $${i} OR o.customer_name_snapshot ILIKE $${i} OR o.restaurant_name_snapshot ILIKE $${i})`,
+      );
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const listSql = `
+      SELECT
+        o.id::text                                                           AS "id",
+        o.order_number                                                       AS "orderNumber",
+        COALESCE(o.customer_name_snapshot, '')                               AS "customerName",
+        COALESCE(o.restaurant_name_snapshot, '')                             AS "restaurantName",
+        o.status                                                             AS "status",
+        o.total_amount::float                                                AS "totalAmount",
+        COALESCE(o.delivery_address_snapshot->>'city', '')                   AS "city",
+        o.created_at                                                         AS "createdAt",
+        CASE WHEN a.id IS NULL THEN NULL
+             ELSE a.first_name || ' ' || a.last_name END                     AS "driverName",
+        (SELECT COUNT(*)::int FROM order_items oi WHERE oi.order_id = o.id)  AS "itemsCount"
+      FROM orders o
+      LEFT JOIN delivery_agents a ON a.id = o.delivery_agent_id
+      ${whereSql}
+      ORDER BY o.created_at DESC
+      OFFSET ${offset} LIMIT ${limit}
+    `;
+    const countSql = `SELECT COUNT(*)::int AS total FROM orders o ${whereSql}`;
+
+    const [items, totalRows] = await Promise.all([
+      this.orderRepo.query(listSql, args),
+      this.orderRepo.query(countSql, args),
+    ]);
+
+    return {
+      data: {
+        items,
+        total: num(totalRows?.[0]?.total),
+        page,
+        limit,
+      },
+      message: 'تم استرجاع قائمة الطلبات.',
+    };
+  }
+
+  /**
+   * Full single-order detail bundle: order header, customer, restaurant,
+   * delivery, payment totals, and items. Reads directly from the live
+   * tables (orders, order_items, deliveries, delivery_agents, restaurants).
+   */
+  async getOrderDetails(id: string) {
+    const orderRows = await this.orderRepo.query(
+      `
+      SELECT
+        o.id::text                              AS "id",
+        o.order_number                          AS "orderNumber",
+        o.status                                AS "status",
+        o.created_at                            AS "createdAt",
+        o.delivered_at                          AS "deliveredAt",
+        o.estimated_delivery_at                 AS "estimatedDeliveryAt",
+        o.subtotal::float                       AS "subtotal",
+        o.delivery_fee::float                   AS "deliveryFee",
+        o.discount_amount::float                AS "discountAmount",
+        o.total_amount::float                   AS "totalAmount",
+        o.payment_method                        AS "paymentMethod",
+        o.payment_status                        AS "paymentStatus",
+        o.customer_id::text                     AS "customerId",
+        o.restaurant_id::text                   AS "restaurantId",
+        o.delivery_agent_id::text               AS "deliveryAgentId",
+        COALESCE(o.customer_name_snapshot, '')  AS "customerName",
+        COALESCE(o.customer_phone_snapshot, '') AS "customerPhone",
+        COALESCE(o.restaurant_name_snapshot,'') AS "restaurantName",
+        o.delivery_address_snapshot             AS "deliveryAddress",
+        o.customer_notes                        AS "customerNotes"
+      FROM orders o
+      WHERE o.id = $1
+      LIMIT 1
+      `,
+      [id],
+    );
+    const order = orderRows[0];
+    if (!order) throw new NotFoundException('الطلب غير موجود.');
+
+    const [items, restaurantRows, deliveryRows] = await Promise.all([
+      this.orderRepo.query(
+        `
+        SELECT
+          oi.id::text                       AS "id",
+          oi.meal_name_snapshot             AS "name",
+          oi.quantity::int                  AS "quantity",
+          oi.unit_price_snapshot::float     AS "unitPrice",
+          oi.total_price::float             AS "totalPrice",
+          oi.special_instructions           AS "specialInstructions"
+        FROM order_items oi
+        WHERE oi.order_id = $1
+        ORDER BY oi.id
+        `,
+        [id],
+      ),
+      this.orderRepo.query(
+        `SELECT id::text AS "id", name, city FROM restaurants WHERE id = $1 LIMIT 1`,
+        [order.restaurantId],
+      ),
+      order.deliveryAgentId
+        ? this.orderRepo.query(
+            `
+            SELECT
+              d.status                              AS "status",
+              d.distance_km::float                  AS "distanceKm",
+              d.agent_earnings::float               AS "agentEarnings",
+              d.delivered_at                        AS "deliveredAt",
+              a.id::text                            AS "agentId",
+              a.first_name || ' ' || a.last_name    AS "agentName",
+              a.city                                AS "agentCity"
+            FROM deliveries d
+            LEFT JOIN delivery_agents a ON a.id = d.agent_id
+            WHERE d.order_id = $1
+            LIMIT 1
+            `,
+            [id],
+          )
+        : Promise.resolve([]),
+    ]);
+
+    return {
+      data: {
+        order: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          createdAt: order.createdAt,
+          deliveredAt: order.deliveredAt,
+          estimatedDeliveryAt: order.estimatedDeliveryAt,
+          customerNotes: order.customerNotes,
+        },
+        customer: {
+          id: order.customerId,
+          name: order.customerName,
+          phone: order.customerPhone,
+          address: order.deliveryAddress ?? null,
+        },
+        restaurant: {
+          id: order.restaurantId,
+          name: restaurantRows?.[0]?.name ?? order.restaurantName,
+          city: restaurantRows?.[0]?.city ?? null,
+        },
+        delivery: deliveryRows?.[0]
+          ? {
+              status: deliveryRows[0].status,
+              distanceKm: deliveryRows[0].distanceKm,
+              agentEarnings: deliveryRows[0].agentEarnings,
+              deliveredAt: deliveryRows[0].deliveredAt,
+              agent: deliveryRows[0].agentId
+                ? {
+                    id: deliveryRows[0].agentId,
+                    name: deliveryRows[0].agentName,
+                    city: deliveryRows[0].agentCity,
+                  }
+                : null,
+            }
+          : null,
+        payment: {
+          method: order.paymentMethod,
+          status: order.paymentStatus,
+          subtotal: order.subtotal,
+          deliveryFee: order.deliveryFee,
+          discountAmount: order.discountAmount,
+          totalAmount: order.totalAmount,
+        },
+        items,
+      },
+      message: 'تم استرجاع تفاصيل الطلب.',
+    };
+  }
 
   async getOrdersAnalytics() {
     const [counts, byStatus, byPaymentMethod, timeSeries] = await Promise.all([

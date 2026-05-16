@@ -1,11 +1,27 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index, OneToMany } from 'typeorm';
-import { OrderStatus, PaymentMethod, PaymentStatus } from './order-enums';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  Index,
+  OneToMany,
+  TableInheritance,
+} from 'typeorm';
+import { PaymentMethod, PaymentStatus } from './order-enums';
 import { OrderItem } from './order-item.entity';
 import { OrderStatusHistory } from './order-status-history.entity';
 
+/**
+ * Base order class — shared columns for every kind of order (online delivery,
+ * local POS dine-in, local POS takeaway). The `kind` discriminator column
+ * lets TypeORM resolve each row to the right child class (OnlineOrder /
+ * LocalOrder). Kind-specific columns live on the child entities; they exist
+ * in the same physical `orders` table but are only populated for the relevant
+ * child.
+ */
 @Entity('orders')
-@Index(['restaurantId', 'status'])
-@Index(['customerId', 'status'])
+@TableInheritance({ column: { type: 'varchar', name: 'kind', length: 20 } })
+@Index(['restaurantId'])
 // Prevents duplicate orders from the same customer using the same idempotency key
 @Index(['customerId', 'idempotencyKey'], { unique: true, where: '"idempotency_key" IS NOT NULL' })
 export class Order {
@@ -19,9 +35,10 @@ export class Order {
   @Column({ name: 'idempotency_key', type: 'uuid', nullable: true })
   idempotencyKey: string | null;
 
+  // Nullable: walk-in POS orders may have no registered customer
   @Index()
-  @Column({ name: 'customer_id', type: 'uuid' })
-  customerId: string;
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true })
+  customerId: string | null;
 
   @Index()
   @Column({ name: 'restaurant_id', type: 'uuid' })
@@ -29,18 +46,6 @@ export class Order {
 
   @Column({ name: 'owner_user_id', type: 'uuid', nullable: true })
   ownerUserId: string;
-
-  @Column({ name: 'delivery_address_id', type: 'uuid', nullable: true })
-  deliveryAddressId: string;
-
-  @Column({ name: 'delivery_address_snapshot', type: 'jsonb', nullable: true })
-  deliveryAddressSnapshot: {
-    street: string;
-    city: string;
-    lat: number;
-    lng: number;
-    label?: string;
-  };
 
   @Column({ name: 'restaurant_name_snapshot', length: 200, nullable: true })
   restaurantNameSnapshot: string;
@@ -51,22 +56,14 @@ export class Order {
   @Column({ name: 'customer_phone_snapshot', length: 50, nullable: true })
   customerPhoneSnapshot: string;
 
-  @Index()
-  @Column({ name: 'delivery_agent_id', type: 'uuid', nullable: true })
-  deliveryAgentId: string;
-
   @Column({ name: 'receipt_key', type: 'text', nullable: true })
   receiptKey: string;
 
-  @Index()
-  @Column({ type: 'enum', enum: OrderStatus, enumName: 'order_status', default: OrderStatus.PENDING })
-  status: OrderStatus;
+  @Column({ name: 'payment_proof_key', type: 'text', nullable: true })
+  paymentProofKey: string;
 
   @Column({ type: 'numeric', precision: 10, scale: 2 })
   subtotal: number;
-
-  @Column({ name: 'delivery_fee', type: 'numeric', precision: 8, scale: 2, default: 0.00 })
-  deliveryFee: number;
 
   @Column({ name: 'discount_amount', type: 'numeric', precision: 8, scale: 2, default: 0.00 })
   discountAmount: number;
@@ -90,18 +87,17 @@ export class Order {
   @Column({ name: 'is_locked', default: false })
   isLocked: boolean;
 
-  @Column({ name: 'estimated_delivery_at', type: 'timestamp', nullable: true })
-  estimatedDeliveryAt: Date;
-
-  @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
-  deliveredAt: Date;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  // Discriminator value: 'online' or 'local'. Set automatically by TypeORM
+  // based on which child class was used to save the row.
+  @Column({ length: 20 })
+  kind: string;
 
   @OneToMany(() => OrderItem, (item) => item.order)
   items: OrderItem[];
 
-  @OneToMany(() => OrderStatusHistory, (h) => h.orderId)
+  @OneToMany(() => OrderStatusHistory, (h) => h.order)
   statusHistory: OrderStatusHistory[];
 }
