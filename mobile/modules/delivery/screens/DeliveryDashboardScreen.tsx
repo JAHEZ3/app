@@ -112,7 +112,16 @@ export default function DeliveryDashboardScreen() {
     if (!profile) return null;
 
     const emptyValue = t('dashboard.fields.empty');
-    const ratingStars = Math.round(profile.rating ?? 0);
+    // Postgres `numeric` columns can arrive as strings; coerce so toFixed() works.
+    const toNum = (v: unknown, fallback = 0): number => {
+        if (v === null || v === undefined || v === '') return fallback;
+        const n = typeof v === 'number' ? v : parseFloat(String(v));
+        return Number.isFinite(n) ? n : fallback;
+    };
+    const ratingValue = toNum(profile.rating, 0);
+    const walletValue = toNum(profile.walletBalance, 0);
+    const deliveriesValue = toNum(profile.totalDeliveries, 0);
+    const ratingStars = Math.round(ratingValue);
     const vehicleLabel = profile.vehicleType
         ? t(`application.vehicles.${profile.vehicleType === 'on_foot' ? 'onFoot' : profile.vehicleType}` as const)
         : emptyValue;
@@ -190,7 +199,7 @@ export default function DeliveryDashboardScreen() {
                                 <Ionicons key={i} name={i < ratingStars ? 'star' : 'star-outline'} size={16} color="#F55905" />
                             ))}
                             <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 13, color: '#767777', marginLeft: 4 }}>
-                                {(profile.rating ?? 0).toFixed(1)}
+                                {ratingValue.toFixed(1)}
                             </Text>
                         </View>
 
@@ -203,9 +212,9 @@ export default function DeliveryDashboardScreen() {
 
                 <View style={{ paddingHorizontal: 20, paddingTop: 48 }}>
                     <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-                        <StatCard icon="bicycle-outline" label={t('dashboard.stats.deliveries')} value={profile.totalDeliveries ?? 0} delay={200} />
-                        <StatCard icon="wallet-outline" label={t('dashboard.stats.balance')} value={`ILS ${(profile.walletBalance ?? 0).toFixed(0)}`} color="#1a7a4a" delay={280} />
-                        <StatCard icon="star-outline" label={t('dashboard.stats.rating')} value={(profile.rating ?? 0).toFixed(1)} color="#c94400" delay={360} />
+                        <StatCard icon="bicycle-outline" label={t('dashboard.stats.deliveries')} value={deliveriesValue} delay={200} />
+                        <StatCard icon="wallet-outline" label={t('dashboard.stats.balance')} value={`ILS ${walletValue.toFixed(0)}`} color="#1a7a4a" delay={280} />
+                        <StatCard icon="star-outline" label={t('dashboard.stats.rating')} value={ratingValue.toFixed(1)} color="#c94400" delay={360} />
                     </View>
 
                     <View style={{

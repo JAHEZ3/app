@@ -103,6 +103,10 @@ export default function RootLayout() {
                         name="orders/[id]/track"
                         options={{ animation: "fade", presentation: "modal" }}
                       />
+                      <Stack.Screen
+                        name="orders/[id]/chat"
+                        options={{ animation: "slide_from_bottom" }}
+                      />
                       <Stack.Screen name="profile/index" />
                     </Stack>
                   </OrderProvider>

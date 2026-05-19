@@ -96,7 +96,41 @@
     "notReadyTitle": "Receipt not ready",
     "notReadyBody": "The receipt will be available once the order is processed.",
     "errorTitle": "Could not open receipt",
-    "errorBody": "Please try again later."
+    "errorBody": "Please try again later.",
+    "expiredTitle": "Link expired",
+    "expiredBody": "The download link expired. Please try again.",
+    "unauthorizedTitle": "Session expired",
+    "unauthorizedBody": "Please sign in again to view the receipt.",
+    "networkTitle": "Connection issue",
+    "networkBody": "Check your connection and try again.",
+    "openFailedTitle": "Could not open receipt",
+    "openFailedBody": "No app is available to view this file.",
+    "retry": "Retry"
+  },
+  "actions": {
+    "cancel": "Cancel"
+  },
+  "rating": {
+    "openRating": "Rate your order",
+    "openRatingBody": "Tell us how the food and delivery went",
+    "alreadyRatedPill": "Thanks — you've rated this order",
+    "modalTitle": "Rate your order",
+    "modalSubtitle": "Your feedback helps us improve",
+    "foodLabel": "Food quality",
+    "deliveryLabel": "Delivery experience",
+    "commentLabel": "Comment (optional)",
+    "commentPlaceholder": "Tell us more about your experience…",
+    "submit": "Submit rating",
+    "submitting": "Submitting…",
+    "requiredHint": "Please rate both food and delivery to submit.",
+    "thanksTitle": "Thanks for your feedback",
+    "thanksBody": "We'll share it with the restaurant.",
+    "alreadyRated": "You've already rated this order.",
+    "notDelivered": "You can rate the order once it has been delivered.",
+    "forbidden": "You can't rate this order.",
+    "unauthorized": "Please sign in again.",
+    "network": "We couldn't reach the server. Check your connection.",
+    "genericError": "Could not submit your rating. Please try again."
   },
   "realtime": {
     "live": "Live",
@@ -113,6 +147,24 @@
     "etaMinutes": "~ {{count}} min",
     "etaUnknown": "ETA pending…",
     "distance": "{{km}} away"
+  },
+  "chat": {
+    "title": "Order chat",
+    "openChat": "Message the restaurant or driver",
+    "openChatBody": "Real-time, in-app conversation",
+    "placeholder": "Type a message…",
+    "send": "Send",
+    "sending": "Sending…",
+    "failed": "Failed",
+    "retry": "Tap to retry",
+    "dateToday": "Today",
+    "dateYesterday": "Yesterday",
+    "emptyTitle": "Start the conversation",
+    "emptyBody": "Messages between you and the restaurant or driver will appear here.",
+    "errorTitle": "Could not load chat",
+    "errorBody": "Please try again.",
+    "retryLoad": "Try again",
+    "typing": "typing…"
   },
   "reorder": "Reorder"
 }

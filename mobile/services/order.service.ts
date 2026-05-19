@@ -7,12 +7,15 @@ import type {
     OrderDetails,
     OrderDetailsResponse,
     OrderListItem,
+    OrderRating,
     OrdersListResponse,
     OrdersPaginationMeta,
     OrdersQueryParams,
     PromoValidatePayload,
     PromoValidateResponse,
     PromoValidationResult,
+    RateOrderPayload,
+    RateOrderResponse,
 } from '@/modules/Order/types';
 
 const CHECKOUT_URL = '/api/order/checkout';
@@ -91,6 +94,17 @@ export const OrderService = {
             `${ORDERS_URL}/${id}/receipt`,
         );
         return res.data?.data?.url ?? null;
+    },
+
+    rateOrder: async (
+        id: string,
+        payload: RateOrderPayload,
+    ): Promise<OrderRating> => {
+        const res = await orderApi.post<RateOrderResponse>(
+            `${ORDERS_URL}/${id}/rate`,
+            payload,
+        );
+        return res.data.data;
     },
 };
 

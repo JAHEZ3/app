@@ -25,7 +25,9 @@ import OrderDetailsSkeleton from "../components/OrderDetailsSkeleton";
 import { getOrdersErrorMessage } from "../hooks/useOrders";
 import { useOrderDetails } from "../hooks/useOrderDetails";
 import { useOrderReceipt } from "../hooks/useOrderReceipt";
+import { useRateOrder } from "../hooks/useRateOrder";
 import { useJoinOrderRoom, useSocketStatus } from "@/hooks/useSocket";
+import RatingBottomSheet from "../components/RatingBottomSheet";
 
 const formatPrice = (value: number, currency: string) =>
     `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
@@ -218,10 +220,88 @@ function OrderDetailsScreen() {
     // auto-rejoins after a reconnect, so we don't need to babysit it.
     useJoinOrderRoom(orderId);
 
+    // Rating modal state.
+    const { submit: submitRating, isSubmitting: isSubmittingRating } = useRateOrder();
+    const [rateOpen, setRateOpen] = useState(false);
+    const [rateError, setRateError] = useState<string | null>(null);
+
     const handleBack = useCallback(() => {
         if (router.canGoBack()) router.back();
         else router.replace("/orders" as never);
     }, []);
+
+    const handleSubmitRating = useCallback(
+        async (payload: {
+            foodRating: number;
+            deliveryRating: number;
+            comment?: string;
+        }) => {
+            if (!orderId) return;
+            setRateError(null);
+            const result = await submitRating({ orderId, payload });
+            if (result.ok) {
+                setRateOpen(false);
+                Alert.alert(
+                    t("rating.thanksTitle", {
+                        defaultValue: "Thanks for your feedback",
+                    }),
+                    t("rating.thanksBody", {
+                        defaultValue: "We'll share it with the restaurant.",
+                    }),
+                );
+                return;
+            }
+            // Map known reasons to localized inline messages.
+            switch (result.reason) {
+                case "already_rated":
+                    setRateError(
+                        t("rating.alreadyRated", {
+                            defaultValue: "You've already rated this order.",
+                        }),
+                    );
+                    break;
+                case "not_delivered":
+                    setRateError(
+                        t("rating.notDelivered", {
+                            defaultValue:
+                                "You can rate the order once it has been delivered.",
+                        }),
+                    );
+                    break;
+                case "forbidden":
+                    setRateError(
+                        t("rating.forbidden", {
+                            defaultValue: "You can't rate this order.",
+                        }),
+                    );
+                    break;
+                case "unauthorized":
+                    setRateError(
+                        t("rating.unauthorized", {
+                            defaultValue: "Please sign in again.",
+                        }),
+                    );
+                    break;
+                case "network":
+                    setRateError(
+                        t("rating.network", {
+                            defaultValue:
+                                "We couldn't reach the server. Check your connection.",
+                        }),
+                    );
+                    break;
+                default:
+                    setRateError(
+                        result.message ??
+                            t("rating.genericError", {
+                                defaultValue:
+                                    "Could not submit your rating. Please try again.",
+                            }),
+                    );
+            }
+        },
+        [orderId, submitRating, t],
+    );
 
     const placedAt = useMemo(
         () => formatDateTime(order?.createdAt, language === "ar" ? "ar" : "en-GB"),
@@ -242,17 +322,69 @@ function OrderDetailsScreen() {
         if (!orderId) return;
         const result = await openReceipt(orderId);
         if (result.ok) return;
-        if (result.reason === "not_ready") {
-            Alert.alert(
-                t("receipt.notReadyTitle"),
-                t("receipt.notReadyBody"),
-            );
-            return;
+        switch (result.reason) {
+            case "not_ready":
+                Alert.alert(
+                    t("receipt.notReadyTitle"),
+                    t("receipt.notReadyBody"),
+                );
+                return;
+            case "expired":
+                Alert.alert(
+                    t("receipt.expiredTitle", {
+                        defaultValue: "Link expired",
+                    }),
+                    t("receipt.expiredBody", {
+                        defaultValue:
+                            "The download link expired. Please try again.",
+                    }),
+                    [
+                        { text: t("actions.cancel", { defaultValue: "Cancel" }), style: "cancel" },
+                        {
+                            text: t("receipt.retry", { defaultValue: "Retry" }),
+                            onPress: () => {
+                                handleOpenReceipt();
+                            },
+                        },
+                    ],
+                );
+                return;
+            case "unauthorized":
+                Alert.alert(
+                    t("receipt.unauthorizedTitle", {
+                        defaultValue: "Session expired",
+                    }),
+                    t("receipt.unauthorizedBody", {
+                        defaultValue: "Please sign in again to view the receipt.",
+                    }),
+                );
+                return;
+            case "network":
+                Alert.alert(
+                    t("receipt.networkTitle", {
+                        defaultValue: "Connection issue",
+                    }),
+                    t("receipt.networkBody", {
+                        defaultValue: "Check your connection and try again.",
+                    }),
+                );
+                return;
+            case "open_failed":
+                Alert.alert(
+                    t("receipt.openFailedTitle", {
+                        defaultValue: "Could not open receipt",
+                    }),
+                    t("receipt.openFailedBody", {
+                        defaultValue: "No app is available to view this file.",
+                    }),
+                );
+                return;
+            default:
+                Alert.alert(
+                    t("receipt.errorTitle"),
+                    result.message ?? t("receipt.errorBody"),
+                );
         }
-        Alert.alert(
-            t("receipt.errorTitle"),
-            result.message ?? t("receipt.errorBody"),
-        );
     }, [openReceipt, orderId, t]);
 
     let content: React.ReactNode;
@@ -492,6 +624,62 @@ function OrderDetailsScreen() {
                                 name={isRTL ? "chevron-back" : "chevron-forward"}
                                 size={18}
                                 color={colors.onPrimary}
+                            />
+                        </AnimatedPressable>
+                    ) : null}
+                    {!["DELIVERED", "CANCELLED"].includes(order.status) ? (
+                        <AnimatedPressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/orders/[id]/chat",
+                                    params: { id: order.orderId },
+                                } as never)
+                            }
+                            haptic="selection"
+                            scaleTo={0.97}
+                            style={[
+                                styles.chatBtn,
+                                isRTL && styles.rowReverse,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("chat.openChat", {
+                                defaultValue: "Open chat",
+                            })}
+                        >
+                            <View style={styles.chatIcon}>
+                                <Ionicons
+                                    name="chatbubbles"
+                                    size={16}
+                                    color={colors.primary}
+                                />
+                            </View>
+                            <View style={styles.trackTextBlock}>
+                                <Text
+                                    style={[
+                                        styles.chatTitle,
+                                        { writingDirection },
+                                    ]}
+                                >
+                                    {t("chat.openChat", {
+                                        defaultValue: "Message the restaurant or driver",
+                                    })}
+                                </Text>
+                                <Text
+                                    style={[
+                                        styles.chatBody,
+                                        { writingDirection },
+                                    ]}
+                                    numberOfLines={1}
+                                >
+                                    {t("chat.openChatBody", {
+                                        defaultValue: "Real-time, in-app conversation",
+                                    })}
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name={isRTL ? "chevron-back" : "chevron-forward"}
+                                size={18}
+                                color={colors.primary}
                             />
                         </AnimatedPressable>
                     ) : null}
@@ -760,6 +948,84 @@ function OrderDetailsScreen() {
                     </Section>
                 ) : null}
 
+                {/* Rate-your-order CTA (only after delivery, hidden once rated) */}
+                {order.status === "DELIVERED" && !order.hasRating ? (
+                    <Animated.View
+                        entering={FadeInUp.delay(280).duration(360)}
+                    >
+                        <AnimatedPressable
+                            onPress={() => {
+                                setRateError(null);
+                                setRateOpen(true);
+                            }}
+                            haptic="impact"
+                            scaleTo={0.97}
+                            style={[
+                                styles.rateBtn,
+                                isRTL && styles.rowReverse,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("rating.openRating", {
+                                defaultValue: "Rate your order",
+                            })}
+                        >
+                            <View style={styles.rateIcon}>
+                                <Ionicons
+                                    name="star"
+                                    size={18}
+                                    color="#F5B400"
+                                />
+                            </View>
+                            <View style={styles.rateTextBlock}>
+                                <Text
+                                    style={[styles.rateTitle, { writingDirection }]}
+                                >
+                                    {t("rating.openRating", {
+                                        defaultValue: "Rate your order",
+                                    })}
+                                </Text>
+                                <Text
+                                    style={[styles.rateBody, { writingDirection }]}
+                                    numberOfLines={1}
+                                >
+                                    {t("rating.openRatingBody", {
+                                        defaultValue:
+                                            "Tell us how the food and delivery went",
+                                    })}
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name={isRTL ? "chevron-back" : "chevron-forward"}
+                                size={18}
+                                color={colors.onSurface}
+                            />
+                        </AnimatedPressable>
+                    </Animated.View>
+                ) : null}
+
+                {/* Already-rated pill */}
+                {order.status === "DELIVERED" && order.hasRating ? (
+                    <Animated.View
+                        entering={FadeInUp.delay(280).duration(360)}
+                        style={[
+                            styles.ratedPill,
+                            isRTL && styles.rowReverse,
+                        ]}
+                    >
+                        <Ionicons name="star" size={14} color="#F5B400" />
+                        <Text
+                            style={[
+                                styles.ratedPillText,
+                                { writingDirection },
+                            ]}
+                        >
+                            {t("rating.alreadyRatedPill", {
+                                defaultValue: "Thanks — you've rated this order",
+                            })}
+                        </Text>
+                    </Animated.View>
+                ) : null}
+
                 {/* Receipt */}
                 <Animated.View
                     entering={FadeInUp.delay(310).duration(360)}
@@ -835,6 +1101,46 @@ function OrderDetailsScreen() {
             </View>
 
             <View style={styles.content}>{content}</View>
+
+            <RatingBottomSheet
+                visible={rateOpen}
+                onDismiss={() => {
+                    if (isSubmittingRating) return;
+                    setRateOpen(false);
+                    setRateError(null);
+                }}
+                onSubmit={handleSubmitRating}
+                isSubmitting={isSubmittingRating}
+                title={t("rating.modalTitle", {
+                    defaultValue: "Rate your order",
+                })}
+                subtitle={t("rating.modalSubtitle", {
+                    defaultValue: "Your feedback helps us improve",
+                })}
+                foodLabel={t("rating.foodLabel", {
+                    defaultValue: "Food quality",
+                })}
+                deliveryLabel={t("rating.deliveryLabel", {
+                    defaultValue: "Delivery experience",
+                })}
+                commentLabel={t("rating.commentLabel", {
+                    defaultValue: "Comment (optional)",
+                })}
+                commentPlaceholder={t("rating.commentPlaceholder", {
+                    defaultValue: "Tell us more about your experience…",
+                })}
+                submitLabel={t("rating.submit", {
+                    defaultValue: "Submit rating",
+                })}
+                submittingLabel={t("rating.submitting", {
+                    defaultValue: "Submitting…",
+                })}
+                requiredHint={t("rating.requiredHint", {
+                    defaultValue: "Please rate both food and delivery to submit.",
+                })}
+                inlineError={rateError}
+                restaurantName={order?.restaurantName}
+            />
         </SafeAreaView>
     );
 }
@@ -1197,6 +1503,59 @@ const styles = StyleSheet.create({
     receiptDock: {
         marginTop: 2,
     },
+    rateBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        borderRadius: radii.xl,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.surfaceContainer,
+        ...shadows.soft,
+    },
+    rateIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: "#FFF7E0",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    rateTextBlock: {
+        flex: 1,
+        minWidth: 0,
+    },
+    rateTitle: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    rateBody: {
+        marginTop: 2,
+        fontFamily: typography.bodyMedium,
+        color: colors.outline,
+        fontSize: 12,
+        lineHeight: 15,
+    },
+    ratedPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        alignSelf: "center",
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: radii.pill,
+        backgroundColor: "#FFF7E0",
+    },
+    ratedPillText: {
+        fontFamily: typography.bodyBold,
+        color: "#A66A00",
+        fontSize: 12,
+        lineHeight: 15,
+    },
     trackBtn: {
         flexDirection: "row",
         alignItems: "center",
@@ -1229,6 +1588,39 @@ const styles = StyleSheet.create({
         marginTop: 2,
         fontFamily: typography.bodyMedium,
         color: "rgba(255,255,255,0.85)",
+        fontSize: 12,
+        lineHeight: 15,
+    },
+    chatBtn: {
+        marginTop: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: radii.lg,
+        backgroundColor: colors.faintPrimary,
+        borderWidth: 1,
+        borderColor: colors.softPrimary,
+    },
+    chatIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.card,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    chatTitle: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    chatBody: {
+        marginTop: 2,
+        fontFamily: typography.bodyMedium,
+        color: colors.outline,
         fontSize: 12,
         lineHeight: 15,
     },

@@ -191,10 +191,34 @@ export interface OrderDetails {
     delivery?: OrderDeliveryInfo;
     /** Truthy when the receipt has been generated and is downloadable. */
     hasReceipt?: boolean;
+    /** Local flag — set after a successful rating submission to hide the CTA. */
+    hasRating?: boolean;
+    rating?: OrderRating;
 }
 
 export interface ReceiptUrlResponse {
     data: { url: string } | null;
+    message?: string | null;
+}
+
+export interface RateOrderPayload {
+    foodRating: number;
+    deliveryRating: number;
+    comment?: string;
+}
+
+export interface OrderRating {
+    id?: string;
+    orderId?: string;
+    customerId?: string;
+    foodRating: number;
+    deliveryRating: number;
+    comment?: string;
+    createdAt?: string;
+}
+
+export interface RateOrderResponse {
+    data: OrderRating;
     message?: string | null;
 }
 

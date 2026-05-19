@@ -99,6 +99,7 @@
     "total": "Total paid",
     "eta": "Arrives in 25-35 min",
     "trackOrder": "Track your order",
+    "trackOrderCountdown": "{{count}}s",
     "backHome": "Back to home"
   }
 }

@@ -3,10 +3,12 @@ import type {
     CheckoutPayload,
     OrderDetails,
     OrderListItem,
+    OrderRating,
     OrdersPaginationMeta,
     OrdersQueryParams,
     PromoValidatePayload,
     PromoValidationResult,
+    RateOrderPayload,
 } from '../types';
 
 export interface OrdersPage {
@@ -20,4 +22,5 @@ export interface OrderRepository {
     getOrders: (params?: OrdersQueryParams) => Promise<OrdersPage>;
     getOrderById: (id: string) => Promise<OrderDetails>;
     getReceiptUrl: (id: string) => Promise<string | null>;
+    rateOrder: (id: string, payload: RateOrderPayload) => Promise<OrderRating>;
 }

@@ -103,6 +103,7 @@
     "total": "الإجمالي المدفوع",
     "eta": "يصل خلال 25-35 دقيقة",
     "trackOrder": "تتبع طلبك",
+    "trackOrderCountdown": "{{count}} ث",
     "backHome": "العودة للرئيسية"
   }
 }

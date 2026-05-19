@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -81,6 +81,44 @@ function OrderSuccessScreen() {
             router.replace("/orders" as never);
         }
     }, [orderId]);
+
+    /**
+     * After the celebration animation has had a moment to play, auto-route to
+     * the order details screen. That screen joins the per-order socket room
+     * (status updates + delivery location) and exposes the chat entry point —
+     * which gives the customer the "live session" they expect right after
+     * checkout. The user can still tap "Back to home" before the timer fires.
+     */
+    const AUTO_REDIRECT_MS = 3_500;
+    const [secondsLeft, setSecondsLeft] = useState(
+        Math.ceil(AUTO_REDIRECT_MS / 1000),
+    );
+    const dismissedRef = useRef(false);
+
+    useEffect(() => {
+        if (!orderId) return;
+        const startedAt = Date.now();
+        const tick = setInterval(() => {
+            if (dismissedRef.current) return;
+            const remaining = Math.max(
+                0,
+                Math.ceil((AUTO_REDIRECT_MS - (Date.now() - startedAt)) / 1000),
+            );
+            setSecondsLeft(remaining);
+        }, 250);
+        const timer = setTimeout(() => {
+            if (dismissedRef.current) return;
+            handleTrack();
+        }, AUTO_REDIRECT_MS);
+        return () => {
+            clearInterval(tick);
+            clearTimeout(timer);
+        };
+    }, [orderId, handleTrack]);
+
+    const cancelAutoRedirect = useCallback(() => {
+        dismissedRef.current = true;
+    }, []);
 
     const handleHome = useCallback(() => {
         router.replace("/home/Home" as never);
@@ -173,14 +211,24 @@ function OrderSuccessScreen() {
                     style={styles.actions}
                 >
                     <AnimatedPressable
-                        onPress={handleTrack}
+                        onPress={() => {
+                            cancelAutoRedirect();
+                            handleTrack();
+                        }}
                         scaleTo={0.96}
                         haptic="impact"
                         style={[styles.primaryBtn, isRTL && styles.rowReverse]}
                         accessibilityRole="button"
                     >
                         <Text style={[styles.primaryBtnText, { writingDirection }]}>
-                            {t("success.trackOrder")}
+                            {orderId && secondsLeft > 0
+                                ? t("success.trackOrderCountdown", {
+                                      count: secondsLeft,
+                                      defaultValue: "{{count}}",
+                                  }) +
+                                  " · " +
+                                  t("success.trackOrder")
+                                : t("success.trackOrder")}
                         </Text>
                         <Ionicons
                             name={isRTL ? "arrow-back" : "arrow-forward"}
@@ -190,7 +238,10 @@ function OrderSuccessScreen() {
                     </AnimatedPressable>
 
                     <AnimatedPressable
-                        onPress={handleHome}
+                        onPress={() => {
+                            cancelAutoRedirect();
+                            handleHome();
+                        }}
                         scaleTo={0.96}
                         haptic="selection"
                         style={styles.secondaryBtn}

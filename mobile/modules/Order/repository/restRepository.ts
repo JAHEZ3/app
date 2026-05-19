@@ -6,11 +6,14 @@ import type {
     CheckoutResponse,
     OrderDetails,
     OrderDetailsResponse,
+    OrderRating,
     OrdersListResponse,
     OrdersPaginationMeta,
     PromoValidatePayload,
     PromoValidateResponse,
     PromoValidationResult,
+    RateOrderPayload,
+    RateOrderResponse,
     ReceiptUrlResponse,
 } from '../types';
 import { OrderRepository, OrdersPage } from './OrderRepository';
@@ -112,6 +115,21 @@ export const restRepository = (): OrderRepository => ({
             return res.data?.data?.url ?? null;
         } catch (err) {
             logError('getReceiptUrl', err);
+            throw err;
+        }
+    },
+
+    rateOrder: async (
+        id: string,
+        payload: RateOrderPayload,
+    ): Promise<OrderRating> => {
+        const url = `${ORDERS_URL}/${id}/rate`;
+        console.log(`[order] → POST ${url}`, payload);
+        try {
+            const res = await orderApi.post<RateOrderResponse>(url, payload);
+            return res.data.data;
+        } catch (err) {
+            logError('rateOrder', err);
             throw err;
         }
     },
