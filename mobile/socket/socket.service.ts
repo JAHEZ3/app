@@ -2,6 +2,30 @@ import { io, Socket } from 'socket.io-client';
 
 export type SocketStatus = 'idle' | 'connecting' | 'open' | 'closed';
 
+/**
+ * Error events that bubble up to UI subscribers. We deliberately keep this
+ * limited to **terminal, user-actionable** failures from the gateway:
+ *
+ *   - `AUTH_FAILED`       — token rejected; user needs to re-login
+ *   - `ACCOUNT_INACTIVE`  — account suspended/banned; show a status screen
+ *
+ * Transient network failures (`connect_error`, `reconnect_failed`) are
+ * logged to the console only. The HTTP API is independent of the socket,
+ * so the app stays fully functional while the socket retries / gives up.
+ * `CONNECT_ERROR` / `GAVE_UP` are kept in the union for backwards
+ * compatibility with any external dispatcher, but the service no longer
+ * fires them itself.
+ */
+export interface SocketError {
+    code:
+        | 'AUTH_FAILED'
+        | 'ACCOUNT_INACTIVE'
+        | 'CONNECT_ERROR'
+        | 'GAVE_UP'
+        | (string & {});
+    message: string;
+}
+
 export type SocketEventName =
     // canonical names used by callers
     | 'order:status:updated'
@@ -39,17 +63,25 @@ const EVENT_ALIASES: Record<string, string[]> = {
     'chat:message': ['chat:new'],
 };
 
-const DEFAULT_URL = 'ws://localhost:3000';
+const DEFAULT_URL = process.env.EXPO_PUBLIC_WS_URL ?? '';
 
 class SocketService {
     private socket: Socket | null = null;
-    private url: string = process.env.EXPO_PUBLIC_WS_URL ?? DEFAULT_URL;
+    private url: string = DEFAULT_URL;
     private token: string | null = null;
     private status: SocketStatus = 'idle';
 
     /** Event name → set of handler callbacks. Sets prevent duplicate listeners. */
     private listeners = new Map<string, Set<Handler>>();
     private statusListeners = new Set<(status: SocketStatus) => void>();
+    /** Subscribers for the server-emitted `error` event + connect_error. */
+    private errorListeners = new Set<(err: SocketError) => void>();
+    /** Most recent error so a late-subscribing UI can render the previous failure. */
+    private lastError: SocketError | null = null;
+    /** Counter for consecutive failed connect attempts. Resets on successful
+     *  connect. Used to throttle the log spam — we want to know about the
+     *  *first* failure clearly, not see it 17 times. */
+    private consecutiveFailures = 0;
 
     /** Rooms the app wants to be in. Re-joined automatically after reconnect. */
     private desiredRooms = new Map<string, JoinRoom>();
@@ -66,6 +98,14 @@ class SocketService {
      */
     connect(token: string) {
         if (!token) return;
+
+        // Skip silently if no WS URL is configured — prevents pointless
+        // reconnect loops against ws://localhost:3000 on a physical device.
+        if (!this.url) {
+            console.log('[socket] EXPO_PUBLIC_WS_URL is not set — socket disabled');
+            return;
+        }
+
         if (this.token === token && this.socket?.connected) return;
 
         // Token rotation while connected — tear down and rebuild so the gateway
@@ -84,15 +124,21 @@ class SocketService {
 
         this.setStatus('connecting');
 
+        // Start with HTTP long-polling so the session handshake succeeds even
+        // when the gateway sits behind a reverse-proxy that blocks raw WebSocket
+        // upgrades. socket.io automatically upgrades the session to WebSocket
+        // in the background once the polling session is established — this is
+        // the same order the restaurant dashboard uses and is why that socket
+        // connects reliably while ['websocket', 'polling'] times out on device.
         this.socket = io(this.url, {
-            transports: ['websocket'],
+            transports: ['polling', 'websocket'],
             auth: { token },
             reconnection: true,
-            reconnectionAttempts: Infinity,
+            reconnectionAttempts: 10,
             reconnectionDelay: 1_000,
             reconnectionDelayMax: 30_000,
             randomizationFactor: 0.3,
-            timeout: 10_000,
+            timeout: 8_000,
             forceNew: false,
         });
 
@@ -150,6 +196,25 @@ class SocketService {
         };
     }
 
+    /**
+     * Subscribe to gateway-emitted `error` events and `connect_error` failures.
+     * Returns an unsubscribe function. New subscribers are immediately notified
+     * with the last error (if any) so a screen mounted *after* the failure
+     * still gets a chance to surface it.
+     */
+    onError(handler: (err: SocketError) => void): () => void {
+        this.errorListeners.add(handler);
+        if (this.lastError) handler(this.lastError);
+        return () => {
+            this.errorListeners.delete(handler);
+        };
+    }
+
+    /** Clear the cached error after the UI has shown / acknowledged it. */
+    clearError() {
+        this.lastError = null;
+    }
+
     emit(event: string, data: unknown) {
         if (!this.socket || !this.socket.connected) {
             console.log('[socket] emit dropped — not connected', { event });
@@ -197,6 +262,10 @@ class SocketService {
         socket.on('connect', () => {
             console.log('[socket] connected', { id: socket.id });
             this.setStatus('open');
+            // A successful connect clears any prior auth/connect failure so the
+            // UI banner stops shouting after a recovery.
+            this.lastError = null;
+            this.consecutiveFailures = 0;
             this.rejoinRooms();
         });
 
@@ -206,11 +275,41 @@ class SocketService {
         });
 
         socket.on('connect_error', (err: Error) => {
-            console.log('[socket] connect_error', { message: err.message });
+            this.consecutiveFailures += 1;
+            // Log first failure + every 5th retry, but DO NOT dispatch to
+            // error subscribers while the socket is still retrying. The HTTP
+            // API is unaffected, the app keeps running, and the UI shouldn't
+            // shout an error banner that will resolve itself in a few seconds.
+            // The terminal `reconnect_failed` event handles GAVE_UP for us.
+            if (
+                this.consecutiveFailures === 1 ||
+                this.consecutiveFailures % 5 === 0
+            ) {
+                console.log('[socket] connect_error (retrying silently)', {
+                    message: err.message,
+                    attempt: this.consecutiveFailures,
+                });
+            }
+        });
+
+        // Server-emitted error from the gateway. Today this fires for
+        // AUTH_FAILED (bad/expired token) and ACCOUNT_INACTIVE (suspended user).
+        // The gateway calls `disconnect(true)` immediately after, so this is
+        // the only chance to surface the reason — without this listener the
+        // failure is completely invisible to the UI.
+        socket.on('error', (payload: unknown) => {
+            const err = this.coerceError(payload);
+            console.log('[socket] gateway error', err);
+            this.dispatchError(err);
         });
 
         socket.io.on('reconnect_attempt', (attempt: number) => {
-            console.log('[socket] reconnect_attempt', { attempt });
+            // Same throttling as connect_error so the two streams don't fight
+            // for log space. Status update still happens every attempt so the
+            // UI "connecting…" indicator stays accurate.
+            if (attempt === 1 || attempt % 5 === 0) {
+                console.log('[socket] reconnect_attempt', { attempt });
+            }
             this.setStatus('connecting');
         });
 
@@ -221,9 +320,31 @@ class SocketService {
         });
 
         socket.io.on('reconnect_failed', () => {
-            console.log('[socket] reconnect_failed');
+            // Logged for diagnostics only — NO user-visible banner.
+            // The HTTP API still works; the app is fully usable without sockets,
+            // so a network/gateway timeout shouldn't bother the user. They can
+            // pull-to-refresh to recover when connectivity is back, or restart
+            // the app for a clean retry.
+            console.log('[socket] reconnect_failed — giving up silently (HTTP still works)');
             this.setStatus('closed');
         });
+    }
+
+    /**
+     * Manual reconnect — called by the UI's "Retry" button after we gave up.
+     * Resets the socket.io retry counter by rebuilding the connection with
+     * the cached token.
+     */
+    reconnect() {
+        if (!this.token) return;
+        this.consecutiveFailures = 0;
+        this.lastError = null;
+        if (this.socket) {
+            this.teardown();
+        }
+        const token = this.token;
+        this.token = null; // force the connect() path to create a fresh socket
+        this.connect(token);
     }
 
     private bindNativeEvent(canonicalEvent: string) {
@@ -283,7 +404,49 @@ class SocketService {
             }
         });
     }
+
+    /** Normalize whatever shape the gateway sent into a typed `SocketError`. */
+    private coerceError(payload: unknown): SocketError {
+        if (payload && typeof payload === 'object') {
+            const p = payload as { code?: unknown; message?: unknown };
+            return {
+                code: typeof p.code === 'string' ? p.code : 'UNKNOWN',
+                message:
+                    typeof p.message === 'string' && p.message
+                        ? p.message
+                        : 'تعذر الاتصال بخدمة التتبع',
+            };
+        }
+        return { code: 'UNKNOWN', message: 'تعذر الاتصال بخدمة التتبع' };
+    }
+
+    private dispatchError(err: SocketError) {
+        // Only cache terminal errors so newly-mounted screens don't inherit a
+        // stale CONNECT_ERROR (which is transient — the socket is still retrying).
+        const isTerminal =
+            err.code === 'GAVE_UP' ||
+            err.code === 'AUTH_FAILED' ||
+            err.code === 'ACCOUNT_INACTIVE';
+        if (isTerminal) {
+            this.lastError = err;
+        }
+        this.errorListeners.forEach((handler) => {
+            try {
+                handler(err);
+            } catch {
+                /* ignore */
+            }
+        });
+    }
 }
 
-/** Module-scoped singleton — the only socket instance in the app. */
+/** Module-scoped singleton used by the customer-side of the app. */
 export const socketService = new SocketService();
+
+/**
+ * Separate socket instance for delivery agents. Connects with the delivery
+ * access token (useDeliveryStore) rather than the customer token, so the
+ * gateway authenticates the agent correctly and routes `delivery:location`
+ * events to the right rooms.
+ */
+export const deliverySocketService = new SocketService();

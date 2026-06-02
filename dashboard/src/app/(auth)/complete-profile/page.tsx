@@ -20,6 +20,7 @@ import { getApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
+import { LocationPicker, type PickedLocation } from "@/components/ui/location-picker";
 import { useToast } from "@/providers/ToastProvider";
 
 const ACCOUNT_TYPE_OPTIONS = [
@@ -226,6 +227,8 @@ export default function CompleteProfilePage() {
     restaurantPhone: "",
     street: "",
     city: "",
+    lat: "",
+    lng: "",
     cuisineType: "",
     accountType: "bank_account",
     accountHolderName: "",
@@ -521,6 +524,33 @@ export default function CompleteProfilePage() {
               placeholder="شارع الملك فهد"
               startIcon={<MapPin className="w-4 h-4" />}
               required
+            />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary" />
+              موقع المطعم على الخريطة
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              اضغط «استخدم موقعي الحالي» إذا كنت داخل المطعم الآن، أو اسحب الدبوس
+              لتحديد المكان بدقة. سيتم تعبئة المدينة والشارع تلقائياً.
+            </p>
+            <LocationPicker
+              value={
+                form.lat && form.lng
+                  ? { lat: parseFloat(form.lat), lng: parseFloat(form.lng) }
+                  : null
+              }
+              onChange={(loc: PickedLocation) => {
+                setForm((prev) => ({
+                  ...prev,
+                  lat: String(loc.lat),
+                  lng: String(loc.lng),
+                  // Only auto-fill when the user hasn't typed something themselves.
+                  city: prev.city || loc.city || prev.city,
+                  street: prev.street || loc.street || prev.street,
+                }));
+              }}
             />
           </div>
         </SectionCard>

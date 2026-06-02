@@ -1,8 +1,7 @@
 "use client";
-
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { ImageIcon, Sparkles, Info } from "lucide-react";
+import { ImageIcon, Sparkles, Info, MapPin } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRestaurant } from "@/hooks/useRestaurants";
+import { LocationPicker, type PickedLocation } from "@/components/ui/location-picker";
 import { extractApiErrorMessage, restaurantsApi } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
 import { useToast } from "@/providers/ToastProvider";
@@ -47,6 +47,8 @@ interface FormState {
   cuisineType: CuisineType | "";
   logoUrl: string;
   coverUrl: string;
+  lat: number | null;
+  lng: number | null;
 }
 
 const emptyForm: FormState = {
@@ -58,6 +60,8 @@ const emptyForm: FormState = {
   cuisineType: "",
   logoUrl: "",
   coverUrl: "",
+  lat: null,
+  lng: null,
 };
 
 export function EditRestaurantDialog({
@@ -84,6 +88,8 @@ export function EditRestaurantDialog({
         cuisineType: r.cuisineType ?? "",
         logoUrl: r.logoUrl ?? "",
         coverUrl: r.coverUrl ?? "",
+        lat: r.lat != null ? Number(r.lat) : null,
+        lng: r.lng != null ? Number(r.lng) : null,
       });
     } else if (!open) {
       setForm(emptyForm);
@@ -158,6 +164,12 @@ export function EditRestaurantDialog({
     }
     if (form.logoUrl !== (r.logoUrl ?? "")) payload.logoUrl = form.logoUrl;
     if (form.coverUrl !== (r.coverUrl ?? "")) payload.coverUrl = form.coverUrl;
+    if (form.lat != null && form.lat !== (r.lat != null ? Number(r.lat) : null)) {
+      payload.lat = form.lat;
+    }
+    if (form.lng != null && form.lng !== (r.lng != null ? Number(r.lng) : null)) {
+      payload.lng = form.lng;
+    }
     if (Object.keys(payload).length === 0) {
       onOpenChange(false);
       return;
@@ -306,6 +318,32 @@ export function EditRestaurantDialog({
                   value={form.street}
                   onChange={(e) => setForm({ ...form, street: e.target.value })}
                 />
+                <div className="sm:col-span-2 flex flex-col gap-2">
+                  <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    موقع المطعم على الخريطة
+                  </label>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    اسحب الدبوس أو اضغط على الخريطة لتحديث الموقع. يتم تعبئة
+                    المدينة والشارع تلقائياً من Mapbox.
+                  </p>
+                  <LocationPicker
+                    value={
+                      form.lat != null && form.lng != null
+                        ? { lat: form.lat, lng: form.lng }
+                        : null
+                    }
+                    onChange={(loc: PickedLocation) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        lat: loc.lat,
+                        lng: loc.lng,
+                        city: prev.city || loc.city || prev.city,
+                        street: prev.street || loc.street || prev.street,
+                      }))
+                    }
+                  />
+                </div>
                 <div className="flex flex-col gap-1.5 sm:col-span-2">
                   <label className="text-sm font-medium text-foreground">
                     نوع المطبخ

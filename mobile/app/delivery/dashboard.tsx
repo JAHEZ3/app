@@ -1,3 +1,5 @@
-import DeliveryDashboardScreen from '@/modules/delivery/screens/DeliveryDashboardScreen';
+import { Redirect } from 'expo-router';
 
-export default DeliveryDashboardScreen;
+export default function DeliveryDashboardRedirect() {
+    return <Redirect href="/delivery/tabs/home" />;
+}

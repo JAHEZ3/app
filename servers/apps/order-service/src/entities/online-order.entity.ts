@@ -42,4 +42,21 @@ export class OnlineOrder extends Order {
   // dashboard can render a 15-min countdown matching the timer.
   @Column({ name: 'preparing_started_at', type: 'timestamp', nullable: true })
   preparingStartedAt: Date | null;
+
+  // Fulfilment mode chosen at checkout. Defaults to 'delivery' so existing
+  // rows stay valid after the column is added. 'pickup' skips driver
+  // dispatch; 'scheduled' surfaces in the restaurant queue near scheduled_for.
+  @Column({ name: 'order_type', length: 20, default: 'delivery' })
+  orderType: string;
+
+  // Driver-side acceptance flag set when a customer self-picks a driver
+  // via `PATCH /orders/:id/delivery`. Stays NONE for manager/owner-assigned
+  // orders since those skip the round-trip. See DeliveryAcceptance enum.
+  @Column({ name: 'delivery_acceptance', length: 12, default: 'none' })
+  deliveryAcceptance: string;
+
+  // When `orderType === 'scheduled'`, the customer's requested delivery time.
+  // null otherwise.
+  @Column({ name: 'scheduled_for', type: 'timestamp', nullable: true })
+  scheduledFor: Date | null;
 }

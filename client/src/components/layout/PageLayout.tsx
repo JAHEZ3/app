@@ -10,7 +10,7 @@ export function PageLayout({ children }: PageLayoutProps) {
   return (
     <>
       <Navbar />
-      <main className="pt-20 min-h-screen">{children}</main>
+      <main className="min-h-screen">{children}</main>
       <Footer />
     </>
   );

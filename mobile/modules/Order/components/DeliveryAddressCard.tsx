@@ -13,6 +13,9 @@ interface Props {
     placeholderAddress?: string;
     placeholderCity?: string;
     placeholderStreet?: string;
+    placeholderBuilding?: string;
+    placeholderFloor?: string;
+    placeholderNotes?: string;
     changeLabel?: string;
     error?: string | null;
 }
@@ -24,6 +27,9 @@ function DeliveryAddressCard({
     placeholderAddress,
     placeholderCity,
     placeholderStreet,
+    placeholderBuilding,
+    placeholderFloor,
+    placeholderNotes,
     changeLabel,
     error,
 }: Props) {
@@ -78,6 +84,44 @@ function DeliveryAddressCard({
                         style={[styles.input, { textAlign, writingDirection }]}
                     />
                 </View>
+            </View>
+
+            {/* Building + Floor — two short fields on one row so they don't
+                dominate the form. Notes goes below, full-width, multiline. */}
+            <View style={styles.row2}>
+                <View style={[styles.inputRow, styles.flex1, isRTL && styles.rowReverse]}>
+                    <Ionicons name="home-outline" size={16} color={colors.outline} />
+                    <TextInput
+                        value={value.building ?? ""}
+                        onChangeText={(text) => patch({ building: text })}
+                        placeholder={placeholderBuilding}
+                        placeholderTextColor={colors.outline}
+                        style={[styles.input, { textAlign, writingDirection }]}
+                    />
+                </View>
+                <View style={[styles.inputRow, styles.flex1, isRTL && styles.rowReverse]}>
+                    <Ionicons name="layers-outline" size={16} color={colors.outline} />
+                    <TextInput
+                        value={value.floor ?? ""}
+                        onChangeText={(text) => patch({ floor: text })}
+                        placeholder={placeholderFloor}
+                        placeholderTextColor={colors.outline}
+                        style={[styles.input, { textAlign, writingDirection }]}
+                    />
+                </View>
+            </View>
+
+            <View style={[styles.inputRow, isRTL && styles.rowReverse, styles.notesRow]}>
+                <Ionicons name="reader-outline" size={16} color={colors.outline} />
+                <TextInput
+                    value={value.notes ?? ""}
+                    onChangeText={(text) => patch({ notes: text })}
+                    placeholder={placeholderNotes}
+                    placeholderTextColor={colors.outline}
+                    style={[styles.input, styles.notesInput, { textAlign, writingDirection }]}
+                    multiline
+                    numberOfLines={2}
+                />
             </View>
 
             {error ? (
@@ -146,6 +190,13 @@ const styles = StyleSheet.create({
     row2: {
         flexDirection: "row",
         gap: 10,
+    },
+    notesRow: {
+        alignItems: "flex-start",
+        minHeight: 70,
+    },
+    notesInput: {
+        textAlignVertical: "top",
     },
     errorText: {
         fontFamily: typography.bodyMedium,

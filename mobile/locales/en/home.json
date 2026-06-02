@@ -9,7 +9,8 @@
   },
   "accessibility": {
     "notifications": "Notifications",
-    "cart": "Cart"
+    "cart": "Cart",
+    "orders": "My orders"
   },
   "actions": {
     "seeAll": "See All"
@@ -34,7 +35,16 @@
     "restaurants": "Restaurants",
     "popularMeals": "Popular Meals",
     "nearYou": "Near You",
-    "featured": "Featured"
+    "featured": "Featured",
+    "saved": "Saved Restaurants"
+  },
+  "favorite": {
+    "save": "Save",
+    "saved": "Saved",
+    "rate": "Rate restaurant",
+    "rated": "Thanks for rating!",
+    "ratingError": "Could not submit your rating. Please try again.",
+    "errorTitle": "Error"
   },
   "restaurant": {
     "open": "Open",

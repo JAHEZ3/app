@@ -2,7 +2,8 @@ export type OrderStatus =
     | 'PENDING'
     | 'CONFIRMED'
     | 'PREPARING'
-    | 'ON_THE_WAY'
+    | 'READY_FOR_PICKUP'
+    | 'OUT_FOR_DELIVERY'
     | 'DELIVERED'
     | 'CANCELLED';
 
@@ -28,14 +29,20 @@ export interface OrderListItem {
 
 export type PaymentMethod = 'cash_on_delivery' | 'card' | 'online';
 
+/** Fulfilment mode chosen at checkout. Mirrors the backend `OrderType` enum. */
+export type OrderType = 'delivery' | 'pickup' | 'scheduled';
+
 /** Local UI model for the checkout address form. */
 export interface DeliveryAddressInput {
     label?: string;
     addressLine: string;
     city?: string;
     street?: string;
+    /** Building name or number — visible on the receipt. */
     building?: string;
-    apartment?: string;
+    /** Floor / apartment indicator. Kept as a free string so "ground", "2A" etc. work. */
+    floor?: string;
+    /** Driver-facing notes ("ring the second bell"). */
     notes?: string;
     latitude?: number;
     longitude?: number;
@@ -48,6 +55,9 @@ export interface AddressSnapshot {
     lat: number;
     lng: number;
     label?: string;
+    building?: string;
+    floor?: string;
+    notes?: string;
 }
 
 /**
@@ -58,6 +68,10 @@ export interface CheckoutPayload {
     /** UUID v4; FK to customer_addresses but the column is nullable. */
     addressId: string;
     paymentMethod: PaymentMethod;
+    /** Optional — server defaults to 'delivery' for backwards compatibility. */
+    orderType?: OrderType;
+    /** ISO-8601 datetime. Required only when `orderType === 'scheduled'`. */
+    scheduledFor?: string;
     addressSnapshot?: AddressSnapshot;
     customerNotes?: string;
     promoCode?: string;
@@ -129,6 +143,10 @@ export interface OrdersListResponse {
 export interface OrdersQueryParams {
     page?: number;
     limit?: number;
+    /** Server filters on order status (lowercase: pending, confirmed, ...). */
+    status?: string;
+    /** Free-text search across order number / restaurant name. */
+    search?: string;
 }
 
 export interface OrderItemOption {
@@ -171,6 +189,8 @@ export interface OrderDeliveryInfo {
     longitude?: number;
 }
 
+export type DeliveryAcceptance = 'none' | 'pending' | 'accepted' | 'rejected';
+
 export interface OrderDetails {
     orderId: string;
     orderNumber?: string;
@@ -179,6 +199,13 @@ export interface OrderDetails {
     updatedAt?: string;
     restaurantId?: string;
     restaurantName?: string;
+    /**
+     * Driver-side acceptance flag. `pending` = customer picked a driver, the
+     * driver hasn't accepted yet. `accepted` = driver tapped accept or a
+     * manager assigned them. `none` = no driver attached (initial state or
+     * after a rejection).
+     */
+    deliveryAcceptance?: DeliveryAcceptance;
     items: OrderItem[];
     subtotal: number;
     deliveryFee?: number;
@@ -191,9 +218,16 @@ export interface OrderDetails {
     delivery?: OrderDeliveryInfo;
     /** Truthy when the receipt has been generated and is downloadable. */
     hasReceipt?: boolean;
+<<<<<<< HEAD
     /** Local flag — set after a successful rating submission to hide the CTA. */
     hasRating?: boolean;
     rating?: OrderRating;
+=======
+    /** Customer rating 1-5 (set after delivery). */
+    rating?: number | null;
+    ratingComment?: string | null;
+    ratedAt?: string | null;
+>>>>>>> origin/Dashbords
 }
 
 export interface ReceiptUrlResponse {

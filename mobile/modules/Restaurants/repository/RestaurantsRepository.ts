@@ -9,9 +9,19 @@ export interface RestaurantsPage {
     meta: PaginationMeta;
 }
 
+export interface RestaurantRatingPayload {
+    rating: number;
+    comment?: string;
+}
+
 export interface RestaurantsRepository {
     getRestaurants: (params?: RestaurantsQueryParams) => Promise<RestaurantsPage>;
     getRestaurantById: (id: string) => Promise<RestaurantDetails>;
     getRestaurantMenus: (restaurantId: string) => Promise<Menu[]>;
     getMenuSections: (restaurantId: string, menuId: string) => Promise<MenuSection[]>;
+    rateRestaurant: (id: string, payload: RestaurantRatingPayload) => Promise<void>;
+    getFavorites: () => Promise<string[]>;
+    getFavoriteRestaurants: () => Promise<Restaurant[]>;
+    addFavorite: (restaurantId: string) => Promise<void>;
+    removeFavorite: (restaurantId: string) => Promise<void>;
 }

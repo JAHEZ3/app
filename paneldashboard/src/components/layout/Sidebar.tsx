@@ -18,6 +18,8 @@ import {
   LifeBuoy,
   Star,
   Mail,
+  Globe,
+  Map as MapIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
@@ -30,9 +32,11 @@ const navItems = [
   { href: "/panel/categories",      icon: Tag,             label: "التصنيفات"      },
   { href: "/panel/delivery-agents", icon: Truck,           label: "مندوبو التوصيل" },
   { href: "/panel/orders",          icon: ShoppingBag,     label: "الطلبات"        },
+  { href: "/panel/map",             icon: MapIcon,         label: "خريطة المنصة"   },
   { href: "/panel/notifications",   icon: Bell,            label: "الإشعارات"      },
   { href: "/panel/contact",         icon: Mail,            label: "رسائل التواصل"  },
   { href: "/panel/support",         icon: LifeBuoy,        label: "الدعم الفني"    },
+  { href: "/panel/website",         icon: Globe,           label: "إدارة الموقع"    },
   { href: "/panel/settings",        icon: Settings,        label: "الإعدادات"      },
 ];
 

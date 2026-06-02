@@ -1,9 +1,17 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withSpring,
+} from 'react-native-reanimated';
 import AppText from '@/components/ui/AppText';
+import AnimatedPressable from '@/components/ui/AnimatedPressable';
 import { Restaurant } from '../entities/Restaurant';
+import { useFavorites } from '../hooks/useFavorites';
+import { useToggleFavorite } from '../hooks/useToggleFavorite';
 
 const COVER_BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
 
@@ -14,6 +22,25 @@ interface RestaurantCardProps {
 
 const RestaurantCardComponent = ({ restaurant, onPress }: RestaurantCardProps) => {
     const handlePress = useCallback(() => onPress?.(restaurant), [onPress, restaurant]);
+
+    const { isFavorite } = useFavorites();
+    const { mutate: toggleFavorite, isPending } = useToggleFavorite();
+    const favorited = isFavorite(restaurant.id);
+
+    // Spring-pop the heart icon whenever the favorited state flips
+    const heartScale = useSharedValue(1);
+    useEffect(() => {
+        heartScale.value = withSpring(1.3, { damping: 5, stiffness: 300 }, () => {
+            heartScale.value = withSpring(1, { damping: 8, stiffness: 260 });
+        });
+    }, [favorited, heartScale]);
+    const heartStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: heartScale.value }],
+    }));
+
+    const handleFavorite = useCallback(() => {
+        toggleFavorite({ restaurantId: restaurant.id, isFavorite: favorited });
+    }, [restaurant.id, favorited, toggleFavorite]);
 
     const {
         name,
@@ -60,6 +87,22 @@ const RestaurantCardComponent = ({ restaurant, onPress }: RestaurantCardProps) =
                         {isOpen ? 'Open' : 'Closed'}
                     </AppText>
                 </View>
+
+                <AnimatedPressable
+                    onPress={handleFavorite}
+                    disabled={isPending}
+                    scaleTo={0.86}
+                    haptic="selection"
+                    style={[styles.heartBtn, favorited && styles.heartBtnActive]}
+                >
+                    <Animated.View style={heartStyle}>
+                        <Ionicons
+                            name={favorited ? 'heart' : 'heart-outline'}
+                            size={18}
+                            color={favorited ? '#F55905' : '#fff'}
+                        />
+                    </Animated.View>
+                </AnimatedPressable>
 
                 <View style={styles.logoWrap}>
                     <Image
@@ -141,6 +184,29 @@ const styles = StyleSheet.create({
     },
     coverWrap: { position: 'relative', width: '100%', aspectRatio: 16 / 9, backgroundColor: '#F3F4F6' },
     cover: { width: '100%', height: '100%' },
+    heartBtn: {
+        position: 'absolute',
+        top: 11,
+        right: 11,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(20,20,20,0.45)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // frosted-glass border
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
+    },
+    heartBtnActive: {
+        backgroundColor: '#fff',
+        borderColor: 'rgba(245,89,5,0.18)',
+        shadowColor: '#F55905',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+        elevation: 6,
+    },
     statusBadge: {
         position: 'absolute',
         top: 12,

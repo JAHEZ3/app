@@ -9,7 +9,8 @@
   },
   "accessibility": {
     "notifications": "الإشعارات",
-    "cart": "السلة"
+    "cart": "السلة",
+    "orders": "طلباتي"
   },
   "actions": {
     "seeAll": "عرض الكل"
@@ -38,7 +39,16 @@
     "restaurants": "المطاعم",
     "popularMeals": "الوجبات الشائعة",
     "nearYou": "بالقرب منك",
-    "featured": "مميز"
+    "featured": "مميز",
+    "saved": "المطاعم المحفوظة"
+  },
+  "favorite": {
+    "save": "حفظ",
+    "saved": "محفوظ",
+    "rate": "قيّم المطعم",
+    "rated": "شكراً على تقييمك!",
+    "ratingError": "تعذر إرسال تقييمك. حاول مرة أخرى.",
+    "errorTitle": "خطأ"
   },
   "restaurant": {
     "open": "مفتوح",

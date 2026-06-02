@@ -58,18 +58,15 @@ export interface DeliveryAgent {
 
 /** Pending agent application. Image URLs are presigned. */
 export interface DeliveryApplication {
-  id: string;
-  userId: string;
-  agentId: string | null;
-  status: DeliveryRequestStatus;
-  submittedAt: string;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  rejectionReason: string | null;
-  answers: ApplicationAnswer[] | null;
+  requestId: string;
+  agentId: string;
+  fullName: string | null;
+  phone: string | null;
+  dateOfBirth: string | null;
   profilePictureUrl: string | null;
   idPictureUrl: string | null;
-  agent?: DeliveryAgent;
+  answers: ApplicationAnswer[] | null;
+  submittedAt: string;
 }
 
 export interface ListAgentsParams extends PaginationParams {

@@ -45,7 +45,7 @@ export default function DeliveryPendingScreen() {
         if (!profile?.status) return;
 
         if (profile.status === 'ACTIVE') {
-            router.replace('/delivery/dashboard' as never);
+            router.replace('/delivery/tabs/home' as never);
             return;
         }
 

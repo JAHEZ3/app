@@ -8,6 +8,7 @@ import { DeliveryRead, DeliveryStatus } from './read-models/delivery.read';
 import { DeliveryAgentRead, AgentStatus } from './read-models/delivery-agent.read';
 import { UserRead, UserRole, UserStatus } from './read-models/user.read';
 import { OrderTransactionRead } from './read-models/order-transaction.read';
+import { DeliverySettings } from '../entities/delivery-settings.entity';
 
 const REVENUE_STATUSES = [OrderStatus.DELIVERED];
 
@@ -36,23 +37,140 @@ export class AnalyticsService {
     @InjectRepository(DeliveryAgentRead) private readonly agentRepo: Repository<DeliveryAgentRead>,
     @InjectRepository(UserRead) private readonly userRepo: Repository<UserRead>,
     @InjectRepository(OrderTransactionRead) private readonly txRepo: Repository<OrderTransactionRead>,
+    @InjectRepository(DeliverySettings) private readonly deliverySettingsRepo: Repository<DeliverySettings>,
   ) {}
+
+  /**
+   * GET /api/manager/map/users — geo points for every customer, restaurant,
+   * and recently-active delivery agent. Used by the platform-wide map page
+   * in the panel dashboard. Points without coordinates are skipped (we don't
+   * surface unconfigured users).
+   *
+   * Driver positions come from the most recent delivery_location_log entry
+   * per agent (Postgres DISTINCT ON), keeping the query single-pass.
+   */
+  async getUserMap() {
+    const [restaurants, customers, drivers] = await Promise.all([
+      this.restaurantRepo
+        .createQueryBuilder('r')
+        .select(['r.id AS id', 'r.name AS name', 'r.city AS city', 'r.status AS status', 'r.lat AS lat', 'r.lng AS lng'])
+        .where('r.lat IS NOT NULL AND r.lng IS NOT NULL')
+        .getRawMany<{ id: string; name: string; city: string | null; status: string; lat: string; lng: string }>(),
+      this.customerRepo
+        .createQueryBuilder('c')
+        .select([
+          'c.id AS id',
+          'c.first_name AS "firstName"',
+          'c.last_name AS "lastName"',
+          'c.location_lat AS lat',
+          'c.location_lng AS lng',
+        ])
+        .where('c.location_lat IS NOT NULL AND c.location_lng IS NOT NULL')
+        .getRawMany<{ id: string; firstName: string | null; lastName: string | null; lat: string; lng: string }>(),
+      // Latest position per agent. The delivery_location_logs table is owned
+      // by delivery-service but shares the same Postgres instance — so a
+      // direct query is acceptable here (read-only).
+      this.agentRepo.manager.query<
+        Array<{ agentId: string; firstName: string; lastName: string; lat: string; lng: string; recordedAt: Date }>
+      >(`
+        SELECT DISTINCT ON (l.delivery_id)
+          l.delivery_id           AS "agentId",
+          a.first_name            AS "firstName",
+          a.last_name             AS "lastName",
+          l.lat::text             AS lat,
+          l.lng::text             AS lng,
+          l.recorded_at           AS "recordedAt"
+        FROM delivery_location_logs l
+        JOIN delivery_agents a ON a.id = l.delivery_id
+        WHERE l.recorded_at > NOW() - INTERVAL '1 hour'
+        ORDER BY l.delivery_id, l.recorded_at DESC
+      `),
+    ]);
+
+    return {
+      restaurants: restaurants.map((r) => ({
+        id: r.id,
+        name: r.name ?? '—',
+        city: r.city,
+        status: r.status,
+        lat: Number(r.lat),
+        lng: Number(r.lng),
+      })),
+      customers: customers.map((c) => ({
+        id: c.id,
+        name: [c.firstName, c.lastName].filter(Boolean).join(' ') || '—',
+        lat: Number(c.lat),
+        lng: Number(c.lng),
+      })),
+      drivers: drivers.map((d) => ({
+        id: d.agentId,
+        name: [d.firstName, d.lastName].filter(Boolean).join(' ') || '—',
+        lat: Number(d.lat),
+        lng: Number(d.lng),
+        recordedAt: d.recordedAt,
+      })),
+    };
+  }
 
   // ─── Public landing stats (no auth) ────────────────────────────────────────
   // Aggregate counts only — used by the unauthenticated login/landing page.
   // Safe to expose: no PII, just totals every platform shows publicly.
 
   async getPublicStats() {
-    const [restaurants, customers, deliveredOrders] = await Promise.all([
+    const [
+      restaurantCount,
+      customerCount,
+      orderCount,
+      deliveryPartnerCount,
+      cityRow,
+      ratingRow,
+      deliverySettings,
+    ] = await Promise.all([
       this.restaurantRepo.count({ where: { status: RestaurantStatus.ACTIVE } }),
       this.customerRepo.count(),
       this.orderRepo.count({ where: { status: OrderStatus.DELIVERED } }),
+      this.agentRepo.count({ where: { status: AgentStatus.ACTIVE } }),
+      this.restaurantRepo
+        .createQueryBuilder('r')
+        .select('COUNT(DISTINCT r.city)', 'count')
+        .where('r.status = :status', { status: RestaurantStatus.ACTIVE })
+        .andWhere('r.city IS NOT NULL')
+        .getRawOne<{ count: string }>(),
+      // Weighted average rating across active, rated restaurants.
+      // SUM(rating * total_ratings) / SUM(total_ratings) — gives big-volume
+      // restaurants more pull than a 5-star place with one review.
+      this.restaurantRepo
+        .createQueryBuilder('r')
+        .select(
+          'COALESCE(SUM(r.rating * r.total_ratings) / NULLIF(SUM(r.total_ratings), 0), 0)',
+          'avg',
+        )
+        .where('r.status = :status', { status: RestaurantStatus.ACTIVE })
+        .getRawOne<{ avg: string }>(),
+      this.deliverySettingsRepo.findOne({ where: { id: 1 } }),
     ]);
+
+    const cityCount = Number(cityRow?.count ?? 0);
+    const weightedRating = Number(ratingRow?.avg ?? 0);
+    const appRating = weightedRating > 0 ? Number(weightedRating.toFixed(1)) : 4.6;
+    const avgDeliveryMinutes = deliverySettings
+      ? Math.round((deliverySettings.estimatedTimeMin + deliverySettings.estimatedTimeMax) / 2)
+      : 30;
+
     return {
       data: {
-        restaurants,
-        customers,
-        completedOrders: deliveredOrders,
+        // New shape consumed by the public marketing website (client/).
+        restaurantCount,
+        avgDeliveryMinutes,
+        appRating,
+        cityCount,
+        orderCount,
+        deliveryPartnerCount,
+        // Legacy shape kept for the paneldashboard login page. Same numbers,
+        // different field names — remove these once the panel migrates.
+        restaurants: restaurantCount,
+        customers: customerCount,
+        completedOrders: orderCount,
         uptimePercent: 99.9,
       },
       message: 'تم استرجاع الإحصائيات العامة.',
@@ -102,7 +220,9 @@ export class AnalyticsService {
     const limit = Math.max(1, Math.min(100, Number(params.limit) || 50));
     const offset = (page - 1) * limit;
 
-    const where: string[] = [];
+    // Manager dashboard shows customer-facing online orders only.
+    // POS/local dine-in/takeaway rows live in the same table (discriminated by `kind`).
+    const where: string[] = [`o.kind = 'online'`];
     const args: (string | number)[] = [];
     if (params.status) {
       args.push(params.status);
@@ -115,7 +235,7 @@ export class AnalyticsService {
         `(o.order_number ILIKE $${i} OR o.customer_name_snapshot ILIKE $${i} OR o.restaurant_name_snapshot ILIKE $${i})`,
       );
     }
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const whereSql = `WHERE ${where.join(' AND ')}`;
 
     const listSql = `
       SELECT
@@ -184,7 +304,7 @@ export class AnalyticsService {
         o.delivery_address_snapshot             AS "deliveryAddress",
         o.customer_notes                        AS "customerNotes"
       FROM orders o
-      WHERE o.id = $1
+      WHERE o.id = $1 AND o.kind = 'online'
       LIMIT 1
       `,
       [id],

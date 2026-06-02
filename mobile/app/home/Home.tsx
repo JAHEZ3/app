@@ -28,6 +28,9 @@ import { ProtectedRoute } from "@/hooks/useProtectedRoute";
 import { useHomeT } from "@/hooks/useAppTranslation";
 import { useGetProfile } from "@/modules/Profile/hooks/useGetProfile";
 import { useRestaurantHomeFeed } from "@/modules/Restaurants/hooks/useRestaurantHomeFeed";
+import { useFavoriteRestaurants } from "@/modules/Restaurants/hooks/useFavoriteRestaurants";
+import { useToggleFavorite } from "@/modules/Restaurants/hooks/useToggleFavorite";
+import { useFavorites } from "@/modules/Restaurants/hooks/useFavorites";
 import { Meal } from "@/modules/Restaurants/entities/Meal";
 import { Restaurant } from "@/modules/Restaurants/entities/Restaurant";
 import MealOptionsModal from "@/modules/Restaurants/components/MealOptionsModal";
@@ -371,6 +374,54 @@ function MealPreviewCard({
   );
 }
 
+function FavoriteCard({
+  restaurant,
+  isFavorited,
+  onToggle,
+  onPress,
+  isRTL,
+}: {
+  restaurant: Restaurant;
+  isFavorited: boolean;
+  onToggle: () => void;
+  onPress: () => void;
+  isRTL: boolean;
+}) {
+  return (
+    <AnimatedPressable onPress={onPress} haptic="impact" style={styles.favCard}>
+      <View style={styles.favImageWrap}>
+        <Image
+          source={imageSource(restaurant.coverUrl || restaurant.logoUrl, restaurant.cuisineType)}
+          placeholder={IMAGE_BLURHASH}
+          contentFit="cover"
+          transition={200}
+          style={styles.favImage}
+        />
+        <View style={[styles.favStatus, restaurant.isOpen ? styles.openBadge : styles.closedBadge]}>
+          <View style={styles.statusDot} />
+        </View>
+        <AnimatedPressable
+          onPress={(e) => { (e as any).stopPropagation?.(); onToggle(); }}
+          haptic="selection"
+          scaleTo={0.84}
+          style={styles.favHeart}
+        >
+          <Ionicons name={isFavorited ? "heart" : "heart-outline"} size={14} color={isFavorited ? "#F55905" : "#fff"} />
+        </AnimatedPressable>
+      </View>
+      <View style={styles.favBody}>
+        <Text style={[styles.favName, { textAlign: isRTL ? "right" : "left" }]} numberOfLines={1}>
+          {restaurant.name}
+        </Text>
+        <View style={styles.ratingPill}>
+          <Ionicons name="star" size={11} color="#D68A00" />
+          <Text style={styles.ratingText}>{restaurant.rating.toFixed(1)}</Text>
+        </View>
+      </View>
+    </AnimatedPressable>
+  );
+}
+
 function RailSkeleton({ count = 3, width = 144, height = 168 }: { count?: number; width?: number; height?: number }) {
   return (
     <ScrollView
@@ -402,6 +453,7 @@ function EmptySection({ text }: { text: string }) {
 function HomeScreen() {
   const { t } = useHomeT();
   const { language } = useLanguageStore();
+  const isRTL = useLanguageStore((s) => s.isRTL);
   const { width } = useWindowDimensions();
   const { data: profile } = useGetProfile();
   const feed = useRestaurantHomeFeed();
@@ -409,6 +461,10 @@ function HomeScreen() {
   const addItem = useCartStore((state) => state.addItem);
   const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
   const [search, setSearch] = useState("");
+
+  const { data: favoriteRestaurants = [] } = useFavoriteRestaurants();
+  const { isFavorite } = useFavorites();
+  const { mutate: toggleFavorite } = useToggleFavorite();
 
   const cartCount = getCartQuantity(cartItems);
   const firstName = profile?.firstName?.trim() || t("user.guest");
@@ -482,6 +538,38 @@ function HomeScreen() {
             onSearchChange={setSearch}
           />
         </FadeInView>
+
+        {favoriteRestaurants.length > 0 ? (
+          <FadeInView delay={80}>
+            <SectionHeader
+              title={t("sections.saved")}
+              action={t("actions.seeAll")}
+              onAction={() => router.push("/restaurants" as never)}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rail}
+              decelerationRate="fast"
+            >
+              {favoriteRestaurants.map((restaurant, index) => (
+                <FadeInView key={restaurant.id} delay={110 + index * 50}>
+                  <FavoriteCard
+                    restaurant={restaurant}
+                    isFavorited={isFavorite(restaurant.id)}
+                    onToggle={() =>
+                      toggleFavorite({ restaurantId: restaurant.id, isFavorite: isFavorite(restaurant.id) })
+                    }
+                    onPress={() =>
+                      router.push({ pathname: "/restaurants/[id]", params: { id: restaurant.id } } as never)
+                    }
+                    isRTL={isRTL}
+                  />
+                </FadeInView>
+              ))}
+            </ScrollView>
+          </FadeInView>
+        ) : null}
 
         <FadeInView delay={130}>
           <SectionHeader title={t("sections.categories")} />
@@ -978,6 +1066,52 @@ const styles = StyleSheet.create({
   skeletonCard: {
     borderRadius: radii.xl,
     backgroundColor: colors.surfaceContainerHighest,
+  },
+  favCard: {
+    width: 130,
+    marginLeft: screen.horizontal,
+    borderRadius: radii.xl,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+    ...shadows.soft,
+  },
+  favImageWrap: {
+    width: '100%',
+    height: 88,
+    position: 'relative',
+    backgroundColor: colors.surfaceContainerHighest,
+  },
+  favImage: { width: '100%', height: '100%' },
+  favStatus: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  favHeart: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(30,30,30,0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favBody: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  favName: {
+    fontFamily: typography.bodyBold,
+    color: colors.onSurface,
+    fontSize: 12,
   },
   emptySection: {
     marginHorizontal: screen.horizontal,

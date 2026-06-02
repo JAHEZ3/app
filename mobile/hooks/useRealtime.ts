@@ -45,6 +45,39 @@ export interface DeliveryLocationEvent {
     timestamp: number;
 }
 
+/** order:payment:status payload — fires when a restaurant verifies a bank
+ *  transfer and flips the order's paymentStatus. */
+export interface OrderPaymentStatusEvent {
+    eventId?: string;
+    orderId: string;
+    orderNumber?: string;
+    paymentStatus: 'paid' | 'unpaid' | 'refunded' | string;
+    customerId?: string;
+    restaurantId?: string;
+    ownerUserId?: string;
+    changedAt?: string;
+    note?: string | null;
+}
+
+/**
+ * order:delivery:accepted / order:delivery:rejected payloads — fire when a
+ * delivery agent accepts or declines a customer's self-picked assignment.
+ *
+ * On `accepted`, the customer's tracking screen should flip out of "waiting"
+ * state. On `rejected`, the assignment is cleared server-side so the
+ * customer's UI should reset to the "pick a driver" state.
+ */
+export interface OrderDeliveryAcceptanceEvent {
+    eventId?: string;
+    orderId: string;
+    orderNumber?: string;
+    deliveryAgentId?: string;
+    /** Only on `rejected` payloads. */
+    reason?: string | null;
+    acceptedAt?: string;
+    rejectedAt?: string;
+}
+
 /** chat:new / chat:message payload. */
 export interface ChatMessageEvent {
     roomId?: string;
@@ -90,6 +123,22 @@ const isDeliveryLocationEvent = (data: unknown): data is DeliveryLocationEvent =
         typeof o.lat === 'number' &&
         typeof o.lng === 'number'
     );
+};
+
+const isOrderPaymentStatusEvent = (data: unknown): data is OrderPaymentStatusEvent => {
+    const o = asObject(data);
+    return (
+        !!o &&
+        typeof o.orderId === 'string' &&
+        typeof o.paymentStatus === 'string'
+    );
+};
+
+const isOrderDeliveryAcceptanceEvent = (
+    data: unknown,
+): data is OrderDeliveryAcceptanceEvent => {
+    const o = asObject(data);
+    return !!o && typeof o.orderId === 'string';
 };
 
 const isChatMessageEvent = (data: unknown): data is ChatMessageEvent => {
@@ -150,10 +199,44 @@ export const useRealtime = () => {
             appendChatMessage(queryClient, payload);
         });
 
+        // Payment status flip (unpaid ↔ paid) — patch the cached order so the
+        // tracking screen and order-details show the new badge immediately.
+        const offPayment = socketService.on('order:payment:status', (payload) => {
+            if (!isOrderPaymentStatusEvent(payload)) {
+                console.log('[realtime] order:payment:status — invalid payload', payload);
+                return;
+            }
+            patchOrderPaymentStatus(queryClient, payload);
+        });
+
+        // Driver accepted the assignment — flip the order's deliveryAcceptance
+        // to 'accepted' so the tracking UI exits the "waiting" state.
+        const offAccepted = socketService.on('order:delivery:accepted', (payload) => {
+            if (!isOrderDeliveryAcceptanceEvent(payload)) {
+                console.log('[realtime] order:delivery:accepted — invalid payload', payload);
+                return;
+            }
+            patchOrderAcceptance(queryClient, payload.orderId, 'accepted');
+        });
+
+        // Driver rejected — server already cleared deliveryAgentId, so we
+        // mirror that locally: blank the courier name + reset acceptance so
+        // the customer's "Pick a driver" card reappears.
+        const offRejected = socketService.on('order:delivery:rejected', (payload) => {
+            if (!isOrderDeliveryAcceptanceEvent(payload)) {
+                console.log('[realtime] order:delivery:rejected — invalid payload', payload);
+                return;
+            }
+            patchOrderAcceptance(queryClient, payload.orderId, 'none', /*clearAgent*/ true);
+        });
+
         return () => {
             offStatus();
             offAssigned();
             offLocation();
+            offPayment();
+            offAccepted();
+            offRejected();
             offChat();
         };
     }, [accessToken, queryClient, status]);
@@ -166,6 +249,82 @@ export const useRealtime = () => {
 };
 
 // ─── Cache patchers ─────────────────────────────────────────────────────────
+
+/**
+ * Patch the order's `deliveryAcceptance` (and optionally clear the courier)
+ * in both the detail and list caches. `clearAgent` is true on rejected
+ * events so the customer's UI sees the order as un-assigned again.
+ */
+const patchOrderAcceptance = (
+    queryClient: ReturnType<typeof useQueryClient>,
+    orderId: string,
+    acceptance: 'none' | 'pending' | 'accepted' | 'rejected',
+    clearAgent = false,
+) => {
+    queryClient.setQueriesData(
+        { queryKey: ['order', orderId] },
+        (prev: unknown) => {
+            const o = asObject(prev);
+            if (!o) return prev;
+            const next: Record<string, unknown> = {
+                ...o,
+                deliveryAcceptance: acceptance,
+            };
+            if (clearAgent) {
+                const delivery = asObject((o as { delivery?: unknown }).delivery);
+                if (delivery) {
+                    next.delivery = {
+                        ...delivery,
+                        courierName: undefined,
+                        courierPhone: undefined,
+                    };
+                }
+            }
+            return next;
+        },
+    );
+    queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+};
+
+/**
+ * Surgical cache patch for payment status. Updates both the single-order
+ * detail cache and any list query that contains this order, so the customer
+ * sees "مدفوع" instantly when the restaurant verifies their proof.
+ */
+const patchOrderPaymentStatus = (
+    queryClient: ReturnType<typeof useQueryClient>,
+    event: OrderPaymentStatusEvent,
+) => {
+    // Detail cache — match anything keyed on this orderId.
+    queryClient.setQueriesData(
+        { queryKey: ['order', event.orderId] },
+        (prev: unknown) => {
+            const o = asObject(prev);
+            if (!o) return prev;
+            return { ...o, paymentStatus: event.paymentStatus };
+        },
+    );
+    // List caches — find the row and update in-place.
+    queryClient.setQueriesData({ queryKey: ['orders'] }, (prev: unknown) => {
+        const o = asObject(prev);
+        if (!o) return prev;
+        const data = Array.isArray((o as { data?: unknown[] }).data)
+            ? ((o as { data: unknown[] }).data as unknown[])
+            : null;
+        if (!data) return prev;
+        const next = data.map((row) => {
+            const r = asObject(row);
+            if (!r) return row;
+            const id = r.orderId ?? r.id;
+            return id === event.orderId ? { ...r, paymentStatus: event.paymentStatus } : row;
+        });
+        return { ...o, data: next };
+    });
+    // Belt-and-suspenders refetch so anything we don't know to patch refreshes.
+    queryClient.invalidateQueries({ queryKey: ['order', event.orderId] });
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+};
 
 const patchOrderStatus = (
     queryClient: ReturnType<typeof useQueryClient>,

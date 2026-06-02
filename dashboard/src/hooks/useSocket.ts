@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 
 // Resolve once. If unset we skip the socket entirely instead of silently
@@ -39,7 +40,10 @@ export function useSocket() {
         reconnection: true,
         reconnectionDelay: 2000,
         reconnectionDelayMax: 10_000,
-        reconnectionAttempts: Infinity,
+        // Cap retries — matches mobile + paneldashboard. After 10 failed
+        // attempts socket.io stops, so a wrong GATEWAY_URL doesn't hammer the
+        // browser forever. A page reload kicks off a fresh connection.
+        reconnectionAttempts: 10,
       });
     } else {
       // Refresh auth on token rotation so reconnect uses the latest access token.
@@ -97,4 +101,34 @@ export function useSocket() {
     leaveOrder,
     registerRestaurant,
   };
+}
+
+/**
+ * Cache-coherent realtime for the orders page. Listens for the gateway's
+ * payment-status / order-status / order-new events and invalidates the
+ * orders queries so any open list or detail dialog reflects changes made
+ * elsewhere (paneldashboard manager, another staff session, NATS event).
+ *
+ * Mount once at the orders page top — it's safe to mount even when the
+ * socket isn't yet connected; the underlying listeners no-op on null.
+ */
+export function useOrdersRealtime() {
+  const { on } = useSocket();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const invalidate = () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    };
+    const offStatus = on("order:status", invalidate);
+    const offNew = on("order:new", invalidate);
+    const offPayment = on("order:payment:status", invalidate);
+    const offAssigned = on("order:delivery:assigned", invalidate);
+    return () => {
+      offStatus?.();
+      offNew?.();
+      offPayment?.();
+      offAssigned?.();
+    };
+  }, [on, queryClient]);
 }

@@ -91,6 +91,8 @@ export interface UpdateRestaurantPayload {
   street?: string;
   city?: string;
   cuisineType?: CuisineType;
+  lat?: number;
+  lng?: number;
 }
 
 export interface ChangeRestaurantStatusPayload {

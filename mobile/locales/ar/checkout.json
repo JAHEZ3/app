@@ -11,6 +11,10 @@
     "signIn": "تسجيل الدخول"
   },
   "sections": {
+    "orderType": {
+      "title": "نوع الطلب",
+      "subtitle": "اختر طريقة استلام الطلب"
+    },
     "address": {
       "title": "عنوان التوصيل",
       "subtitle": "إلى أين نوصل طلبك؟"
@@ -40,7 +44,48 @@
   "address": {
     "placeholderLine": "الشارع، المبنى، الشقة…",
     "placeholderCity": "المدينة",
-    "placeholderStreet": "الحي / المنطقة"
+    "placeholderStreet": "الحي / المنطقة",
+    "placeholderBuilding": "اسم أو رقم المبنى",
+    "placeholderFloor": "الطابق / الشقة",
+    "placeholderNotes": "ملاحظات للمندوب (الجرس، علامة مميزة…)",
+    "gps": {
+      "cta": "استخدم موقعي الحالي",
+      "errorTitle": "تعذر تحديد الموقع",
+      "errorBody": "تأكد من تفعيل خدمات الموقع وحاول مرة أخرى."
+    },
+    "saved": {
+      "cta": "محفوظة",
+      "title": "العناوين المحفوظة",
+      "emptyTitle": "لا توجد عناوين محفوظة",
+      "emptyBody": "أدخل عنوانًا في النموذج أدناه ثم احفظه من ملفك الشخصي.",
+      "error": "تعذر تحميل العناوين."
+    },
+    "map": {
+      "cta": "الخريطة"
+    }
+  },
+  "error": {
+    "action": "إعادة المحاولة",
+    "back": "إغلاق"
+  },
+  "orderType": {
+    "delivery": {
+      "label": "توصيل",
+      "description": "نوصل لك الطلب إلى العنوان الذي تختاره"
+    },
+    "pickup": {
+      "label": "استلام من المطعم",
+      "description": "اذهب للمطعم واستلم طلبك بنفسك",
+      "badge": "بدون رسوم توصيل"
+    },
+    "scheduled": {
+      "label": "جدولة لاحقًا",
+      "description": "حدّد وقتًا لاحقًا لاستلام طلبك",
+      "pickButton": "اختر الوقت المناسب",
+      "modalTitle": "موعد الطلب",
+      "confirm": "تأكيد",
+      "cancel": "إلغاء"
+    }
   },
   "payment": {
     "cash": {
@@ -81,7 +126,8 @@
     "placing": "جارٍ إرسال طلبك…"
   },
   "errors": {
-    "addressRequired": "الرجاء إدخال عنوان التوصيل"
+    "addressRequired": "الرجاء إدخال عنوان التوصيل",
+    "addressLocationRequired": "حدّد موقعك على الخريطة: اضغط \"استخدم موقعي الحالي\" أو اختر عنوانًا محفوظًا يحتوي على موقع."
   },
   "alerts": {
     "conflictTitle": "قيد المعالجة",
@@ -93,7 +139,9 @@
     "networkTitle": "مشكلة في الاتصال",
     "networkMessage": "تعذر الوصول إلى الخادم. تحقق من اتصالك وحاول مجددًا.",
     "genericTitle": "تعذر إتمام الطلب",
-    "genericMessage": "حدث خطأ أثناء إرسال طلبك. حاول مرة أخرى."
+    "genericMessage": "حدث خطأ أثناء إرسال طلبك. حاول مرة أخرى.",
+    "scheduleRequiredTitle": "اختر وقت الطلب",
+    "scheduleRequiredMessage": "الرجاء اختيار وقت الاستلام قبل تأكيد الطلب."
   },
   "success": {
     "title": "تم إرسال طلبك بنجاح!",
@@ -103,7 +151,12 @@
     "total": "الإجمالي المدفوع",
     "eta": "يصل خلال 25-35 دقيقة",
     "trackOrder": "تتبع طلبك",
+<<<<<<< HEAD
     "trackOrderCountdown": "{{count}} ث",
     "backHome": "العودة للرئيسية"
+=======
+    "backHome": "العودة للرئيسية",
+    "pickDriver": "اختر السائق"
+>>>>>>> origin/Dashbords
   }
 }

@@ -445,6 +445,29 @@ export class RestaurantServiceService {
     return { ...paymentInfo, qrImageUrl: qrImageUrl ?? undefined };
   }
 
+  /**
+   * Customer-facing read of the restaurant's payment instructions. Used by the
+   * mobile checkout screen so the customer knows where to send the bank
+   * transfer / wallet payment for orders paid online. The endpoint is JWT-
+   * protected (no anonymous scraping of bank details). The QR-image S3 key is
+   * resolved to a presigned URL before returning.
+   */
+  async getPaymentInfoForCheckout(restaurantId: string) {
+    const restaurant = await this.restaurantRepo.findOne({
+      where: { id: restaurantId },
+      select: ["id", "paymentInfo", "name"],
+    });
+    if (!restaurant) {
+      throw new NotFoundException("المطعم غير موجود.");
+    }
+    const paymentInfo = await this.resolvePaymentQr(restaurant.paymentInfo);
+    return {
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.name,
+      paymentInfo: paymentInfo ?? null,
+    };
+  }
+
   async uploadPaymentQr(userId: string, file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException("لم يتم رفع أي ملف.");

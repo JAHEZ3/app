@@ -16,7 +16,7 @@ import {
   CheckCircle, Wrench, RefreshCw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { settingsApi } from "@/lib/api";
+import { settingsApi, unwrapManager } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
 import { useToast } from "@/providers/ToastProvider";
 import { cn } from "@/lib/utils";
@@ -138,19 +138,28 @@ export default function SettingsPage() {
   const { success, error } = useToast();
   const qc = useQueryClient();
 
-  const { isLoading, data: remoteSettings } = useQuery<SystemSettings>({
+  const { isLoading, data: remoteSettings } = useQuery<Partial<SystemSettings>>({
     queryKey: queryKeys.settings,
     queryFn: async () => {
       const res = await settingsApi.get();
-      return res.data as SystemSettings;
+      return unwrapManager<Partial<SystemSettings>>(res.data);
     },
     placeholderData: defaultSettings,
     retry: false,
   });
 
-  // Sync remote data into local state once when it arrives
+  // Sync remote data into local state once when it arrives. Merge per-section
+  // against defaults so a missing/partial response never produces undefined.
   useEffect(() => {
-    if (remoteSettings) setLocal(remoteSettings);
+    if (!remoteSettings) return;
+    setLocal({
+      general:       { ...defaultSettings.general,       ...(remoteSettings.general       ?? {}) },
+      fees:          { ...defaultSettings.fees,          ...(remoteSettings.fees          ?? {}) },
+      delivery:      { ...defaultSettings.delivery,      ...(remoteSettings.delivery      ?? {}) },
+      notifications: { ...defaultSettings.notifications, ...(remoteSettings.notifications ?? {}) },
+      system:        { ...defaultSettings.system,        ...(remoteSettings.system        ?? {}) },
+      payment:       { ...defaultSettings.payment,       ...(remoteSettings.payment       ?? {}) },
+    });
   }, [remoteSettings]);
 
   const save = useMutation({
@@ -215,13 +224,13 @@ export default function SettingsPage() {
                 <CardContent>
                   {isLoading ? <SettingsSkeleton /> : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      <Input label="اسم المنصة" value={local.general.platformName}
+                      <Input label="اسم المنصة" value={local.general.platformName ?? ""}
                         onChange={(e) => set("general", "platformName", e.target.value)} />
-                      <Input label="البريد الإلكتروني للدعم" value={local.general.supportEmail}
+                      <Input label="البريد الإلكتروني للدعم" value={local.general.supportEmail ?? ""}
                         onChange={(e) => set("general", "supportEmail", e.target.value)} />
-                      <Input label="هاتف الدعم" value={local.general.supportPhone}
+                      <Input label="هاتف الدعم" value={local.general.supportPhone ?? ""}
                         onChange={(e) => set("general", "supportPhone", e.target.value)} />
-                      <Input label="العملة الافتراضية" value={local.general.currency}
+                      <Input label="العملة الافتراضية" value={local.general.currency ?? ""}
                         onChange={(e) => set("general", "currency", e.target.value)} />
 
                       {/* ── Public contact info (shown on the website's "Contact us" page) ── */}
@@ -587,7 +596,7 @@ function NumberInput({
     <Input
       label={label}
       type="number"
-      value={value}
+      value={Number.isFinite(value) ? value : ""}
       min={min}
       max={max}
       onChange={(e) => onChange(Number(e.target.value))}

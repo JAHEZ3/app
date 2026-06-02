@@ -378,6 +378,91 @@ export const adminOrdersApi = {
     api.get<ApiResponse<AdminOrdersList>>("/manager/orders", { params }),
   getOne: (id: string) =>
     api.get<ApiResponse<AdminOrderDetails>>(`/manager/orders/${id}`),
+  /** Flip an online order's paymentStatus after reviewing the proof. Hits
+   *  the order-service directly (not manager-service) — the order-service
+   *  endpoint accepts the `manager` role. */
+  updatePaymentStatus: (
+    id: string,
+    data: { paymentStatus: "paid" | "unpaid"; note?: string },
+  ) =>
+    api.patch<ApiResponse<{ id: string; paymentStatus: string }>>(
+      `/order/orders/${id}/payment-status`,
+      data,
+    ),
+};
+
+export interface UserMapPoint {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+}
+export interface RestaurantMapPoint extends UserMapPoint {
+  city: string | null;
+  status: string;
+}
+export interface DriverMapPoint extends UserMapPoint {
+  recordedAt: string;
+}
+export interface UserMapResponse {
+  restaurants: RestaurantMapPoint[];
+  customers: UserMapPoint[];
+  drivers: DriverMapPoint[];
+}
+
+export const mapApi = {
+  users: () => api.get<ApiResponse<UserMapResponse>>("/manager/map/users"),
+};
+
+// ─── Promo codes / coupons ────────────────────────────────────────────────────
+
+export type PromoDiscountType = "percentage" | "fixed_amount";
+
+export interface PromoCode {
+  id: string;
+  code: string;
+  discountType: PromoDiscountType;
+  discountValue: number;
+  maxDiscountCap: number | null;
+  minOrderAmount: number;
+  usageLimit: number | null;
+  usageCount: number;
+  perUserLimit: number;
+  restaurantId: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+}
+
+export interface CreatePromoPayload {
+  code: string;
+  discountType: PromoDiscountType;
+  discountValue: number;
+  maxDiscountCap?: number;
+  minOrderAmount?: number;
+  usageLimit?: number;
+  perUserLimit?: number;
+  restaurantId?: string;
+  validFrom?: string;
+  validUntil?: string;
+}
+
+export interface UpdatePromoPayload {
+  usageLimit?: number;
+  maxDiscountCap?: number;
+  validUntil?: string;
+}
+
+export const promoCodesApi = {
+  list: (restaurantId?: string) =>
+    api.get<ApiResponse<PromoCode[]>>("/order/manager/promo-codes", {
+      params: restaurantId ? { restaurantId } : undefined,
+    }),
+  create: (payload: CreatePromoPayload) =>
+    api.post<ApiResponse<PromoCode>>("/order/manager/promo-codes", payload),
+  update: (id: string, payload: UpdatePromoPayload) =>
+    api.patch<ApiResponse<PromoCode>>(`/order/manager/promo-codes/${id}`, payload),
+  remove: (id: string) =>
+    api.delete<ApiResponse<null>>(`/order/manager/promo-codes/${id}`),
 };
 export const settingsApi = {
   get: () => api.get("/manager/admin/settings"),

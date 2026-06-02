@@ -3,6 +3,8 @@ import type {
     OrderDetails,
     OrderItem,
     OrderItemOption,
+    OrderItemPreview,
+    OrderListItem,
     OrderStatus,
     OrderStatusHistoryEntry,
 } from '../types';
@@ -43,6 +45,11 @@ interface RawOrder {
     customer_notes?: string;
     receiptKey?: string | null;
     receipt_key?: string | null;
+    rating?: number | null;
+    ratingComment?: string | null;
+    rating_comment?: string | null;
+    ratedAt?: string | null;
+    rated_at?: string | null;
     deliveryAddressSnapshot?: {
         street?: string;
         city?: string;
@@ -131,12 +138,12 @@ const STATUS_NORMALIZE: Record<string, OrderStatus> = {
     CONFIRMED: 'CONFIRMED',
     preparing: 'PREPARING',
     PREPARING: 'PREPARING',
-    ready_for_pickup: 'PREPARING',
-    READY_FOR_PICKUP: 'PREPARING',
-    out_for_delivery: 'ON_THE_WAY',
-    OUT_FOR_DELIVERY: 'ON_THE_WAY',
-    on_the_way: 'ON_THE_WAY',
-    ON_THE_WAY: 'ON_THE_WAY',
+    ready_for_pickup: 'READY_FOR_PICKUP',
+    READY_FOR_PICKUP: 'READY_FOR_PICKUP',
+    out_for_delivery: 'OUT_FOR_DELIVERY',
+    OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+    on_the_way: 'OUT_FOR_DELIVERY',
+    ON_THE_WAY: 'OUT_FOR_DELIVERY',
     delivered: 'DELIVERED',
     DELIVERED: 'DELIVERED',
     cancelled: 'CANCELLED',
@@ -259,8 +266,64 @@ export const adaptOrderDetails = (raw: RawOrder | undefined | null): OrderDetail
         paymentMethod: pick(raw.paymentMethod, raw.payment_method),
         paymentStatus: pick(raw.paymentStatus, raw.payment_status),
         customerNotes: pick(raw.customerNotes, raw.customer_notes),
+        // Driver acceptance flag — defaults to "none" when the backend hasn't
+        // attached one yet, so the UI doesn't need a separate undefined check.
+        deliveryAcceptance:
+            (pick(
+                (raw as Record<string, unknown>).deliveryAcceptance,
+                (raw as Record<string, unknown>).delivery_acceptance,
+            ) as 'none' | 'pending' | 'accepted' | 'rejected' | undefined) ?? 'none',
         statusHistory,
         delivery: adaptDelivery(raw),
         hasReceipt: Boolean(pick(raw.receiptKey, raw.receipt_key)),
+        rating: raw.rating ?? null,
+        ratingComment: pick(raw.ratingComment, raw.rating_comment) ?? null,
+        ratedAt: pick(raw.ratedAt, raw.rated_at) ?? null,
     };
+};
+
+/** Light adapter for the orders list. Tolerates the raw entity shape. */
+export const adaptOrderListItem = (raw: RawOrder | undefined | null): OrderListItem | null => {
+    if (!raw) return null;
+    const orderId = pick(raw.id, raw.orderId);
+    if (!orderId) return null;
+
+    const items: OrderItemPreview[] | undefined = raw.items?.map((item) => ({
+        mealId: pick(item.mealId, item.meal_id),
+        mealName:
+            pick(item.mealName, item.mealNameSnapshot, item.meal_name_snapshot) ?? '',
+        mealImage: pick(item.mealImage, item.meal_image),
+        quantity: toNumber(item.quantity, 1),
+    }));
+
+    const subtotal = toNumber(raw.subtotal);
+    const deliveryFee = toNumber(pick(raw.deliveryFee, raw.delivery_fee));
+    const discount = toNumber(pick(raw.discountAmount, raw.discount_amount));
+    const total = toNumber(
+        pick(raw.totalAmount, raw.total_amount, raw.total),
+        subtotal + deliveryFee - discount,
+    );
+
+    return {
+        orderId,
+        orderNumber: pick(raw.orderNumber, raw.order_number),
+        status: normalizeStatus(raw.status),
+        restaurantId: pick(raw.restaurantId, raw.restaurant_id),
+        restaurantName: pick(
+            raw.restaurantName,
+            raw.restaurantNameSnapshot,
+            raw.restaurant_name_snapshot,
+        ),
+        itemCount: items?.length,
+        items,
+        total,
+        createdAt: pick(raw.createdAt, raw.created_at) ?? new Date().toISOString(),
+    };
+};
+
+export const adaptOrderList = (raw: unknown[] | undefined | null): OrderListItem[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((row) => adaptOrderListItem(row as RawOrder))
+        .filter(Boolean) as OrderListItem[];
 };

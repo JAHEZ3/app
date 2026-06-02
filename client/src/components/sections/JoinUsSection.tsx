@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useContactInfo } from "@/hooks/useContact";
 
 const RESTAURANT_BENEFITS = [
   "وصول فوري لآلاف العملاء",
@@ -41,6 +42,9 @@ type Tab = "restaurant" | "driver";
 
 export function JoinUsSection() {
   const [activeTab, setActiveTab] = useState<Tab>("restaurant");
+  const { data: contact } = useContactInfo();
+  const restaurantHref = contact?.restaurantSignupUrl ?? "#join";
+  const driverHref = contact?.driverSignupUrl ?? "#join";
 
   return (
     <section id="join" className="section-padding bg-gray-50 relative overflow-hidden">
@@ -127,8 +131,8 @@ export function JoinUsSection() {
                     </li>
                   ))}
                 </ul>
-                <Button size="lg" className="w-full text-base font-bold">
-                  سجّل مطعمك الآن
+                <Button asChild size="lg" className="w-full text-base font-bold">
+                  <a href={restaurantHref}>سجّل مطعمك الآن</a>
                 </Button>
                 <p className="text-center text-gray-400 text-xs mt-3">
                   مجاناً · بدون رسوم تسجيل
@@ -169,8 +173,8 @@ export function JoinUsSection() {
                     </li>
                   ))}
                 </ul>
-                <Button size="lg" variant="dark" className="w-full text-base font-bold text-white">
-                  سجّل كسائق الآن
+                <Button asChild size="lg" variant="dark" className="w-full text-base font-bold text-white">
+                  <a href={driverHref}>سجّل كسائق الآن</a>
                 </Button>
                 <p className="text-center text-gray-400 text-xs mt-3">
                   مركبتك الخاصة · انطلق فوراً

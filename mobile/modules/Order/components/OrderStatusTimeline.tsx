@@ -25,7 +25,8 @@ type StepKey =
     | "PENDING"
     | "CONFIRMED"
     | "PREPARING"
-    | "ON_THE_WAY"
+    | "READY_FOR_PICKUP"
+    | "OUT_FOR_DELIVERY"
     | "DELIVERED";
 
 interface Step {
@@ -39,7 +40,8 @@ const STEPS: Step[] = [
     { key: "PENDING", labelKey: "pending", icon: "time-outline" },
     { key: "CONFIRMED", labelKey: "confirmed", icon: "checkmark-done-outline" },
     { key: "PREPARING", labelKey: "preparing", icon: "restaurant-outline" },
-    { key: "ON_THE_WAY", labelKey: "onTheWay", icon: "bicycle-outline" },
+    { key: "READY_FOR_PICKUP", labelKey: "readyForPickup", icon: "bag-handle-outline" },
+    { key: "OUT_FOR_DELIVERY", labelKey: "outForDelivery", icon: "bicycle-outline" },
     { key: "DELIVERED", labelKey: "delivered", icon: "home-outline" },
 ];
 
@@ -47,8 +49,9 @@ const STATUS_TO_INDEX: Record<string, number> = {
     PENDING: 0,
     CONFIRMED: 1,
     PREPARING: 2,
-    ON_THE_WAY: 3,
-    DELIVERED: 4,
+    READY_FOR_PICKUP: 3,
+    OUT_FOR_DELIVERY: 4,
+    DELIVERED: 5,
     CANCELLED: -1,
 };
 

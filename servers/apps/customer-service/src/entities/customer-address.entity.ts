@@ -19,6 +19,18 @@ export class CustomerAddress {
   @Column({ length: 100, nullable: true })
   city: string;
 
+  // ─── New mobile fields (added so the address sheet can capture full ────
+  // detail: building number, floor, and any delivery instructions). All
+  // nullable so existing rows stay valid after the migration.
+  @Column({ length: 80, nullable: true })
+  building: string | null;
+
+  @Column({ length: 40, nullable: true })
+  floor: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
+
   @Column({ type: 'numeric', precision: 9, scale: 6, nullable: true })
   lat: number;
 
