@@ -24,6 +24,7 @@
   },
   "category": {
     "all": "الكل",
+    "showAll": "عرض كل المطاعم",
     "placesCount_zero": "لا توجد أماكن",
     "placesCount_one": "مكان واحد",
     "placesCount_two": "مكانان",

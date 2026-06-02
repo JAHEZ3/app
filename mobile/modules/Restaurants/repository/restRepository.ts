@@ -3,16 +3,20 @@ import { RestaurantDetailsDTO, RestaurantsResponseDTO } from '../dto/Restaurant'
 import { MenuDTO } from '../dto/Menu';
 import { MenuSectionDTO } from '../dto/MenuSection';
 import { toRestaurantAdapter } from '../adapter/toRestaurantAdapter';
+import { toCategoryAdapter } from '../adapter/toCategoryAdapter';
+import { CategoryDTO } from '../dto/Category';
 import { toRestaurantDetailsAdapter } from '../adapter/toRestaurantDetailsAdapter';
 import { toMenuAdapter } from '../adapter/toMenuAdapter';
 import { toMenuSectionAdapter } from '../adapter/toMenuSectionAdapter';
 import { RestaurantDetails } from '../entities/RestaurantDetails';
+import { Category } from '../entities/Category';
 import { Menu } from '../entities/Menu';
 import { MenuSection } from '../entities/MenuSection';
 import { RestaurantsRepository, RestaurantsPage } from './RestaurantsRepository';
 
 const BASE = '/api/restaurant/mobile/restaurants';
 const MENU_BASE = '/api/restaurant/mobile/menus';
+const CATEGORIES_BASE = '/api/restaurant/categories';
 
 const toId = (item: unknown): string | null => {
     if (typeof item === 'string') return item;
@@ -31,6 +35,13 @@ export const restRepository = (): RestaurantsRepository => ({
             data: (res.data.data ?? []).map(toRestaurantAdapter),
             meta: res.data.meta,
         };
+    },
+
+    getCategories: async (): Promise<Category[]> => {
+        // The endpoint returns a bare array; tolerate a `{ data }` wrapper too.
+        const res = await restaurantApi.get<CategoryDTO[] | { data: CategoryDTO[] }>(CATEGORIES_BASE);
+        const raw = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
+        return raw.map(toCategoryAdapter);
     },
 
     getRestaurantById: async (id): Promise<RestaurantDetails> => {

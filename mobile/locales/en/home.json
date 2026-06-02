@@ -24,6 +24,7 @@
   },
   "category": {
     "all": "All",
+    "showAll": "Show all restaurants",
     "placesCount_one": "{{count}} place",
     "placesCount_other": "{{count}} places"
   },
