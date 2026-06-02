@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const ORDER_PROXY      = process.env.ORDER_PROXY_URL      ?? "http://localhost:3001";
 const RESTAURANT_PROXY = process.env.RESTAURANT_PROXY_URL ?? "http://localhost:3003";
 const MANAGER_PROXY    = process.env.MANAGER_PROXY_URL    ?? "http://localhost:3006";
+const CUSTOMER_PROXY   = process.env.CUSTOMER_PROXY_URL   ?? "http://localhost:3005";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["10.30.0.*"],
@@ -15,6 +16,7 @@ const nextConfig: NextConfig = {
       { source: "/api/order/:path*",      destination: `${ORDER_PROXY}/api/order/:path*`      },
       { source: "/api/restaurant/:path*", destination: `${RESTAURANT_PROXY}/api/restaurant/:path*` },
       { source: "/api/manager/:path*",    destination: `${MANAGER_PROXY}/api/manager/:path*`  },
+      { source: "/api/customer/:path*",   destination: `${CUSTOMER_PROXY}/api/customer/:path*` },
     ];
   },
 };

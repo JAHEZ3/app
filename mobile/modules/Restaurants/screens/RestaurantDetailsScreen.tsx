@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -16,9 +17,13 @@ import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
 import { useCartStore } from "@/store/useCartStore";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import { useRestaurantDetails } from "../hooks/useRestaurantDetails";
 import { useRestaurantMenus } from "../hooks/useRestaurantMenus";
 import { useMenuSections } from "../hooks/useMenuSections";
+import { useFavorites } from "../hooks/useFavorites";
+import { useToggleFavorite } from "../hooks/useToggleFavorite";
+import { useRateRestaurant } from "../hooks/useRateRestaurant";
 import { RestaurantDetails } from "../entities/RestaurantDetails";
 import { MenuSection } from "../entities/MenuSection";
 import { formatCuisineType, imageSource } from "../utils/foodImages";
@@ -26,6 +31,7 @@ import DetailsHeroSkeleton from "../components/DetailsHeroSkeleton";
 import ListErrorState from "../components/ListErrorState";
 import MenuTabs from "../components/MenuTabs";
 import MealsList from "../components/MealsList";
+import RestaurantRatingDialog from "../components/RestaurantRatingDialog";
 
 const COVER_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
@@ -144,7 +150,10 @@ function InfoRow({
 const RestaurantDetailsScreen = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
   const addCartItem = useCartStore((state) => state.addItem);
+  const isRTL = useLanguageStore((s) => s.isRTL);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [ratingDialogVisible, setRatingDialogVisible] = useState(false);
+  const [ratedSuccessfully, setRatedSuccessfully] = useState(false);
 
   const { data, isLoading, isError, error, refetch, isRefetching } =
     useRestaurantDetails(id);
@@ -157,6 +166,39 @@ const RestaurantDetailsScreen = () => {
     isError: menusError,
     refetch: refetchMenus,
   } = useRestaurantMenus(id);
+
+  const { isFavorite } = useFavorites();
+  const { mutate: toggleFavorite, isPending: isTogglingFavorite } = useToggleFavorite();
+  const { mutate: rateRestaurant, isPending: isRatingLoading } = useRateRestaurant();
+
+  const favorited = id ? isFavorite(id) : false;
+
+  const handleToggleFavorite = useCallback(() => {
+    if (!id) return;
+    toggleFavorite({ restaurantId: id, isFavorite: favorited });
+  }, [id, favorited, toggleFavorite]);
+
+  const handleRateSubmit = useCallback(
+    (rating: number, comment?: string) => {
+      if (!id) return;
+      rateRestaurant(
+        { restaurantId: id, rating, comment },
+        {
+          onSuccess: () => {
+            setRatingDialogVisible(false);
+            setRatedSuccessfully(true);
+          },
+          onError: () => {
+            Alert.alert(
+              isRTL ? 'خطأ' : 'Error',
+              isRTL ? 'تعذر إرسال تقييمك. حاول مرة أخرى.' : 'Could not submit your rating. Please try again.',
+            );
+          },
+        },
+      );
+    },
+    [id, rateRestaurant, isRTL],
+  );
 
   const {
     data: sections = [],
@@ -274,10 +316,20 @@ const RestaurantDetailsScreen = () => {
 
           <View style={styles.topBarOverlay}>
             <AnimatedPressable onPress={handleBack} style={styles.overlayIconButton}>
-              <Ionicons name="chevron-back" size={22} color={colors.onPrimary} />
+              <Ionicons name={isRTL ? "chevron-forward" : "chevron-back"} size={22} color={colors.onPrimary} />
             </AnimatedPressable>
-            <AnimatedPressable style={styles.overlayIconButton}>
-              <Ionicons name="heart-outline" size={20} color={colors.onPrimary} />
+            <AnimatedPressable
+              onPress={handleToggleFavorite}
+              style={[styles.overlayIconButton, favorited && styles.overlayIconButtonFav]}
+              haptic="impact"
+              scaleTo={0.88}
+              disabled={isTogglingFavorite}
+            >
+              <Ionicons
+                name={favorited ? "heart" : "heart-outline"}
+                size={20}
+                color={favorited ? "#F55905" : colors.onPrimary}
+              />
             </AnimatedPressable>
           </View>
 
@@ -310,24 +362,73 @@ const RestaurantDetailsScreen = () => {
 
         <View style={styles.content}>
           <View style={styles.metaCard}>
-            <StatChip icon="star" label="Rating" value={`${rating.toFixed(1)} (${totalRatings})`} />
+            <StatChip icon="star" label={isRTL ? "التقييم" : "Rating"} value={`${rating.toFixed(1)} (${totalRatings})`} />
             <View style={styles.metaDivider} />
-            <StatChip icon="cart-outline" label="Min order" value={formatPrice(minOrderAmount)} />
+            <StatChip icon="cart-outline" label={isRTL ? "الحد الأدنى" : "Min order"} value={formatPrice(minOrderAmount)} />
             {estimatedDeliveryTime != null ? (
               <>
                 <View style={styles.metaDivider} />
-                <StatChip icon="time-outline" label="ETA" value={`${estimatedDeliveryTime} min`} />
+                <StatChip icon="time-outline" label={isRTL ? "وقت التوصيل" : "ETA"} value={`${estimatedDeliveryTime} min`} />
               </>
             ) : null}
           </View>
 
+          {/* Rate + Favorite action row */}
+          <View style={[styles.actionRow, isRTL && styles.rowReverse]}>
+            <AnimatedPressable
+              onPress={() => { setRatingDialogVisible(true); setRatedSuccessfully(false); }}
+              style={[styles.actionBtn, ratedSuccessfully && styles.actionBtnSuccess]}
+              scaleTo={0.96}
+              haptic="impact"
+            >
+              <Ionicons
+                name={ratedSuccessfully ? "checkmark-circle" : "star-outline"}
+                size={16}
+                color={ratedSuccessfully ? "#16A34A" : colors.primary}
+              />
+              <Text style={[styles.actionBtnText, ratedSuccessfully && { color: "#16A34A" }]}>
+                {ratedSuccessfully
+                  ? (isRTL ? "شكراً على تقييمك!' " : "Thanks for rating!")
+                  : (isRTL ? "قيّم المطعم" : "Rate restaurant")}
+              </Text>
+            </AnimatedPressable>
+
+            <AnimatedPressable
+              onPress={handleToggleFavorite}
+              style={[styles.actionBtn, favorited && styles.actionBtnFav]}
+              scaleTo={0.96}
+              haptic="impact"
+              disabled={isTogglingFavorite}
+            >
+              <Ionicons
+                name={favorited ? "heart" : "heart-outline"}
+                size={16}
+                color={favorited ? "#F55905" : colors.onSurface}
+              />
+              <Text style={[styles.actionBtnText, favorited && { color: "#F55905" }]}>
+                {favorited
+                  ? (isRTL ? "محفوظ" : "Saved")
+                  : (isRTL ? "حفظ" : "Save")}
+              </Text>
+            </AnimatedPressable>
+          </View>
+
           {description ? (
             <View style={styles.aboutBlock}>
-              <Text style={styles.blockTitle}>About</Text>
+              <Text style={styles.blockTitle}>{isRTL ? "عن المطعم" : "About"}</Text>
               <Text style={styles.description}>{description}</Text>
             </View>
           ) : null}
         </View>
+
+        <RestaurantRatingDialog
+          visible={ratingDialogVisible}
+          restaurantName={name}
+          isRTL={isRTL}
+          onClose={() => setRatingDialogVisible(false)}
+          onSubmit={handleRateSubmit}
+          isLoading={isRatingLoading}
+        />
 
         <View style={styles.menuBlock}>
           <View style={styles.blockHeader}>
@@ -460,6 +561,42 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(30,30,30,0.42)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  overlayIconButtonFav: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+  },
+  rowReverse: {
+    flexDirection: "row-reverse",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    height: 44,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainerHighest,
+    backgroundColor: colors.card,
+    ...shadows.soft,
+  },
+  actionBtnFav: {
+    borderColor: "#F55905",
+    backgroundColor: "#FFF3EC",
+  },
+  actionBtnSuccess: {
+    borderColor: "#16A34A",
+    backgroundColor: "#F0FDF4",
+  },
+  actionBtnText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onSurface,
+    fontSize: 13,
   },
   heroContent: {
     position: "absolute",

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo } from "react";
-import { StatusBar, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -19,6 +19,8 @@ import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
 import { useTranslation } from "react-i18next";
 import { useLanguageStore } from "@/store/useLanguageStore";
+import PaymentInfoCard from "../components/PaymentInfoCard";
+import PaymentProofCard from "../components/PaymentProofCard";
 
 const formatPrice = (value: number, currency: string) =>
     `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
@@ -35,6 +37,7 @@ function OrderSuccessScreen() {
         orderNumber?: string;
         total?: string;
         paymentMethod?: string;
+        restaurantId?: string;
     }>();
 
     const orderId = params.orderId ?? "";
@@ -44,6 +47,7 @@ function OrderSuccessScreen() {
         return Number.isFinite(parsed) ? parsed : 0;
     }, [params.total]);
     const paymentMethod = params.paymentMethod ?? "";
+    const restaurantId = params.restaurantId ?? "";
     const currency = tCart("price.currency");
 
     const displayOrderRef = orderNumber || orderId.slice(0, 8).toUpperCase();
@@ -97,7 +101,10 @@ function OrderSuccessScreen() {
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-            <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <ScrollView
+                contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 12) + 24 }]}
+                showsVerticalScrollIndicator={false}
+            >
                 <Animated.View entering={FadeIn.duration(380)} style={styles.illustration}>
                     <Animated.View style={[styles.ring, ringStyle]}>
                         <LinearGradient
@@ -168,6 +175,37 @@ function OrderSuccessScreen() {
                     </View>
                 </Animated.View>
 
+                {orderId && paymentMethod === "online" ? (
+                    <>
+                        {restaurantId ? (
+                            <Animated.View
+                                entering={FadeInUp.delay(380).duration(420)}
+                                style={styles.uploadWrap}
+                            >
+                                <PaymentInfoCard restaurantId={restaurantId} />
+                            </Animated.View>
+                        ) : null}
+                        <Animated.View
+                            entering={FadeInUp.delay(400).duration(420)}
+                            style={styles.uploadWrap}
+                        >
+                            <PaymentProofCard
+                                orderId={orderId}
+                                onUploaded={() => {
+                                    // Small delay so the success badge inside the card
+                                    // is visible before we leave the screen.
+                                    setTimeout(() => {
+                                        router.replace({
+                                            pathname: "/orders/[id]",
+                                            params: { id: orderId },
+                                        } as never);
+                                    }, 900);
+                                }}
+                            />
+                        </Animated.View>
+                    </>
+                ) : null}
+
                 <Animated.View
                     entering={FadeInUp.delay(440).duration(420)}
                     style={styles.actions}
@@ -189,6 +227,35 @@ function OrderSuccessScreen() {
                         />
                     </AnimatedPressable>
 
+                    {orderId ? (
+                        <AnimatedPressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/orders/[id]/pick-driver",
+                                    params: { id: orderId },
+                                } as never)
+                            }
+                            scaleTo={0.96}
+                            haptic="impact"
+                            style={[styles.secondaryBtn, isRTL && styles.rowReverse]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("success.pickDriver", {
+                                defaultValue: "Pick your driver",
+                            })}
+                        >
+                            <Ionicons
+                                name="bicycle"
+                                size={16}
+                                color={colors.onSurface}
+                            />
+                            <Text style={[styles.secondaryBtnText, { writingDirection, marginLeft: 8 }]}>
+                                {t("success.pickDriver", {
+                                    defaultValue: "Pick your driver",
+                                })}
+                            </Text>
+                        </AnimatedPressable>
+                    ) : null}
+
                     <AnimatedPressable
                         onPress={handleHome}
                         scaleTo={0.96}
@@ -201,7 +268,7 @@ function OrderSuccessScreen() {
                         </Text>
                     </AnimatedPressable>
                 </Animated.View>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -249,11 +316,15 @@ const styles = StyleSheet.create({
         flexDirection: "row-reverse",
     },
     content: {
-        flex: 1,
+        flexGrow: 1,
         paddingHorizontal: screen.horizontal,
+        paddingTop: 24,
         alignItems: "center",
         justifyContent: "center",
         gap: 16,
+    },
+    uploadWrap: {
+        width: "100%",
     },
     illustration: {
         width: 160,

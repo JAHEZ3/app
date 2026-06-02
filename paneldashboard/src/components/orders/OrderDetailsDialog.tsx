@@ -1,20 +1,26 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bike,
   Building2,
+  Check,
   CheckCircle,
   Clock,
   CreditCard,
+  Loader2,
+  Map as MapIcon,
   MapPin,
   Package,
   Phone,
   ShoppingBag,
   User,
+  X,
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogBody,
@@ -23,9 +29,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MapboxMap, type MapPin as MapPinData } from "@/components/ui/mapbox-map";
+import { useOrderTracking } from "@/hooks/useOrderTracking";
 import { adminOrdersApi, type AdminOrderDetails } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { useToast } from "@/providers/ToastProvider";
 
 interface OrderDetailsDialogProps {
   orderId: string | null;
@@ -160,6 +169,8 @@ export function OrderDetailsDialog({
   open,
   onOpenChange,
 }: OrderDetailsDialogProps) {
+  const [mapOpen, setMapOpen] = useState(false);
+
   const { data, isLoading, isError } = useQuery({
     queryKey: queryKeys.orders.one(orderId ?? ""),
     queryFn: async () => {
@@ -172,6 +183,10 @@ export function OrderDetailsDialog({
 
   const orderNumber = data?.order.orderNumber ?? "—";
   const status = data?.order.status;
+  const customerLat = data?.customer.address?.lat;
+  const customerLng = data?.customer.address?.lng;
+  const hasCustomerCoords =
+    typeof customerLat === "number" && typeof customerLng === "number";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -268,6 +283,20 @@ export function OrderDetailsDialog({
                     }
                   />
                 )}
+                {hasCustomerCoords && (
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setMapOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <MapIcon className="w-3.5 h-3.5" />
+                      عرض على الخريطة
+                    </Button>
+                  </div>
+                )}
               </Section>
 
               <Section
@@ -336,6 +365,14 @@ export function OrderDetailsDialog({
                     </Badge>
                   }
                 />
+                {/* Manager toggle — only for online orders. Server validates
+                    "paid" requires a proof to be on file. */}
+                {data.payment.method === "online" && (
+                  <PaymentStatusToggle
+                    orderId={data.order.id}
+                    current={data.payment.status}
+                  />
+                )}
                 <Row
                   label="المجموع الفرعي"
                   value={formatCurrency(data.payment.subtotal)}
@@ -402,6 +439,201 @@ export function OrderDetailsDialog({
           )}
         </DialogBody>
       </DialogContent>
+
+      {data && hasCustomerCoords && (
+        <OrderLocationDialog
+          open={mapOpen}
+          onOpenChange={setMapOpen}
+          orderId={data.order.id}
+          orderNumber={data.order.orderNumber}
+          customerName={data.customer.name}
+          customerLat={customerLat!}
+          customerLng={customerLng!}
+          address={[
+            data.customer.address?.label,
+            data.customer.address?.street,
+            data.customer.address?.city,
+          ]
+            .filter(Boolean)
+            .join("، ")}
+        />
+      )}
     </Dialog>
   );
+}
+
+/**
+ * Manager-side toggle for an online order's paymentStatus. After eyeballing
+ * the customer's uploaded bank-transfer screenshot, the manager flips this
+ * from "unpaid" to "paid" (or back, to reverse a mistake). The server
+ * rejects "paid" without a proof on file and surfaces a localized message.
+ */
+function PaymentStatusToggle({
+  orderId,
+  current,
+}: {
+  orderId: string;
+  current: AdminOrderDetails["payment"]["status"];
+}) {
+  const qc = useQueryClient();
+  const { success, error } = useToast();
+  const isPaid = current === "paid";
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      adminOrdersApi.updatePaymentStatus(orderId, {
+        paymentStatus: isPaid ? "unpaid" : "paid",
+      }),
+    onSuccess: () => {
+      success(isPaid ? "تم إعادة الحالة إلى غير مدفوع" : "تم تأكيد الدفع");
+      qc.invalidateQueries({ queryKey: queryKeys.orders.one(orderId) });
+      qc.invalidateQueries({ queryKey: queryKeys.orders.all() });
+    },
+    onError: (e) => {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "تعذّر تحديث حالة الدفع";
+      error("خطأ", msg);
+    },
+  });
+
+  return (
+    <div className="flex items-center justify-between py-2">
+      <span className="text-xs text-muted-foreground">إجراء سريع</span>
+      <Button
+        size="sm"
+        variant={isPaid ? "outline" : "default"}
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate()}
+        className="h-7 text-[11px]"
+      >
+        {mutation.isPending ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : isPaid ? (
+          <>
+            <X className="w-3.5 h-3.5" /> إعادة إلى غير مدفوع
+          </>
+        ) : (
+          <>
+            <Check className="w-3.5 h-3.5" /> وضع علامة مدفوع
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function OrderLocationDialog({
+  open,
+  onOpenChange,
+  orderId,
+  orderNumber,
+  customerName,
+  customerLat,
+  customerLng,
+  address,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerLat: number;
+  customerLng: number;
+  address: string;
+}) {
+  // Only subscribe to the order room while the dialog is open so we don't
+  // hold socket rooms for orders the operator already closed.
+  const { driver, connected, isStale } = useOrderTracking(open ? orderId : null);
+
+  const pins: MapPinData[] = [
+    {
+      id: "dropoff",
+      lat: customerLat,
+      lng: customerLng,
+      label: customerName,
+      color: "#16A34A",
+      popupHtml: `<div style="font-family: inherit; font-size: 13px; line-height: 1.5;">
+        <strong>${escapeHtml(customerName)}</strong>${
+          address ? `<br/><span style="color:#666">${escapeHtml(address)}</span>` : ""
+        }
+      </div>`,
+    },
+  ];
+  if (driver) {
+    pins.push({
+      id: "driver",
+      lat: driver.lat,
+      lng: driver.lng,
+      label: "السائق",
+      color: "#FF6B00",
+      popupHtml: `<div style="font-family: inherit; font-size: 13px;">
+        <strong>السائق</strong>
+        <br/><span style="color:#666">${
+          isStale ? "آخر تحديث منذ أكثر من 15 ثانية" : "آخر تحديث الآن"
+        }</span>
+      </div>`,
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>
+            تتبع الطلب{" "}
+            <span className="font-mono text-primary">{orderNumber}</span>
+          </DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="flex items-center justify-between mb-3 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  connected ? "bg-green-500 animate-pulse" : "bg-gray-300"
+                }`}
+              />
+              <span
+                className={
+                  connected ? "text-green-600 font-semibold" : "text-muted-foreground"
+                }
+              >
+                {connected ? "اتصال مباشر نشط" : "في انتظار الاتصال…"}
+              </span>
+            </div>
+            <span className="text-muted-foreground">
+              {driver
+                ? isStale
+                  ? "توقفت تحديثات السائق مؤقتاً"
+                  : "موقع السائق محدّث"
+                : "بانتظار خروج السائق…"}
+            </span>
+          </div>
+
+          <div className="h-[480px] w-full rounded-xl overflow-hidden border border-border">
+            <MapboxMap pins={pins} animate zoom={14} />
+          </div>
+          {address && (
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-primary" />
+              {address}
+            </p>
+          )}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default: return c;
+    }
+  });
 }

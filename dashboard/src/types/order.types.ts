@@ -43,6 +43,14 @@ export interface OrderItem {
   notes: string | null;
 }
 
+export interface DeliveryAddressSnapshot {
+  street?: string;
+  city?: string;
+  lat?: number;
+  lng?: number;
+  label?: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -64,6 +72,7 @@ export interface Order {
   // dashboard countdown that mirrors the server auto-ready timer.
   preparingStartedAt: string | null;
   receiptKey: string | null;
+  paymentProofKey: string | null;
   createdAt: string;
   items: OrderItem[];
   // Local POS only — undefined for online delivery orders.
@@ -71,6 +80,8 @@ export interface Order {
   tableNumber?: string | null;
   localStatus?: LocalOrderStatus | null;
   paymentSplits?: PaymentSplit[] | null;
+  // Online orders only. Captured at checkout from the customer's chosen address.
+  deliveryAddress?: DeliveryAddressSnapshot | null;
 }
 
 export interface PaymentSplit {
@@ -119,6 +130,8 @@ type RawOrder = Partial<Order> & {
   discountAmount?: number | string;
   totalAmount?: number | string;
   receipt_key?: string | null;
+  paymentProofKey?: string | null;
+  payment_proof_key?: string | null;
   serviceType?: string | null;
   service_type?: string | null;
   tableNumber?: string | null;
@@ -128,6 +141,9 @@ type RawOrder = Partial<Order> & {
   local_status?: string | null;
   paymentSplits?: Array<{ id?: string; amount: number | string; method: string; paidAt: string; payerName?: string | null; reference?: string | null }> | null;
   payment_splits?: Array<{ id?: string; amount: number | string; method: string; paidAt: string; payerName?: string | null; payer_name?: string | null; reference?: string | null }> | null;
+  deliveryAddress?: DeliveryAddressSnapshot | null;
+  deliveryAddressSnapshot?: DeliveryAddressSnapshot | null;
+  delivery_address_snapshot?: DeliveryAddressSnapshot | null;
 };
 
 const num = (v: unknown): number => {
@@ -171,6 +187,7 @@ export function normalizeOrder(raw: RawOrder): Order {
     deliveredAt: raw.deliveredAt ?? null,
     preparingStartedAt: raw.preparingStartedAt ?? raw.preparing_started_at ?? null,
     receiptKey: raw.receiptKey ?? raw.receipt_key ?? null,
+    paymentProofKey: raw.paymentProofKey ?? raw.payment_proof_key ?? null,
     createdAt: raw.createdAt ?? new Date().toISOString(),
     items: Array.isArray(raw.items) ? raw.items.map(normalizeOrderItem) : [],
     serviceType: (raw.serviceType ?? raw.service_type ?? null) as LocalServiceType | null,
@@ -191,5 +208,10 @@ export function normalizeOrder(raw: RawOrder): Order {
         };
       });
     })(),
+    deliveryAddress:
+      raw.deliveryAddress ??
+      raw.deliveryAddressSnapshot ??
+      raw.delivery_address_snapshot ??
+      null,
   };
 }

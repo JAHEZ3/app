@@ -1097,6 +1097,23 @@ export class RestaurantServiceController {
     return this.inventory.listMovements(itemId, user.sub, user.role, Number(limit) || 100);
   }
 
+  /**
+   * GET /api/restaurant/:id/payment-info — JWT-protected.
+   * Returns the restaurant's bank/wallet details so the mobile checkout can
+   * show the customer where to transfer money for `paymentMethod: 'online'`
+   * orders. Customer + manager only; never exposed anonymously to keep bank
+   * account numbers off scraper-accessible endpoints.
+   *
+   * Must come BEFORE the wildcard `/:id` below, otherwise NestJS routes the
+   * request to `getRestaurant`.
+   */
+  @Get(":id/payment-info")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("customer", "manager")
+  getRestaurantPaymentInfo(@Param("id") id: string) {
+    return this.service.getPaymentInfoForCheckout(id);
+  }
+
   // ─── Must be last: wildcard catches any GET /:id not matched above ────────────
 
   /** GET /api/restaurant/:id — public full menu tree */

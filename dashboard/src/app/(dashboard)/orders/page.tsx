@@ -2,14 +2,55 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
-import { useOrders, useUpdateOrderStatus, useVoidPosOrder, useFinishPosOrder } from "@/hooks/useOrders";
+import {
+  useOrders,
+  useUpdateOrderStatus,
+  useUpdatePaymentStatus,
+  useVoidPosOrder,
+  useFinishPosOrder,
+} from "@/hooks/useOrders";
 import { useRestaurant } from "@/hooks/useRestaurant";
-import { OrderStatus, Order, PaymentMethod, LocalServiceType, LocalOrderStatus } from "@/types/order.types";
+import {
+  OrderStatus,
+  Order,
+  PaymentMethod,
+  PaymentStatus,
+  LocalServiceType,
+  LocalOrderStatus,
+} from "@/types/order.types";
 import { LocalOrderStatusBadge, OrderStatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { MapboxMap, type MapPin } from "@/components/ui/mapbox-map";
+import { useOrderTracking } from "@/hooks/useOrderTracking";
 import { formatCurrency, formatTime, formatRelativeTime } from "@/lib/utils";
-import { Check, X, Eye, ChevronRight, ChevronLeft, Search, RefreshCw, MessageSquare, Send, Loader2, WifiOff, Lock, FileText, Download, ExternalLink, AlertCircle, Trash2, Utensils, ShoppingBag, Bike, Clock } from "lucide-react";
+import {
+  Check,
+  X,
+  Eye,
+  ChevronRight,
+  ChevronLeft,
+  Search,
+  RefreshCw,
+  MessageSquare,
+  Send,
+  Loader2,
+  WifiOff,
+  Lock,
+  FileText,
+  Download,
+  ExternalLink,
+  AlertCircle,
+  Trash2,
+  Utensils,
+  ShoppingBag,
+  Bike,
+  Clock,
+  Map as MapIcon,
+  MapPin as MapPinIcon,
+  Receipt,
+  ImageOff,
+} from "lucide-react";
 import { useToast } from "@/providers/ToastProvider";
 import { useSocket } from "@/hooks/useSocket";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,33 +71,36 @@ interface ChatMsg {
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const statusFilters = [
-  { value: "all",                        label: "جميع الطلبات" },
-  { value: OrderStatus.PENDING,          label: "قيد الانتظار" },
-  { value: OrderStatus.CONFIRMED,        label: "مؤكد"          },
-  { value: OrderStatus.PREPARING,        label: "يتم التحضير"   },
+  { value: "all", label: "جميع الطلبات" },
+  { value: OrderStatus.PENDING, label: "قيد الانتظار" },
+  { value: OrderStatus.CONFIRMED, label: "مؤكد" },
+  { value: OrderStatus.PREPARING, label: "يتم التحضير" },
   { value: OrderStatus.READY_FOR_PICKUP, label: "جاهز للاستلام" },
-  { value: OrderStatus.DELIVERED,        label: "تم التوصيل"    },
-  { value: OrderStatus.CANCELLED,        label: "ملغي"          },
+  { value: OrderStatus.DELIVERED, label: "تم التوصيل" },
+  { value: OrderStatus.CANCELLED, label: "ملغي" },
 ];
 
 // Friendly Arabic labels for the status-edit dropdown.
 const orderStatusLabel: Record<OrderStatus, string> = {
-  [OrderStatus.PENDING]:          "قيد الانتظار",
-  [OrderStatus.CONFIRMED]:        "مؤكد",
-  [OrderStatus.PREPARING]:        "يتم التحضير",
+  [OrderStatus.PENDING]: "قيد الانتظار",
+  [OrderStatus.CONFIRMED]: "مؤكد",
+  [OrderStatus.PREPARING]: "يتم التحضير",
   [OrderStatus.READY_FOR_PICKUP]: "جاهز للاستلام",
   [OrderStatus.OUT_FOR_DELIVERY]: "في الطريق",
-  [OrderStatus.DELIVERED]:        "تم التوصيل",
-  [OrderStatus.CANCELLED]:        "ملغي",
-  [OrderStatus.REFUNDED]:         "مسترد",
+  [OrderStatus.DELIVERED]: "تم التوصيل",
+  [OrderStatus.CANCELLED]: "ملغي",
+  [OrderStatus.REFUNDED]: "مسترد",
 };
 
 // Restaurant-owner allowed next states from each status (must mirror
 // ALLOWED_TRANSITIONS in apps/order-service/src/order/order.service.ts).
 const nextStatusOptions: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  [OrderStatus.PENDING]:   [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
   [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
-  [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
+  [OrderStatus.PREPARING]: [
+    OrderStatus.READY_FOR_PICKUP,
+    OrderStatus.CANCELLED,
+  ],
 };
 
 // Must match ONLINE_PREPARING_AUTO_READY_MS on the server.
@@ -64,22 +108,22 @@ const ONLINE_PREPARING_AUTO_READY_MS = 15 * 60 * 1000;
 
 // Local POS bills have their own short lifecycle, not the delivery flow.
 const localStatusFilters = [
-  { value: "all",       label: "كل الفواتير"  },
-  { value: "open",      label: "مفتوحة"       },
-  { value: "preparing", label: "يتم التحضير"  },
-  { value: "done",      label: "تم"           },
-  { value: "voided",    label: "ملغاة"        },
+  { value: "all", label: "كل الفواتير" },
+  { value: "open", label: "مفتوحة" },
+  { value: "preparing", label: "يتم التحضير" },
+  { value: "done", label: "تم" },
+  { value: "voided", label: "ملغاة" },
 ];
 
 const kindFilters = [
   { value: "online" as const, label: "الطلبات الإلكترونية" },
-  { value: "local"  as const, label: "نقطة البيع"          },
+  { value: "local" as const, label: "نقطة البيع" },
 ];
 
 const paymentMethodLabel: Record<PaymentMethod, string> = {
   cash_on_delivery: "الدفع عند الاستلام",
-  card:             "بطاقة",
-  online:           "أونلاين",
+  card: "بطاقة",
+  online: "أونلاين",
 };
 
 // ─── Sound helper ─────────────────────────────────────────────────────────────
@@ -89,14 +133,17 @@ function playNotificationSound() {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
     osc.frequency.setValueAtTime(880, ctx.currentTime);
     osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch { /* AudioContext not available */ }
+  } catch {
+    /* AudioContext not available */
+  }
 }
 
 // ─── Chat panel ───────────────────────────────────────────────────────────────
@@ -115,17 +162,27 @@ const senderInitial = (name: string, role: string) => {
 
 const senderTone = (role: string): { bg: string; text: string } => {
   switch (role) {
-    case "restaurant": return { bg: "bg-primary",     text: "text-white" };
-    case "delivery":   return { bg: "bg-info",        text: "text-white" };
-    case "manager":    return { bg: "bg-warning",     text: "text-white" };
-    default:           return { bg: "bg-muted",       text: "text-foreground" };
+    case "restaurant":
+      return { bg: "bg-primary", text: "text-white" };
+    case "delivery":
+      return { bg: "bg-info", text: "text-white" };
+    case "manager":
+      return { bg: "bg-warning", text: "text-white" };
+    default:
+      return { bg: "bg-muted", text: "text-foreground" };
   }
 };
 
 const isSameMinute = (a: string, b: string) =>
   new Date(a).getTime() - new Date(b).getTime() < 60_000;
 
-function ChatPanel({ orderId, isLocked }: { orderId: string; isLocked?: boolean }) {
+function ChatPanel({
+  orderId,
+  isLocked,
+}: {
+  orderId: string;
+  isLocked?: boolean;
+}) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -139,10 +196,15 @@ function ChatPanel({ orderId, isLocked }: { orderId: string; isLocked?: boolean 
     let cancelled = false;
     setLoading(true);
     joinOrder(orderId);
-    ordersApi.getChat(orderId)
-      .then((res) => { if (!cancelled) setMessages(res.data?.data ?? []); })
+    ordersApi
+      .getChat(orderId)
+      .then((res) => {
+        if (!cancelled) setMessages(res.data?.data ?? []);
+      })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     const off = on("chat:message", (...args: unknown[]) => {
       const raw = args[0] as (ChatMsg & { messageId?: string }) | undefined;
@@ -150,7 +212,9 @@ function ChatPanel({ orderId, isLocked }: { orderId: string; isLocked?: boolean 
       // Order-service emits `messageId` over the socket but `id` over HTTP.
       const msg: ChatMsg = { ...raw, id: raw.id ?? raw.messageId ?? "" };
       if (!msg.id) return;
-      setMessages((prev) => (prev.some((p) => p.id === msg.id) ? prev : [...prev, msg]));
+      setMessages((prev) =>
+        prev.some((p) => p.id === msg.id) ? prev : [...prev, msg],
+      );
     });
 
     return () => {
@@ -192,7 +256,9 @@ function ChatPanel({ orderId, isLocked }: { orderId: string; isLocked?: boolean 
       <div className="bg-muted/40 px-4 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
-          <span className="text-xs font-bold text-foreground">محادثة الطلب</span>
+          <span className="text-xs font-bold text-foreground">
+            محادثة الطلب
+          </span>
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
           {connected ? (
@@ -220,13 +286,17 @@ function ChatPanel({ orderId, isLocked }: { orderId: string; isLocked?: boolean 
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <MessageSquare className="w-8 h-8 mb-2 opacity-40" />
             <p className="text-xs">لا توجد رسائل بعد</p>
-            <p className="text-[10px] mt-0.5 opacity-70">ابدأ المحادثة مع العميل</p>
+            <p className="text-[10px] mt-0.5 opacity-70">
+              ابدأ المحادثة مع العميل
+            </p>
           </div>
         ) : (
           messages.map((m, i) => {
             const prev = messages[i - 1];
             const grouped =
-              prev && prev.senderId === m.senderId && isSameMinute(prev.createdAt, m.createdAt);
+              prev &&
+              prev.senderId === m.senderId &&
+              isSameMinute(prev.createdAt, m.createdAt);
             const mine = m.senderRole === "restaurant";
             const tone = senderTone(m.senderRole);
 
@@ -248,7 +318,9 @@ function ChatPanel({ orderId, isLocked }: { orderId: string; isLocked?: boolean 
                 </div>
 
                 {/* Bubble + meta */}
-                <div className={`flex flex-col max-w-[75%] ${mine ? "items-end" : "items-start"}`}>
+                <div
+                  className={`flex flex-col max-w-[75%] ${mine ? "items-end" : "items-start"}`}
+                >
                   {!grouped && (
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="text-[10px] font-semibold text-foreground">
@@ -358,12 +430,24 @@ function InvoicePanel({ order }: { order: Order }) {
     setErrMsg(null);
     try {
       const res = await ordersApi.getReceipt(order.id);
-      const body = res.data as { data?: { url?: string } | null; message?: string };
-      if (body?.data?.url) {
-        setUrl(body.data.url);
+      const body = res.data as Record<string, unknown>;
+      // Handle: { data: { url } } | { url } | bare string
+      const inner = body?.data;
+      const receiptUrl =
+        (inner && typeof inner === "object" && typeof (inner as Record<string, unknown>).url === "string"
+          ? (inner as Record<string, unknown>).url
+          : null) ??
+        (typeof body?.url === "string" ? body.url : null) ??
+        (typeof inner === "string" ? inner : null) ??
+        null;
+      if (receiptUrl) {
+        setUrl(receiptUrl as string);
       } else {
         setUrl(null);
-        setErrMsg(body?.message ?? "الفاتورة لم تُنشأ بعد");
+        setErrMsg(
+          (typeof body?.message === "string" ? body.message : null) ??
+            "الفاتورة لم تُنشأ بعد",
+        );
       }
     } catch (e) {
       setErrMsg(getApiError(e));
@@ -382,7 +466,9 @@ function InvoicePanel({ order }: { order: Order }) {
       <div className="bg-muted/40 px-4 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-muted-foreground" />
-          <span className="text-xs font-bold text-foreground">الفاتورة الإلكترونية</span>
+          <span className="text-xs font-bold text-foreground">
+            الفاتورة الإلكترونية
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -444,11 +530,219 @@ function InvoicePanel({ order }: { order: Order }) {
   );
 }
 
+// ─── Payment proof panel ──────────────────────────────────────────────────────
+// Shows the receipt image the customer uploaded at checkout. The order has
+// `paymentProofKey` once uploaded; the backend returns a presigned URL on demand.
+
+function PaymentProofPanel({ order }: { order: Order }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const updatePayment = useUpdatePaymentStatus();
+  const { success, error } = useToast();
+
+  const isPaid = order.paymentStatus === PaymentStatus.PAID;
+  const isOnline = order.paymentMethod === PaymentMethod.ONLINE;
+  const hasProofKey = !!order.paymentProofKey;
+
+  const togglePayment = useCallback(() => {
+    const next: "paid" | "unpaid" = isPaid ? "unpaid" : "paid";
+    if (next === "paid" && isOnline && !hasProofKey) {
+      error("تعذّر تأكيد الدفع", "العميل لم يرفع إيصال الدفع بعد.");
+      return;
+    }
+    updatePayment.mutate(
+      { id: order.id, paymentStatus: next },
+      {
+        onSuccess: () =>
+          success(
+            next === "paid"
+              ? "تم تأكيد الدفع"
+              : "تم إعادة الحالة إلى غير مدفوع",
+          ),
+        onError: (e) => error("تعذّر تحديث حالة الدفع", getApiError(e)),
+      },
+    );
+  }, [isPaid, isOnline, hasProofKey, updatePayment, order.id, success, error]);
+
+  const fetchUrl = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const res = await ordersApi.getPaymentProof(order.id);
+      const body = res.data as Record<string, unknown>;
+      // Handle: { data: { url } } | { url } | bare string
+      const inner = body?.data;
+      const proofUrl =
+        (inner && typeof inner === "object" && typeof (inner as Record<string, unknown>).url === "string"
+          ? (inner as Record<string, unknown>).url
+          : null) ??
+        (typeof body?.url === "string" ? body.url : null) ??
+        (typeof inner === "string" ? inner : null) ??
+        null;
+      if (proofUrl) {
+        setUrl(proofUrl as string);
+      } else {
+        setUrl(null);
+        setErrMsg(
+          (typeof body?.message === "string" ? body.message : null) ??
+            "لم يرفع العميل إيصال الدفع بعد",
+        );
+      }
+    } catch (e) {
+      setErrMsg(getApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [order.id]);
+
+  useEffect(() => {
+    if (order.paymentProofKey) fetchUrl();
+    else {
+      setUrl(null);
+      setErrMsg(null);
+    }
+  }, [order.paymentProofKey, fetchUrl]);
+
+  const hasProof = !!order.paymentProofKey;
+
+  return (
+    <div className="border border-border rounded-xl overflow-hidden bg-white">
+      <div className="bg-muted/40 px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Receipt className="w-4 h-4 text-muted-foreground" />
+          <span className="text-xs font-bold text-foreground">
+            إيصال الدفع من العميل
+          </span>
+          {/* Real paymentStatus badge — not derived from hasProof, so the
+              restaurant's "Mark as paid" decision is what's actually shown. */}
+          {isPaid ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success/10 text-success">
+              <Check className="w-2.5 h-2.5" /> مدفوع
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning/10 text-warning">
+              غير مدفوع
+            </span>
+          )}
+          {hasProof && !isPaid && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-info/10 text-info">
+              بانتظار التأكيد
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {/* Toggle the order between paid ↔ unpaid. Visible for online orders
+              regardless of proof state — server-side validation blocks
+              "paid" without a proof and surfaces the localized error. */}
+          {isOnline && (
+            <Button
+              size="sm"
+              variant={isPaid ? "outline" : "primary"}
+              onClick={togglePayment}
+              loading={updatePayment.isPending}
+              className="h-7 text-[11px]"
+            >
+              {isPaid ? (
+                <>
+                  <X className="w-3 h-3" /> إعادة إلى غير مدفوع
+                </>
+              ) : (
+                <>
+                  <Check className="w-3 h-3" /> وضع علامة مدفوع
+                </>
+              )}
+            </Button>
+          )}
+          {hasProof && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={fetchUrl}
+              loading={loading}
+              className="h-7 text-[11px]"
+            >
+              <RefreshCw className="w-3 h-3" /> تحديث
+            </Button>
+          )}
+          {url && (
+            <>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border text-[11px] font-semibold hover:bg-muted/40 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" /> فتح
+              </a>
+              <a
+                href={url}
+                download={`payment-proof-${order.orderNumber}.jpg`}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-primary text-white text-[11px] font-semibold hover:bg-primary/90 transition-colors"
+              >
+                <Download className="w-3 h-3" /> تحميل
+              </a>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="relative">
+        {loading ? (
+          <div className="h-64 flex items-center justify-center gap-2 text-muted-foreground text-xs">
+            <Loader2 className="w-4 h-4 animate-spin" /> جاري تحميل الإيصال…
+          </div>
+        ) : !hasProof ? (
+          <div className="h-40 flex flex-col items-center justify-center gap-2 text-muted-foreground p-4">
+            <ImageOff className="w-7 h-7 opacity-40" />
+            <p className="text-xs text-center font-semibold">
+              لم يرفع العميل إيصال الدفع بعد
+            </p>
+            <p className="text-[10px] text-center opacity-70">
+              الطلب يعتبر غير مدفوع حتى يرفع العميل الإيصال
+            </p>
+          </div>
+        ) : errMsg ? (
+          <div className="h-32 flex flex-col items-center justify-center gap-2 text-muted-foreground p-4">
+            <AlertCircle className="w-6 h-6 opacity-50" />
+            <p className="text-xs text-center">{errMsg}</p>
+          </div>
+        ) : url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`Payment proof ${order.orderNumber}`}
+              className="w-full max-h-[480px] object-contain bg-muted/30"
+            />
+          </a>
+        ) : (
+          <div className="h-32 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Receipt className="w-6 h-6 opacity-40" />
+            <p className="text-xs">لا يوجد إيصال متاح</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Order type cell ──────────────────────────────────────────────────────────
 // Local POS orders carry a service type (dine-in / takeaway) and an optional
 // table number. Online orders are always delivery.
 
-function OrderTypeCell({ order, kind }: { order: Order; kind: "online" | "local" }) {
+function OrderTypeCell({
+  order,
+  kind,
+}: {
+  order: Order;
+  kind: "online" | "local";
+}) {
   if (kind === "local") {
     if (order.serviceType === LocalServiceType.DINE_IN) {
       return (
@@ -476,15 +770,15 @@ function OrderTypeCell({ order, kind }: { order: Order; kind: "online" | "local"
 // ─── Order detail dialog ──────────────────────────────────────────────────────
 
 const posPaymentMethodLabel: Record<string, string> = {
-  cash:   "نقدًا",
-  card:   "بطاقة",
+  cash: "نقدًا",
+  card: "بطاقة",
   online: "أونلاين",
   wallet: "محفظة",
 };
 
 const posPaymentMethodTone: Record<string, string> = {
-  cash:   "bg-success/10 text-success",
-  card:   "bg-info/10 text-info",
+  cash: "bg-success/10 text-success",
+  card: "bg-info/10 text-info",
   online: "bg-primary/10 text-primary",
   wallet: "bg-warning/10 text-warning",
 };
@@ -502,20 +796,30 @@ function PosPaymentSummary({ order }: { order: Order }) {
       </div>
       <div className="p-4 space-y-2 text-sm">
         {splits.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-2">لم يُسجَّل دفع بعد</p>
+          <p className="text-xs text-muted-foreground text-center py-2">
+            لم يُسجَّل دفع بعد
+          </p>
         ) : (
           splits.map((s, i) => {
             const isCash = s.method === "cash";
-            const tone = posPaymentMethodTone[s.method] ?? "bg-muted text-foreground";
+            const tone =
+              posPaymentMethodTone[s.method] ?? "bg-muted text-foreground";
             const label = posPaymentMethodLabel[s.method] ?? s.method;
             return (
-              <div key={s.id ?? i} className="bg-muted/30 rounded-lg px-3 py-2 space-y-1">
+              <div
+                key={s.id ?? i}
+                className="bg-muted/30 rounded-lg px-3 py-2 space-y-1"
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${tone}`}>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${tone}`}
+                    >
                       {label}
                     </span>
-                    <span className="text-[10px] text-muted-foreground">{formatTime(s.paidAt)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {formatTime(s.paidAt)}
+                    </span>
                   </div>
                   <span className="font-bold">{formatCurrency(s.amount)}</span>
                 </div>
@@ -523,12 +827,18 @@ function PosPaymentSummary({ order }: { order: Order }) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                     {s.payerName && (
                       <span>
-                        المُحوِّل: <span className="text-foreground font-medium">{s.payerName}</span>
+                        المُحوِّل:{" "}
+                        <span className="text-foreground font-medium">
+                          {s.payerName}
+                        </span>
                       </span>
                     )}
                     {s.reference && (
                       <span>
-                        المرجع: <span className="text-foreground font-medium" dir="ltr">{s.reference}</span>
+                        المرجع:{" "}
+                        <span className="text-foreground font-medium" dir="ltr">
+                          {s.reference}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -544,7 +854,9 @@ function PosPaymentSummary({ order }: { order: Order }) {
         {due > 0 && (
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">المتبقي</span>
-            <span className="font-bold text-warning">{formatCurrency(due)}</span>
+            <span className="font-bold text-warning">
+              {formatCurrency(due)}
+            </span>
           </div>
         )}
       </div>
@@ -552,22 +864,36 @@ function PosPaymentSummary({ order }: { order: Order }) {
   );
 }
 
-function OrderDetailDialog({ order, kind }: { order: Order; kind: "online" | "local" }) {
+function OrderDetailDialog({
+  order,
+  kind,
+}: {
+  order: Order;
+  kind: "online" | "local";
+}) {
   const isLocal = kind === "local";
   const updateStatus = useUpdateOrderStatus();
   const { success, error } = useToast();
+  const [mapOpen, setMapOpen] = useState(false);
+
+  const addr = order.deliveryAddress;
+  const hasCoords =
+    !!addr && typeof addr.lat === "number" && typeof addr.lng === "number";
+  const addressText = addr
+    ? [addr.label, addr.street, addr.city].filter(Boolean).join("، ")
+    : "";
 
   const nextStatusMap: Partial<Record<OrderStatus, OrderStatus>> = {
-    [OrderStatus.PENDING]:          OrderStatus.CONFIRMED,
-    [OrderStatus.CONFIRMED]:        OrderStatus.PREPARING,
-    [OrderStatus.PREPARING]:        OrderStatus.READY_FOR_PICKUP,
+    [OrderStatus.PENDING]: OrderStatus.CONFIRMED,
+    [OrderStatus.CONFIRMED]: OrderStatus.PREPARING,
+    [OrderStatus.PREPARING]: OrderStatus.READY_FOR_PICKUP,
     [OrderStatus.READY_FOR_PICKUP]: OrderStatus.OUT_FOR_DELIVERY,
     [OrderStatus.OUT_FOR_DELIVERY]: OrderStatus.DELIVERED,
   };
   const nextStatusLabel: Partial<Record<OrderStatus, string>> = {
-    [OrderStatus.PENDING]:          "قبول الطلب",
-    [OrderStatus.CONFIRMED]:        "بدء التحضير",
-    [OrderStatus.PREPARING]:        "جاهز للاستلام",
+    [OrderStatus.PENDING]: "قبول الطلب",
+    [OrderStatus.CONFIRMED]: "بدء التحضير",
+    [OrderStatus.PREPARING]: "جاهز للاستلام",
     [OrderStatus.READY_FOR_PICKUP]: "خرج للتوصيل",
     [OrderStatus.OUT_FOR_DELIVERY]: "تم التوصيل",
   };
@@ -576,12 +902,14 @@ function OrderDetailDialog({ order, kind }: { order: Order; kind: "online" | "lo
   const nextLabel = !isLocal ? nextStatusLabel[order.status] : undefined;
 
   return (
-    <DialogContent title={`تفاصيل الطلب ${order.orderNumber}`}>
-      <div className="space-y-4 max-h-[80vh] overflow-y-auto">
+    <DialogContent title={`تفاصيل الطلب ${order.orderNumber}`} className="max-w-3xl">
+      <div className="space-y-6 max-h-[100vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">الحالة</span>
           {isLocal ? (
-            <LocalOrderStatusBadge status={order.localStatus ?? LocalOrderStatus.OPEN} />
+            <LocalOrderStatusBadge
+              status={order.localStatus ?? LocalOrderStatus.OPEN}
+            />
           ) : (
             <OrderStatusBadge status={order.status} />
           )}
@@ -608,27 +936,71 @@ function OrderDetailDialog({ order, kind }: { order: Order; kind: "online" | "lo
             {order.customerPhone && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">الهاتف</span>
-                <span className="font-medium" dir="ltr">{order.customerPhone}</span>
+                <span className="font-medium" dir="ltr">
+                  {order.customerPhone}
+                </span>
               </div>
             )}
             {order.customerNotes && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">ملاحظات</span>
-                <span className="font-medium text-yellow-600">{order.customerNotes}</span>
+                <span className="font-medium text-yellow-600">
+                  {order.customerNotes}
+                </span>
               </div>
             )}
+            {!isLocal && addressText && (
+              <div className="flex justify-between text-sm items-start">
+                <span className="text-muted-foreground">العنوان</span>
+                <span className="font-medium text-left flex-1 mr-2">
+                  {addressText}
+                </span>
+              </div>
+            )}
+            {!isLocal && hasCoords && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setMapOpen(true)}
+                className="w-full mt-2"
+              >
+                <MapIcon className="w-4 h-4" />
+                عرض الموقع على الخريطة
+              </Button>
+            )}
           </div>
+        )}
+
+        {!isLocal && hasCoords && (
+          <OrderTrackingDialog
+            open={mapOpen}
+            onOpenChange={setMapOpen}
+            orderId={order.id}
+            orderNumber={order.orderNumber}
+            customerName={order.customerName}
+            dropoffLat={addr!.lat!}
+            dropoffLng={addr!.lng!}
+            addressText={addressText}
+          />
         )}
 
         <div>
           <h4 className="text-sm font-bold mb-2">الوجبات</h4>
           <div className="space-y-2">
             {order.items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between text-sm bg-muted/30 rounded-lg px-3 py-2">
+              <div
+                key={item.id}
+                className="flex items-center justify-between text-sm bg-muted/30 rounded-lg px-3 py-2"
+              >
                 <span>{item.mealName}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-muted-foreground">× {item.quantity}</span>
-                  <span className="font-bold">{formatCurrency(item.totalPrice)}</span>
+                  <span className="text-muted-foreground">
+                    × {item.quantity}
+                  </span>
+                  <span className="font-bold">
+                    {formatCurrency(item.totalPrice)}
+                  </span>
                 </div>
               </div>
             ))}
@@ -654,7 +1026,9 @@ function OrderDetailDialog({ order, kind }: { order: Order; kind: "online" | "lo
           )}
           <div className="flex justify-between font-bold text-base border-t border-border pt-2">
             <span>الإجمالي</span>
-            <span className="text-primary">{formatCurrency(order.totalAmount)}</span>
+            <span className="text-primary">
+              {formatCurrency(order.totalAmount)}
+            </span>
           </div>
           {!isLocal && (
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -667,7 +1041,12 @@ function OrderDetailDialog({ order, kind }: { order: Order; kind: "online" | "lo
         {isLocal ? (
           <PosPaymentSummary order={order} />
         ) : (
-          order.paymentMethod === PaymentMethod.ONLINE && <InvoicePanel order={order} />
+          order.paymentMethod === PaymentMethod.ONLINE && (
+            <>
+              <PaymentProofPanel order={order} />
+              <InvoicePanel order={order} />
+            </>
+          )
         )}
 
         {!isLocal && next && nextLabel && (
@@ -734,14 +1113,18 @@ function StatusCell({
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (order.status !== OrderStatus.PREPARING || !order.preparingStartedAt) return;
+    if (order.status !== OrderStatus.PREPARING || !order.preparingStartedAt)
+      return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [order.status, order.preparingStartedAt]);
 
   const remaining = (() => {
-    if (order.status !== OrderStatus.PREPARING || !order.preparingStartedAt) return null;
-    const ends = new Date(order.preparingStartedAt).getTime() + ONLINE_PREPARING_AUTO_READY_MS;
+    if (order.status !== OrderStatus.PREPARING || !order.preparingStartedAt)
+      return null;
+    const ends =
+      new Date(order.preparingStartedAt).getTime() +
+      ONLINE_PREPARING_AUTO_READY_MS;
     const ms = Math.max(0, ends - now);
     const m = Math.floor(ms / 60_000);
     const s = Math.floor((ms % 60_000) / 1000);
@@ -754,7 +1137,10 @@ function StatusCell({
     <div className="space-y-1.5">
       <OrderStatusBadge status={order.status} />
       {remaining && (
-        <div className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded" suppressHydrationWarning>
+        <div
+          className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded"
+          suppressHydrationWarning
+        >
           <Clock className="w-3 h-3" /> {remaining}
         </div>
       )}
@@ -803,7 +1189,9 @@ export default function OrdersPage() {
   // Real-time: new order + status change
   useEffect(() => {
     const offNew = on("order:new", (...args: unknown[]) => {
-      const data = args[0] as { orderNumber?: string; totalAmount?: number } | undefined;
+      const data = args[0] as
+        | { orderNumber?: string; totalAmount?: number }
+        | undefined;
       playNotificationSound();
       setNewOrderBanner(
         `طلب جديد #${data?.orderNumber ?? ""} — ${data?.totalAmount ?? ""} شيكل`,
@@ -816,7 +1204,10 @@ export default function OrdersPage() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     });
 
-    return () => { offNew(); offStatus(); };
+    return () => {
+      offNew();
+      offStatus();
+    };
   }, [on, queryClient]);
 
   const { data, isLoading, refetch, isFetching } = useOrders({
@@ -846,21 +1237,32 @@ export default function OrdersPage() {
     <div className="flex flex-col h-full">
       <Header />
       <div className="flex-1 p-5 space-y-4">
-
         {/* New order banner */}
         {newOrderBanner && (
           <div className="bg-primary text-white rounded-xl px-5 py-3 flex items-center justify-between animate-pulse">
             <span className="font-bold text-sm">🔔 {newOrderBanner}</span>
-            <button onClick={() => setNewOrderBanner(null)} className="text-white/70 hover:text-white text-lg leading-none">×</button>
+            <button
+              onClick={() => setNewOrderBanner(null)}
+              className="text-white/70 hover:text-white text-lg leading-none"
+            >
+              ×
+            </button>
           </div>
         )}
 
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-black text-foreground">إدارة الطلبات</h1>
+            <h1 className="text-xl font-black text-foreground">
+              إدارة الطلبات
+            </h1>
             <p className="text-sm text-muted-foreground mt-0.5">{total} طلب</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()} loading={isFetching}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            loading={isFetching}
+          >
             <RefreshCw className="w-4 h-4" /> تحديث
           </Button>
         </div>
@@ -899,17 +1301,24 @@ export default function OrdersPage() {
             />
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {(kindFilter === "local" ? localStatusFilters : statusFilters).map((f) => (
-              <button
-                key={f.value}
-                onClick={() => { setStatusFilter(f.value); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  statusFilter === f.value ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+            {(kindFilter === "local" ? localStatusFilters : statusFilters).map(
+              (f) => (
+                <button
+                  key={f.value}
+                  onClick={() => {
+                    setStatusFilter(f.value);
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    statusFilter === f.value
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ),
+            )}
           </div>
         </div>
 
@@ -929,35 +1338,67 @@ export default function OrdersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">رقم الطلب</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">النوع</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">العميل</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">الوجبات</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">الإجمالي</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">الحالة</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">الوقت</th>
-                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">الإجراءات</th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      رقم الطلب
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      النوع
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      العميل
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      الوجبات
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      الإجمالي
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      الحالة
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      الوقت
+                    </th>
+                    <th className="text-right px-5 py-3 text-xs font-bold text-muted-foreground">
+                      الإجراءات
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.map((order) => (
-                    <tr key={order.id} className="hover:bg-muted/20 transition-colors">
+                    <tr
+                      key={order.id}
+                      className="hover:bg-muted/20 transition-colors"
+                    >
                       <td className="px-5 py-4">
-                        <span className="font-bold text-sm">{order.orderNumber}</span>
+                        <span className="font-bold text-sm">
+                          {order.orderNumber}
+                        </span>
                       </td>
                       <td className="px-5 py-4">
                         <OrderTypeCell order={order} kind={kindFilter} />
                       </td>
                       <td className="px-5 py-4">
-                        <p className="text-sm font-semibold">{order.customerName}</p>
-                        <p className="text-xs text-muted-foreground" dir="ltr">{order.customerPhone}</p>
+                        <p className="text-sm font-semibold">
+                          {order.customerName}
+                        </p>
+                        <p className="text-xs text-muted-foreground" dir="ltr">
+                          {order.customerPhone}
+                        </p>
                       </td>
                       <td className="px-5 py-4 text-sm">
                         {order.items[0]?.mealName}
-                        {order.items.length > 1 && <span className="text-muted-foreground"> +{order.items.length - 1}</span>}
+                        {order.items.length > 1 && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            +{order.items.length - 1}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-sm font-bold text-primary">{formatCurrency(order.totalAmount)}</span>
+                        <span className="text-sm font-bold text-primary">
+                          {formatCurrency(order.totalAmount)}
+                        </span>
                       </td>
                       <td className="px-5 py-4">
                         {kindFilter === "online" ? (
@@ -968,111 +1409,200 @@ export default function OrdersPage() {
                               updateStatus.mutate(
                                 { id: order.id, data: { status: next } },
                                 {
-                                  onSuccess: () => success("تم تحديث حالة الطلب"),
+                                  onSuccess: () =>
+                                    success("تم تحديث حالة الطلب"),
                                   onError: (e) => error("خطأ", getApiError(e)),
                                 },
                               )
                             }
                           />
                         ) : (
-                          <LocalOrderStatusBadge status={order.localStatus ?? LocalOrderStatus.OPEN} />
+                          <LocalOrderStatusBadge
+                            status={order.localStatus ?? LocalOrderStatus.OPEN}
+                          />
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        <p className="text-xs text-muted-foreground" suppressHydrationWarning>{formatRelativeTime(order.createdAt)}</p>
-                        <p className="text-xs text-muted-foreground" suppressHydrationWarning>{formatTime(order.createdAt)}</p>
+                        <p
+                          className="text-xs text-muted-foreground"
+                          suppressHydrationWarning
+                        >
+                          {formatRelativeTime(order.createdAt)}
+                        </p>
+                        <p
+                          className="text-xs text-muted-foreground"
+                          suppressHydrationWarning
+                        >
+                          {formatTime(order.createdAt)}
+                        </p>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
-                          {kindFilter === "online" && order.status === OrderStatus.PENDING && (
-                            <>
-                              <Button size="icon" variant="success" className="w-8 h-8 rounded-lg" title="قبول"
-                                onClick={() => updateStatus.mutate(
-                                  { id: order.id, data: { status: OrderStatus.CONFIRMED } },
-                                  { onSuccess: () => success("تم قبول الطلب"), onError: (e) => error("خطأ", getApiError(e)) },
-                                )}>
-                                <Check className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button size="icon" variant="danger" className="w-8 h-8 rounded-lg" title="رفض"
-                                onClick={() => updateStatus.mutate(
-                                  { id: order.id, data: { status: OrderStatus.CANCELLED } },
-                                  { onSuccess: () => success("تم رفض الطلب"), onError: (e) => error("خطأ", getApiError(e)) },
-                                )}>
-                                <X className="w-3.5 h-3.5" />
-                              </Button>
-                            </>
-                          )}
+                          {kindFilter === "online" &&
+                            order.status === OrderStatus.PENDING && (
+                              <>
+                                <Button
+                                  size="icon"
+                                  variant="success"
+                                  className="w-8 h-8 rounded-lg"
+                                  title="قبول"
+                                  onClick={() =>
+                                    updateStatus.mutate(
+                                      {
+                                        id: order.id,
+                                        data: { status: OrderStatus.CONFIRMED },
+                                      },
+                                      {
+                                        onSuccess: () =>
+                                          success("تم قبول الطلب"),
+                                        onError: (e) =>
+                                          error("خطأ", getApiError(e)),
+                                      },
+                                    )
+                                  }
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="danger"
+                                  className="w-8 h-8 rounded-lg"
+                                  title="رفض"
+                                  onClick={() =>
+                                    updateStatus.mutate(
+                                      {
+                                        id: order.id,
+                                        data: { status: OrderStatus.CANCELLED },
+                                      },
+                                      {
+                                        onSuccess: () =>
+                                          success("تم رفض الطلب"),
+                                        onError: (e) =>
+                                          error("خطأ", getApiError(e)),
+                                      },
+                                    )
+                                  }
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            )}
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button size="sm" variant="outline" className="h-8 px-3 rounded-lg gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-3 rounded-lg gap-1.5"
+                              >
                                 <Eye className="w-3.5 h-3.5" />
-                                <span className="text-xs font-semibold">تفاصيل</span>
+                                <span className="text-xs font-semibold">
+                                  تفاصيل
+                                </span>
                               </Button>
                             </DialogTrigger>
-                            <OrderDetailDialog order={order} kind={kindFilter} />
+                            <OrderDetailDialog
+                              order={order}
+                              kind={kindFilter}
+                            />
                           </Dialog>
                           {kindFilter === "local" &&
                             order.localStatus !== LocalOrderStatus.VOIDED &&
                             order.localStatus !== LocalOrderStatus.DONE && (
-                            <Button
-                              size="sm"
-                              variant="success"
-                              className="h-8 px-3 rounded-lg gap-1.5"
-                              title="إنهاء الفاتورة"
-                              loading={finishPos.isPending}
-                              onClick={() => {
-                                if (!window.confirm(`إنهاء الفاتورة ${order.orderNumber}؟`)) return;
-                                finishPos.mutate(
-                                  { id: order.id },
-                                  { onSuccess: () => success("تم إنهاء الفاتورة"), onError: (e) => error("خطأ", getApiError(e)) },
-                                );
-                              }}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span className="text-xs font-semibold">إنهاء</span>
-                            </Button>
-                          )}
+                              <Button
+                                size="sm"
+                                variant="success"
+                                className="h-8 px-3 rounded-lg gap-1.5"
+                                title="إنهاء الفاتورة"
+                                loading={finishPos.isPending}
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      `إنهاء الفاتورة ${order.orderNumber}؟`,
+                                    )
+                                  )
+                                    return;
+                                  finishPos.mutate(
+                                    { id: order.id },
+                                    {
+                                      onSuccess: () =>
+                                        success("تم إنهاء الفاتورة"),
+                                      onError: (e) =>
+                                        error("خطأ", getApiError(e)),
+                                    },
+                                  );
+                                }}
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span className="text-xs font-semibold">
+                                  إنهاء
+                                </span>
+                              </Button>
+                            )}
                           {kindFilter === "online" &&
                             order.status !== OrderStatus.CANCELLED &&
                             order.status !== OrderStatus.DELIVERED &&
                             order.status !== OrderStatus.REFUNDED && (
-                            <Button
-                              size="icon"
-                              variant="danger"
-                              className="w-8 h-8 rounded-lg"
-                              title="إلغاء الطلب"
-                              onClick={() => {
-                                if (!window.confirm(`إلغاء الطلب ${order.orderNumber}؟`)) return;
-                                updateStatus.mutate(
-                                  { id: order.id, data: { status: OrderStatus.CANCELLED } },
-                                  { onSuccess: () => success("تم إلغاء الطلب"), onError: (e) => error("خطأ", getApiError(e)) },
-                                );
-                              }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
+                              <Button
+                                size="icon"
+                                variant="danger"
+                                className="w-8 h-8 rounded-lg"
+                                title="إلغاء الطلب"
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      `إلغاء الطلب ${order.orderNumber}؟`,
+                                    )
+                                  )
+                                    return;
+                                  updateStatus.mutate(
+                                    {
+                                      id: order.id,
+                                      data: { status: OrderStatus.CANCELLED },
+                                    },
+                                    {
+                                      onSuccess: () =>
+                                        success("تم إلغاء الطلب"),
+                                      onError: (e) =>
+                                        error("خطأ", getApiError(e)),
+                                    },
+                                  );
+                                }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                           {kindFilter === "local" &&
                             order.localStatus !== LocalOrderStatus.VOIDED &&
                             order.localStatus !== LocalOrderStatus.DONE && (
-                            <Button
-                              size="icon"
-                              variant="danger"
-                              className="w-8 h-8 rounded-lg"
-                              title="إلغاء الفاتورة"
-                              loading={voidPos.isPending}
-                              onClick={() => {
-                                const reason = window.prompt(`إلغاء الفاتورة ${order.orderNumber}؟ سبب الإلغاء (اختياري):`, "");
-                                if (reason === null) return;
-                                voidPos.mutate(
-                                  { id: order.id, reason: reason.trim() || undefined },
-                                  { onSuccess: () => success("تم إلغاء الفاتورة"), onError: (e) => error("خطأ", getApiError(e)) },
-                                );
-                              }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
+                              <Button
+                                size="icon"
+                                variant="danger"
+                                className="w-8 h-8 rounded-lg"
+                                title="إلغاء الفاتورة"
+                                loading={voidPos.isPending}
+                                onClick={() => {
+                                  const reason = window.prompt(
+                                    `إلغاء الفاتورة ${order.orderNumber}؟ سبب الإلغاء (اختياري):`,
+                                    "",
+                                  );
+                                  if (reason === null) return;
+                                  voidPos.mutate(
+                                    {
+                                      id: order.id,
+                                      reason: reason.trim() || undefined,
+                                    },
+                                    {
+                                      onSuccess: () =>
+                                        success("تم إلغاء الفاتورة"),
+                                      onError: (e) =>
+                                        error("خطأ", getApiError(e)),
+                                    },
+                                  );
+                                }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -1090,10 +1620,20 @@ export default function OrdersPage() {
               عرض {(page - 1) * 10 + 1}–{Math.min(page * 10, total)} من {total}
             </span>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
                 <ChevronRight className="w-4 h-4" /> السابق
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page * 10 >= total}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page * 10 >= total}
+              >
                 التالي <ChevronLeft className="w-4 h-4" />
               </Button>
             </div>
@@ -1101,5 +1641,99 @@ export default function OrdersPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Live order tracking dialog ───────────────────────────────────────────────
+
+function OrderTrackingDialog({
+  open,
+  onOpenChange,
+  orderId,
+  orderNumber,
+  customerName,
+  dropoffLat,
+  dropoffLng,
+  addressText,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  dropoffLat: number;
+  dropoffLng: number;
+  addressText: string;
+}) {
+  // Only subscribe while the dialog is open — avoids joining a socket room for
+  // an order the user never inspected.
+  const { driver, connected, isStale } = useOrderTracking(
+    open ? orderId : null,
+  );
+
+  const pins: MapPin[] = [
+    {
+      id: "dropoff",
+      lat: dropoffLat,
+      lng: dropoffLng,
+      label: customerName,
+      color: "#16A34A",
+      popupHtml: `<div style="font-family:inherit;font-size:13px;"><strong>موقع التسليم</strong><br/><span style="color:#666">${customerName}</span></div>`,
+    },
+  ];
+  if (driver) {
+    pins.push({
+      id: "driver",
+      lat: driver.lat,
+      lng: driver.lng,
+      label: "السائق",
+      color: "#FF6B00",
+      popupHtml: `<div style="font-family:inherit;font-size:13px;"><strong>السائق</strong><br/><span style="color:#666">${
+        isStale ? "آخر تحديث منذ أكثر من 15 ثانية" : "آخر تحديث الآن"
+      }</span></div>`,
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title={`تتبع الطلب - ${orderNumber}`}>
+        <div className="flex items-center justify-between mb-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                connected ? "bg-green-500 animate-pulse" : "bg-gray-300"
+              }`}
+            />
+            <span
+              className={
+                connected
+                  ? "text-green-600 font-semibold"
+                  : "text-muted-foreground"
+              }
+            >
+              {connected ? "اتصال مباشر نشط" : "في انتظار الاتصال…"}
+            </span>
+          </div>
+          <span className="text-muted-foreground">
+            {driver
+              ? isStale
+                ? "توقفت تحديثات السائق مؤقتاً"
+                : "موقع السائق محدّث"
+              : "بانتظار خروج السائق…"}
+          </span>
+        </div>
+
+        <div className="h-[460px] w-full rounded-xl overflow-hidden border border-border">
+          <MapboxMap pins={pins} animate zoom={14} />
+        </div>
+
+        {addressText && (
+          <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+            <MapPinIcon className="w-3.5 h-3.5 text-primary" />
+            {addressText}
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

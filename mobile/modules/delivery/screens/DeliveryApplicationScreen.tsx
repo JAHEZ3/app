@@ -24,8 +24,8 @@ import AppButton from '@/components/ui/AppButton';
 import { useDeliveryT } from '@/hooks/useAppTranslation';
 import { useRTL } from '@/hooks/useRTL';
 import { useSubmitDeliveryProfile } from '../hooks/useSubmitDeliveryProfile';
-import { useGetDeliveryQuestions } from '../hooks/useGetDeliveryQuestions';
 import { Toast, useToast } from '../components/Toast';
+import LocationPickerModal, { PickedLocation } from '../components/LocationPickerModal';
 import { DeliveryApplicationFormData, ImageAsset, PaymentFormData, PaymentType, VehicleType } from '../types';
 
 // ─── Reusable sub-components ─────────────────────────────────────────────────
@@ -360,6 +360,94 @@ function VehicleSelector({ value, onChange }: { value: VehicleType | ''; onChang
     );
 }
 
+/**
+ * Tiny brand mark used inside the bank/wallet picker tiles. Just a coloured
+ * pill with the first Arabic letter — keeps us off image bundling but still
+ * gives each option a distinct visual identity.
+ */
+function BrandMark({ brand, size = 28 }: { brand: PaymentBrand; size?: number }) {
+    return (
+        <View
+            style={{
+                width: size, height: size, borderRadius: size / 4,
+                backgroundColor: brand.bg, alignItems: 'center', justifyContent: 'center',
+            }}
+        >
+            <Text style={{ color: '#fff', fontFamily: 'Cairo_700Bold', fontSize: size * 0.45 }}>
+                {brand.mark}
+            </Text>
+        </View>
+    );
+}
+
+function BrandPicker({
+    label,
+    options,
+    value,
+    onSelect,
+}: {
+    label: string;
+    options: PaymentBrand[];
+    value: string;
+    onSelect: (v: string) => void;
+}) {
+    const isRTL = useRTL();
+    return (
+        <View style={{ marginBottom: 14 }}>
+            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8, textAlign: isRTL ? 'right' : 'left' }}>
+                {label} <Text style={{ color: '#F55905' }}>*</Text>
+            </Text>
+            <View style={{ gap: 8 }}>
+                {options.map((opt) => {
+                    const selected = value === opt.value;
+                    return (
+                        <TouchableOpacity
+                            key={opt.value}
+                            onPress={() => onSelect(opt.value)}
+                            activeOpacity={0.85}
+                            style={{
+                                flexDirection: isRTL ? 'row-reverse' : 'row',
+                                alignItems: 'center', gap: 12,
+                                padding: 12, borderRadius: 14,
+                                borderWidth: 1.5,
+                                borderColor: selected ? '#F55905' : '#e5e5e5',
+                                backgroundColor: selected ? '#FFF5F0' : '#fafafa',
+                            }}
+                        >
+                            <BrandMark brand={opt} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={{
+                                    fontFamily: 'Cairo_700Bold', fontSize: 14,
+                                    color: selected ? '#F55905' : '#1E1E1E',
+                                    textAlign: isRTL ? 'right' : 'left',
+                                }}>
+                                    {opt.label}
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Tajawal_400Regular', fontSize: 11,
+                                    color: selected ? '#F55905' : '#767777',
+                                    textAlign: isRTL ? 'right' : 'left',
+                                }} numberOfLines={1}>
+                                    {opt.value}
+                                </Text>
+                            </View>
+                            <View style={{
+                                width: 20, height: 20, borderRadius: 10,
+                                borderWidth: 1.5,
+                                borderColor: selected ? '#F55905' : '#cfcfcf',
+                                backgroundColor: selected ? '#F55905' : 'transparent',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                {selected && <Ionicons name="checkmark" size={12} color="#fff" />}
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
+    );
+}
+
 function PaymentSelector({
     payment,
     onChange,
@@ -402,14 +490,23 @@ function PaymentSelector({
                 })}
             </View>
 
+            {payment.type !== '' && (
+                <Field
+                    label={t('application.fields.accountHolderName')} required
+                    value={payment.accountHolderName}
+                    onChangeText={(v) => onChange('accountHolderName', v)}
+                    placeholder={t('application.placeholders.accountHolderName')}
+                    icon="person-outline"
+                />
+            )}
+
             {payment.type === 'bank_account' && (
                 <>
-                    <Field
-                        label={t('application.fields.bankName')} required
+                    <BrandPicker
+                        label={t('application.fields.bankName')}
+                        options={BANK_OPTIONS}
                         value={payment.bankName}
-                        onChangeText={(v) => onChange('bankName', v)}
-                        placeholder={t('application.placeholders.bankName')}
-                        icon="business-outline"
+                        onSelect={(v) => onChange('bankName', v)}
                     />
                     <Field
                         label={t('application.fields.iban')} required
@@ -419,7 +516,7 @@ function PaymentSelector({
                         icon="card-outline"
                     />
                     <Field
-                        label={t('application.fields.accountNumber')}
+                        label={t('application.fields.accountNumber')} required
                         value={payment.accountNumber}
                         onChangeText={(v) => onChange('accountNumber', v)}
                         placeholder={t('application.placeholders.accountNumber')}
@@ -430,14 +527,30 @@ function PaymentSelector({
             )}
 
             {payment.type === 'wallet' && (
-                <Field
-                    label={t('application.fields.walletNumber')} required
-                    value={payment.walletNumber}
-                    onChangeText={(v) => onChange('walletNumber', v)}
-                    placeholder={t('application.placeholders.walletNumber')}
-                    keyboardType="phone-pad"
-                    icon="phone-portrait-outline"
-                />
+                <>
+                    <BrandPicker
+                        label={t('application.fields.walletType')}
+                        options={WALLET_OPTIONS}
+                        value={payment.walletType}
+                        onSelect={(v) => onChange('walletType', v)}
+                    />
+                    <Field
+                        label={t('application.fields.accountNumber')} required
+                        value={payment.accountNumber}
+                        onChangeText={(v) => onChange('accountNumber', v)}
+                        placeholder={t('application.placeholders.accountNumber')}
+                        keyboardType="numeric"
+                        icon="document-text-outline"
+                    />
+                    <Field
+                        label={t('application.fields.walletPhone')} required
+                        value={payment.walletPhone}
+                        onChangeText={(v) => onChange('walletPhone', v)}
+                        placeholder={t('application.placeholders.walletPhone')}
+                        keyboardType="phone-pad"
+                        icon="phone-portrait-outline"
+                    />
+                </>
             )}
         </View>
     );
@@ -588,11 +701,41 @@ function StepIndicator({ step, total }: { step: number; total: number }) {
 
 const EMPTY_PAYMENT: PaymentFormData = {
     type: '',
+    accountHolderName: '',
     bankName: '',
     iban: '',
     accountNumber: '',
-    walletNumber: '',
+    walletType: '',
+    walletPhone: '',
 };
+
+// Brand catalogues — must stay in sync with the restaurant complete-profile
+// page in `dashboard/src/app/(auth)/complete-profile/page.tsx`. The `value`
+// field is the canonical key persisted to `payment_info.bankName` / `walletType`.
+interface PaymentBrand {
+    value: string;
+    label: string;
+    mark: string;
+    bg: string;
+}
+const BANK_OPTIONS: PaymentBrand[] = [
+    { value: 'Bank of Palestine',        label: 'بنك فلسطين',           mark: 'ف', bg: '#059669' },
+    { value: 'Palestine Islamic Bank',   label: 'بنك فلسطين الإسلامي',  mark: 'إ', bg: '#0D9488' },
+    { value: 'Arab Islamic Bank',        label: 'البنك الإسلامي العربي', mark: 'ع', bg: '#D97706' },
+];
+const WALLET_OPTIONS: PaymentBrand[] = [
+    { value: 'PalPay',     label: 'PalPay',     mark: 'P', bg: '#0284C7' },
+    { value: 'Jawwal Pay', label: 'Jawwal Pay', mark: 'J', bg: '#C026D3' },
+];
+
+// Fallback honesty questions, used when the server-side question bank is empty
+// or the request fails — keeps the application unblocked. The same wording is
+// what the seed inserts, so no surprise for the operator reviewing answers.
+const FALLBACK_QUESTIONS: { question: string }[] = [
+    { question: 'هل لديك خبرة سابقة في توصيل الطلبات أو في مجال مماثل؟ إذا نعم، اشرحها باختصار.' },
+    { question: 'ما المدة اليومية التي يمكنك تخصيصها للعمل، وفي أي أوقات؟' },
+    { question: 'هل توافق على الالتزام بقواعد التعامل مع العملاء والحفاظ على نظافة وسلامة الطلب؟' },
+];
 
 const EMPTY_FORM: DeliveryApplicationFormData = {
     firstName: '',
@@ -621,8 +764,12 @@ export default function DeliveryApplicationScreen() {
     const { toast, show: showToast, hide: hideToast } = useToast();
 
     const { mutateAsync: submit, isPending } = useSubmitDeliveryProfile();
-    const { data: questions = [], isLoading: questionsLoading, isError: questionsError } = useGetDeliveryQuestions();
+    // Questions are always rendered in Arabic — the server-side bank is bypassed
+    // because the agent app ships an Arabic-first applicant experience.
+    const questions = FALLBACK_QUESTIONS;
+    const questionsLoading = false;
     const steps = useMemo(() => getSteps(t), [t]);
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     const update = useCallback(<K extends keyof DeliveryApplicationFormData>(
         key: K,
@@ -681,13 +828,28 @@ export default function DeliveryApplicationScreen() {
             if (!form.payment.type) {
                 showToast(t('application.validation.paymentMethodRequired'), 'error'); return false;
             }
+            if (!form.payment.accountHolderName.trim()) {
+                showToast(t('application.validation.accountHolderRequired'), 'error'); return false;
+            }
             if (form.payment.type === 'bank_account') {
-                if (!form.payment.bankName.trim() || !form.payment.iban.trim()) {
-                    showToast(t('application.validation.bankAndIbanRequired'), 'error'); return false;
+                if (!form.payment.bankName.trim()) {
+                    showToast(t('application.validation.bankRequired'), 'error'); return false;
+                }
+                if (!form.payment.iban.trim()) {
+                    showToast(t('application.validation.ibanRequired'), 'error'); return false;
+                }
+                if (!form.payment.accountNumber.trim()) {
+                    showToast(t('application.validation.accountNumberRequired'), 'error'); return false;
                 }
             } else if (form.payment.type === 'wallet') {
-                if (!form.payment.walletNumber.trim()) {
-                    showToast(t('application.validation.walletRequired'), 'error'); return false;
+                if (!form.payment.walletType.trim()) {
+                    showToast(t('application.validation.walletTypeRequired'), 'error'); return false;
+                }
+                if (!form.payment.accountNumber.trim()) {
+                    showToast(t('application.validation.accountNumberRequired'), 'error'); return false;
+                }
+                if (!form.payment.walletPhone.trim()) {
+                    showToast(t('application.validation.walletPhoneRequired'), 'error'); return false;
                 }
             }
         }
@@ -704,17 +866,15 @@ export default function DeliveryApplicationScreen() {
             if (!form.termsAccepted) {
                 showToast(t('application.validation.termsRequired'), 'error'); return false;
             }
-            // Guard: questions must have loaded and all 3 must be answered
-            if (questionsError || questions.length === 0) {
-                showToast(t('application.validation.questionsLoadFailed'), 'error'); return false;
-            }
+            // Fallback questions cover the questions-failed path, so the only
+            // hard requirement now is that every visible question has an answer.
             const hasUnanswered = answers.some((a) => !a.answer.trim());
             if (hasUnanswered) {
                 showToast(t('application.validation.questionsRequired'), 'error'); return false;
             }
         }
         return true;
-    }, [step, form, questions, answers, questionsError, showToast, t]);
+    }, [step, form, questions, answers, showToast, t]);
 
     // Single handler — no stale-closure risk
     const handleNext = useCallback(async () => {
@@ -740,6 +900,19 @@ export default function DeliveryApplicationScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F7' }} edges={['top', 'bottom']}>
             <StatusBar barStyle="dark-content" backgroundColor="#F7F7F7" />
             <Toast {...toast} onHide={hideToast} />
+
+            <LocationPickerModal
+                visible={pickerOpen}
+                initial={null}
+                onClose={() => setPickerOpen(false)}
+                onConfirm={(loc: PickedLocation) => {
+                    setForm((prev) => ({
+                        ...prev,
+                        city: loc.city || prev.city,
+                    }));
+                    setPickerOpen(false);
+                }}
+            />
 
             {/* Top bar */}
             <View style={{
@@ -815,13 +988,75 @@ export default function DeliveryApplicationScreen() {
                             keyboardType="numeric"
                             icon="card-outline"
                         />
-                        <Field
-                            label={t('application.fields.city')} required
-                            value={form.city}
-                            onChangeText={(v) => update('city', v)}
-                            placeholder={t('application.placeholders.city')}
-                            icon="location-outline"
-                        />
+                        {/* Location picker — the agent's service area, set on a map. */}
+                        <View style={{ marginBottom: 12 }}>
+                            <Text style={{
+                                fontFamily: 'Cairo_700Bold',
+                                fontSize: 12,
+                                color: '#1E1E1E',
+                                marginBottom: 6,
+                                textAlign: isRTL ? 'right' : 'left',
+                            }}>
+                                {t('application.fields.city')} <Text style={{ color: '#F55905' }}>*</Text>
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => setPickerOpen(true)}
+                                activeOpacity={0.85}
+                                style={{
+                                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    borderWidth: 1.5,
+                                    borderColor: form.city ? '#F55905' : '#e5e5e5',
+                                    borderRadius: 14,
+                                    backgroundColor: '#fafafa',
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 12,
+                                    minHeight: 52,
+                                }}
+                            >
+                                <View style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 10,
+                                    backgroundColor: form.city ? '#F55905' : '#FFF5F0',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}>
+                                    <Ionicons
+                                        name="map-outline"
+                                        size={18}
+                                        color={form.city ? '#fff' : '#F55905'}
+                                    />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    {form.city ? (
+                                        <Text style={{
+                                            fontFamily: 'Cairo_700Bold',
+                                            fontSize: 13,
+                                            color: '#1E1E1E',
+                                            textAlign: isRTL ? 'right' : 'left',
+                                        }} numberOfLines={1}>
+                                            {form.city}
+                                        </Text>
+                                    ) : (
+                                        <Text style={{
+                                            fontFamily: 'Tajawal_400Regular',
+                                            fontSize: 13,
+                                            color: '#9a9a9a',
+                                            textAlign: isRTL ? 'right' : 'left',
+                                        }}>
+                                            {t('application.placeholders.city')}
+                                        </Text>
+                                    )}
+                                </View>
+                                <Ionicons
+                                    name={isRTL ? 'chevron-back' : 'chevron-forward'}
+                                    size={18}
+                                    color="#c0c0c0"
+                                />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 )}
 
@@ -908,13 +1143,6 @@ export default function DeliveryApplicationScreen() {
                             />
                             {questionsLoading ? (
                                 <ActivityIndicator color="#F55905" style={{ marginVertical: 20 }} />
-                            ) : questionsError || questions.length === 0 ? (
-                                <View style={{ alignItems: 'center', paddingVertical: 16, gap: 8 }}>
-                                    <Ionicons name="alert-circle-outline" size={28} color="#b02500" />
-                                    <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 13, color: '#b02500', textAlign: 'center' }}>
-                                        {t('application.questionsFailed')}
-                                    </Text>
-                                </View>
                             ) : (
                                 answers.map((qa, idx) => (
                                     <View key={qa.question} style={{ marginBottom: 16 }}>

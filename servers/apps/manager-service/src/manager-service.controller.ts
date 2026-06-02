@@ -117,4 +117,12 @@ export class ManagerServiceController {
   getPayments() {
     return this.analytics.getPaymentsAnalytics();
   }
+
+  /** GET /api/manager/map/users — geo points for the platform-wide map page. */
+  @Get('map/users')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('manager')
+  getUserMap() {
+    return this.analytics.getUserMap();
+  }
 }

@@ -19,6 +19,7 @@ import { radii, shadows, typography } from "@/components/ui/theme";
 import { useOrdersT } from "@/hooks/useAppTranslation";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import { useOrderDetails } from "../hooks/useOrderDetails";
+import { useSocketError } from "@/hooks/useSocket";
 import {
     estimateEtaMinutes,
     haversineMeters,
@@ -44,7 +45,10 @@ function DeliveryTrackingScreen() {
 
     const destination = useMemo(() => {
         const d = order?.delivery;
-        if (!d?.latitude || !d?.longitude) return null;
+        // Use `== null` so a legitimate equator/Greenwich coord (0) survives,
+        // but the legacy (0, 0) "no picker yet" placeholder is rejected on
+        // the next line.
+        if (d?.latitude == null || d?.longitude == null) return null;
         if (d.latitude === 0 && d.longitude === 0) return null;
         return { lat: d.latitude, lng: d.longitude };
     }, [order?.delivery]);
@@ -69,6 +73,14 @@ function DeliveryTrackingScreen() {
         initialCoords: initialDriverCoords,
         enabled: trackingEnabled,
     });
+    // Only surface terminal errors (GAVE_UP / AUTH_FAILED / ACCOUNT_INACTIVE) as
+    // a banner. Transient CONNECT_ERROR is not shown — the socket is still
+    // retrying and the "waiting for driver" spinner already covers that state.
+    const { error: socketError, clear: clearSocketError, retry: retrySocket } = useSocketError();
+    const isTerminalSocketError =
+        socketError?.code === 'GAVE_UP' ||
+        socketError?.code === 'AUTH_FAILED' ||
+        socketError?.code === 'ACCOUNT_INACTIVE';
 
     const etaMinutes = useMemo(
         () => estimateEtaMinutes(driverCoords, destination),
@@ -144,8 +156,10 @@ function DeliveryTrackingScreen() {
     }, [fitToRoute]);
 
     const initialRegion = useMemo(() => {
-        const center =
-            driverCoords ?? destination ?? { lat: 31.5017, lng: 34.4668 }; // Gaza fallback
+        // `destination` is guaranteed non-null here by the early-return above;
+        // prefer the driver's live position when available so the camera lands
+        // on the action rather than the doorstep.
+        const center = driverCoords ?? destination;
         return {
             latitude: center.lat,
             longitude: center.lng,
@@ -244,6 +258,58 @@ function DeliveryTrackingScreen() {
         );
     }
 
+    // Legacy orders (placed before checkout required real coords) and any
+    // future order that slips through without a pinned location have no
+    // destination to render. Show a clear message rather than centering the
+    // map on the (0, 0) fallback — which previously dropped the user in Gaza
+    // and made the bug look like a map rendering problem.
+    if (!destination) {
+        return (
+            <SafeAreaView
+                style={[styles.safe, { backgroundColor: theme.surface }]}
+                edges={["top"]}
+            >
+                <StatusBar
+                    barStyle={theme.isDark ? "light-content" : "dark-content"}
+                />
+                <View style={styles.fullCenter}>
+                    <Ionicons
+                        name="location-outline"
+                        size={48}
+                        color={theme.outline}
+                    />
+                    <Text style={[styles.errorTitle, { color: theme.onSurface }]}>
+                        {t("tracking.noLocation.title", {
+                            defaultValue: "Delivery location not available",
+                        })}
+                    </Text>
+                    <Text
+                        style={[
+                            styles.emptyBody,
+                            { color: theme.outline, writingDirection },
+                        ]}
+                    >
+                        {t("tracking.noLocation.body", {
+                            defaultValue:
+                                "This order doesn't have a pinned delivery location, so live tracking can't be shown.",
+                        })}
+                    </Text>
+                    <AnimatedPressable
+                        onPress={handleBack}
+                        haptic="impact"
+                        scaleTo={0.96}
+                        style={styles.retryBtn}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.retryBtnText}>
+                            {t("error.back", { defaultValue: "Close" })}
+                        </Text>
+                    </AnimatedPressable>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     const noDriverYet = !driverCoords;
 
     return (
@@ -324,6 +390,46 @@ function DeliveryTrackingScreen() {
                     />
                 ) : null}
             </MapView>
+
+            {/* Socket-error banner — only shown for terminal failures that need
+                user action (GAVE_UP / AUTH_FAILED / ACCOUNT_INACTIVE).
+                Transient CONNECT_ERROR is intentionally suppressed — the socket
+                is retrying and the "waiting for driver" spinner already covers it. */}
+            {isTerminalSocketError ? (
+                <SafeAreaView edges={["top"]} style={styles.errorBannerSafe}>
+                    <View style={styles.errorBanner}>
+                        <Ionicons name="alert-circle" size={18} color="#fff" />
+                        <Text
+                            style={[styles.errorBannerText, { writingDirection }]}
+                            numberOfLines={2}
+                        >
+                            {socketError!.message}
+                        </Text>
+                        {socketError!.code === "GAVE_UP" ? (
+                            <AnimatedPressable
+                                onPress={retrySocket}
+                                haptic="impact"
+                                scaleTo={0.92}
+                                style={styles.errorBannerRetry}
+                                accessibilityRole="button"
+                                accessibilityLabel={t("error.action", { defaultValue: "Retry" })}
+                            >
+                                <Ionicons name="refresh" size={15} color="#fff" />
+                            </AnimatedPressable>
+                        ) : null}
+                        <AnimatedPressable
+                            onPress={clearSocketError}
+                            haptic="impact"
+                            scaleTo={0.92}
+                            style={styles.errorBannerClose}
+                            accessibilityRole="button"
+                            accessibilityLabel="Dismiss"
+                        >
+                            <Ionicons name="close" size={16} color="#fff" />
+                        </AnimatedPressable>
+                    </View>
+                </SafeAreaView>
+            ) : null}
 
             {/* Header overlay */}
             <SafeAreaView pointerEvents="box-none" edges={["top"]} style={styles.headerSafe}>
@@ -476,6 +582,50 @@ const styles = StyleSheet.create({
     safe: {
         flex: 1,
     },
+    // Socket-error banner — sits above the map header. Top-anchored so the
+    // safe-area inset pushes it below the notch on iOS.
+    errorBannerSafe: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 30,
+    },
+    errorBanner: {
+        marginHorizontal: 14,
+        marginTop: 8,
+        backgroundColor: "#B91C1C",
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        ...shadows.medium,
+    },
+    errorBannerText: {
+        flex: 1,
+        color: "#fff",
+        fontFamily: typography.bodyMedium,
+        fontSize: 12,
+        lineHeight: 17,
+    },
+    errorBannerRetry: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: "rgba(255,255,255,0.22)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    errorBannerClose: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: "rgba(255,255,255,0.18)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
     rowReverse: {
         flexDirection: "row-reverse",
     },
@@ -491,6 +641,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         lineHeight: 21,
         textAlign: "center",
+    },
+    emptyBody: {
+        fontFamily: typography.bodyMedium,
+        fontSize: 13,
+        lineHeight: 19,
+        textAlign: "center",
+        paddingHorizontal: 8,
     },
     retryBtn: {
         minHeight: 46,

@@ -50,6 +50,12 @@ export class RestaurantRead {
   @Column({ name: 'is_open' })
   isOpen: boolean;
 
+  @Column({ type: 'numeric', precision: 9, scale: 6, nullable: true })
+  lat: string | null;
+
+  @Column({ type: 'numeric', precision: 9, scale: 6, nullable: true })
+  lng: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

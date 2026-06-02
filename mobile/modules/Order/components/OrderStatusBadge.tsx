@@ -12,7 +12,8 @@ const STATUS_THEME: Record<string, { bg: string; fg: string; key: string }> = {
   PENDING: { bg: "#FFF4E0", fg: "#A66A00", key: "pending" },
   CONFIRMED: { bg: "#E0F2FE", fg: "#0369A1", key: "confirmed" },
   PREPARING: { bg: "#FFE6D5", fg: "#B23A00", key: "preparing" },
-  ON_THE_WAY: { bg: "#E5E0FF", fg: "#3F2BB1", key: "onTheWay" },
+  READY_FOR_PICKUP: { bg: "#FFE9D8", fg: "#B23A00", key: "readyForPickup" },
+  OUT_FOR_DELIVERY: { bg: "#E5E0FF", fg: "#3F2BB1", key: "outForDelivery" },
   DELIVERED: { bg: "#D9F5E2", fg: "#0F7A36", key: "delivered" },
   CANCELLED: { bg: "#FCE2DD", fg: colors.error, key: "cancelled" },
 };

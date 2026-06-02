@@ -22,6 +22,10 @@ import OrderStatusBadge from "../components/OrderStatusBadge";
 import OrderStatusTimeline from "../components/OrderStatusTimeline";
 import OrderItemRow from "../components/OrderItemRow";
 import OrderDetailsSkeleton from "../components/OrderDetailsSkeleton";
+import OrderStateBanner from "../components/OrderStateBanner";
+import PaymentInfoCard from "../components/PaymentInfoCard";
+import PaymentProofCard from "../components/PaymentProofCard";
+import RatingDialog from "../components/RatingDialog";
 import { getOrdersErrorMessage } from "../hooks/useOrders";
 import { useOrderDetails } from "../hooks/useOrderDetails";
 import { useOrderReceipt } from "../hooks/useOrderReceipt";
@@ -211,6 +215,7 @@ function OrderDetailsScreen() {
 
     const { openReceipt, isLoading: isOpeningReceipt } = useOrderReceipt();
     const [showFullId, setShowFullId] = useState(false);
+    const [ratingOpen, setRatingOpen] = useState(false);
     const socketStatus = useSocketStatus();
     const isLive = socketStatus === "open";
 
@@ -425,6 +430,26 @@ function OrderDetailsScreen() {
                     </View>
                 </Animated.View>
 
+                {/* Status banner — surfaces waiting / accepted / ready / rejected */}
+                {(() => {
+                    const variant: "waiting" | "accepted" | "ready" | "rejected" | null =
+                        order.status === "PENDING"
+                            ? "waiting"
+                            : order.status === "CONFIRMED" || order.status === "PREPARING"
+                              ? "accepted"
+                              : order.status === "READY_FOR_PICKUP"
+                                ? "ready"
+                                : order.status === "CANCELLED"
+                                  ? "rejected"
+                                  : null;
+                    if (!variant) return null;
+                    return (
+                        <Animated.View entering={FadeInUp.duration(360)}>
+                            <OrderStateBanner variant={variant} />
+                        </Animated.View>
+                    );
+                })()}
+
                 {/* Status timeline */}
                 <Section
                     icon="time-outline"
@@ -443,7 +468,94 @@ function OrderDetailsScreen() {
                     title={t("sections.delivery", { defaultValue: "Delivery info" })}
                     delay={110}
                 >
-                    {["ON_THE_WAY", "OUT_FOR_DELIVERY", "PREPARING"].includes(
+                    {/* Driver acceptance flow — three mutually-exclusive states:
+                          1. acceptance === "pending"     → "Waiting for driver"
+                          2. no courier + assignable stage → "Pick a driver"
+                          3. (default)                    → nothing here, the
+                             "Track delivery live" card below takes over once
+                             the driver actually moves. */}
+                    {order.deliveryAcceptance === "pending" ? (
+                        <View
+                            style={[
+                                styles.waitingDriverCard,
+                                isRTL && styles.rowReverse,
+                            ]}
+                        >
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <View style={styles.trackTextBlock}>
+                                <Text
+                                    style={[styles.pickDriverTitle, { writingDirection }]}
+                                >
+                                    {t("tracking.waitingDriver", {
+                                        defaultValue: "Waiting for the driver to accept…",
+                                    })}
+                                </Text>
+                                <Text
+                                    style={[styles.pickDriverBody, { writingDirection }]}
+                                    numberOfLines={2}
+                                >
+                                    {t("tracking.waitingDriverBody", {
+                                        defaultValue:
+                                            "We've sent your request. If the driver declines, you'll be able to pick another.",
+                                    })}
+                                </Text>
+                            </View>
+                        </View>
+                    ) : !order.delivery?.courierName &&
+                      ["PENDING", "CONFIRMED", "PREPARING", "READY_FOR_PICKUP"].includes(
+                          order.status,
+                      ) ? (
+                        <AnimatedPressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/orders/[id]/pick-driver",
+                                    params: { id: order.orderId },
+                                } as never)
+                            }
+                            haptic="impact"
+                            scaleTo={0.97}
+                            style={[
+                                styles.pickDriverBtn,
+                                isRTL && styles.rowReverse,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("tracking.pickDriver", {
+                                defaultValue: "Pick a driver",
+                            })}
+                        >
+                            <View style={styles.pickDriverIcon}>
+                                <Ionicons
+                                    name="people-outline"
+                                    size={16}
+                                    color={colors.primary}
+                                />
+                            </View>
+                            <View style={styles.trackTextBlock}>
+                                <Text
+                                    style={[styles.pickDriverTitle, { writingDirection }]}
+                                >
+                                    {t("tracking.pickDriver", {
+                                        defaultValue: "Pick a driver",
+                                    })}
+                                </Text>
+                                <Text
+                                    style={[styles.pickDriverBody, { writingDirection }]}
+                                    numberOfLines={1}
+                                >
+                                    {t("tracking.pickDriverBody", {
+                                        defaultValue: "Choose an available driver on the map",
+                                    })}
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name={isRTL ? "chevron-back" : "chevron-forward"}
+                                size={18}
+                                color={colors.primary}
+                            />
+                        </AnimatedPressable>
+                    ) : null}
+
+                    {["OUT_FOR_DELIVERY", "READY_FOR_PICKUP", "PREPARING"].includes(
                         order.status,
                     ) ? (
                         <AnimatedPressable
@@ -760,6 +872,195 @@ function OrderDetailsScreen() {
                     </Section>
                 ) : null}
 
+                {/* Payment instructions + proof upload (online payment only, while unpaid) */}
+                {order.paymentMethod === "online" && !isPaid ? (
+                    <>
+                        {order.restaurantId ? (
+                            <Animated.View entering={FadeInUp.delay(285).duration(360)}>
+                                <PaymentInfoCard restaurantId={order.restaurantId} />
+                            </Animated.View>
+                        ) : null}
+                        <Animated.View entering={FadeInUp.delay(290).duration(360)}>
+                            <PaymentProofCard orderId={order.orderId} />
+                        </Animated.View>
+                    </>
+                ) : null}
+
+                {/* Pick your driver (only while no driver assigned + order is still pre-delivery) */}
+                {!order.delivery?.courierName &&
+                ["PENDING", "CONFIRMED", "PREPARING", "READY_FOR_PICKUP"].includes(order.status) &&
+                order.delivery?.latitude !== undefined &&
+                order.delivery?.longitude !== undefined ? (
+                    <Animated.View entering={FadeInUp.delay(292).duration(360)}>
+                        <AnimatedPressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/orders/[id]/pick-driver",
+                                    params: { id: order.orderId },
+                                } as never)
+                            }
+                            haptic="impact"
+                            scaleTo={0.97}
+                            style={[styles.driverBtn, isRTL && styles.rowReverse]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("driver.cta", {
+                                defaultValue: "Pick your driver",
+                            })}
+                        >
+                            <View style={styles.driverBtnIcon}>
+                                <Ionicons name="bicycle" size={18} color={colors.primary} />
+                            </View>
+                            <View style={styles.driverBtnTextBlock}>
+                                <Text
+                                    style={[styles.driverBtnTitle, { writingDirection }]}
+                                >
+                                    {t("driver.cta", { defaultValue: "Pick your driver" })}
+                                </Text>
+                                <Text
+                                    style={[styles.driverBtnBody, { writingDirection }]}
+                                    numberOfLines={1}
+                                >
+                                    {t("driver.ctaBody", {
+                                        defaultValue: "Choose from nearby online drivers",
+                                    })}
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name={isRTL ? "chevron-back" : "chevron-forward"}
+                                size={18}
+                                color={colors.outline}
+                            />
+                        </AnimatedPressable>
+                    </Animated.View>
+                ) : null}
+
+                {/* Rate order (delivered + not yet rated) */}
+                {order.status === "DELIVERED" && !order.rating ? (
+                    <Animated.View entering={FadeInUp.delay(295).duration(360)}>
+                        <AnimatedPressable
+                            onPress={() => setRatingOpen(true)}
+                            haptic="impact"
+                            scaleTo={0.97}
+                            style={[styles.rateBtn, isRTL && styles.rowReverse]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("rate.cta", {
+                                defaultValue: "Rate this order",
+                            })}
+                        >
+                            <View style={styles.rateBtnIcon}>
+                                <Ionicons name="star" size={18} color="#F5B400" />
+                            </View>
+                            <View style={styles.rateBtnTextBlock}>
+                                <Text style={[styles.rateBtnTitle, { writingDirection }]}>
+                                    {t("rate.cta", {
+                                        defaultValue: "Rate this order",
+                                    })}
+                                </Text>
+                                <Text
+                                    style={[styles.rateBtnBody, { writingDirection }]}
+                                    numberOfLines={1}
+                                >
+                                    {t("rate.ctaBody", {
+                                        defaultValue: "Tell us how it went",
+                                    })}
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name={isRTL ? "chevron-back" : "chevron-forward"}
+                                size={18}
+                                color={colors.outline}
+                            />
+                        </AnimatedPressable>
+                    </Animated.View>
+                ) : null}
+
+                {/* Existing rating display */}
+                {order.rating ? (
+                    <Animated.View entering={FadeInUp.delay(295).duration(360)}>
+                        <View style={styles.ratingCard}>
+                            <View style={[styles.ratingHeader, isRTL && styles.rowReverse]}>
+                                <Ionicons name="star" size={18} color="#F5B400" />
+                                <Text
+                                    style={[styles.ratingHeaderText, { writingDirection }]}
+                                >
+                                    {t("rate.yourRating", {
+                                        defaultValue: "Your rating",
+                                    })}
+                                </Text>
+                            </View>
+                            <View style={[styles.ratingStars, isRTL && styles.rowReverse]}>
+                                {[1, 2, 3, 4, 5].map((n) => (
+                                    <Ionicons
+                                        key={n}
+                                        name={n <= (order.rating ?? 0) ? "star" : "star-outline"}
+                                        size={22}
+                                        color={n <= (order.rating ?? 0) ? "#F5B400" : colors.outline}
+                                    />
+                                ))}
+                            </View>
+                            {order.ratingComment ? (
+                                <Text
+                                    style={[
+                                        styles.ratingComment,
+                                        { textAlign, writingDirection },
+                                    ]}
+                                >
+                                    {order.ratingComment}
+                                </Text>
+                            ) : null}
+                        </View>
+                    </Animated.View>
+                ) : null}
+
+                {/* Open order chat */}
+                <Animated.View entering={FadeInUp.delay(300).duration(360)}>
+                    <AnimatedPressable
+                        onPress={() =>
+                            router.push({
+                                pathname: "/orders/[id]/chat",
+                                params: { id: order.orderId },
+                            } as never)
+                        }
+                        haptic="impact"
+                        scaleTo={0.97}
+                        style={[styles.chatBtn, isRTL && styles.rowReverse]}
+                        accessibilityRole="button"
+                        accessibilityLabel={t("chat.openTitle", {
+                            defaultValue: "Open chat",
+                        })}
+                    >
+                        <View style={styles.chatBtnIcon}>
+                            <Ionicons
+                                name="chatbubble-ellipses"
+                                size={18}
+                                color={colors.primary}
+                            />
+                        </View>
+                        <View style={styles.chatBtnTextBlock}>
+                            <Text
+                                style={[styles.chatBtnTitle, { writingDirection }]}
+                            >
+                                {t("chat.openTitle", {
+                                    defaultValue: "Chat about this order",
+                                })}
+                            </Text>
+                            <Text
+                                style={[styles.chatBtnBody, { writingDirection }]}
+                                numberOfLines={1}
+                            >
+                                {t("chat.openBody", {
+                                    defaultValue: "Talk to the restaurant or driver",
+                                })}
+                            </Text>
+                        </View>
+                        <Ionicons
+                            name={isRTL ? "chevron-back" : "chevron-forward"}
+                            size={18}
+                            color={colors.outline}
+                        />
+                    </AnimatedPressable>
+                </Animated.View>
+
                 {/* Receipt */}
                 <Animated.View
                     entering={FadeInUp.delay(310).duration(360)}
@@ -835,6 +1136,15 @@ function OrderDetailsScreen() {
             </View>
 
             <View style={styles.content}>{content}</View>
+
+            {orderId ? (
+                <RatingDialog
+                    orderId={orderId}
+                    visible={ratingOpen}
+                    onClose={() => setRatingOpen(false)}
+                />
+            ) : null}
+
         </SafeAreaView>
     );
 }
@@ -1197,6 +1507,140 @@ const styles = StyleSheet.create({
     receiptDock: {
         marginTop: 2,
     },
+    chatBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: radii.lg,
+        backgroundColor: colors.card,
+        ...shadows.soft,
+    },
+    chatBtnIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: colors.faintPrimary,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    chatBtnTextBlock: {
+        flex: 1,
+        minWidth: 0,
+        gap: 2,
+    },
+    chatBtnTitle: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    chatBtnBody: {
+        fontFamily: typography.bodyMedium,
+        color: colors.outline,
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    driverBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: radii.lg,
+        backgroundColor: colors.card,
+        ...shadows.soft,
+    },
+    driverBtnIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: colors.faintPrimary,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    driverBtnTextBlock: {
+        flex: 1,
+        minWidth: 0,
+        gap: 2,
+    },
+    driverBtnTitle: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    driverBtnBody: {
+        fontFamily: typography.bodyMedium,
+        color: colors.outline,
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    rateBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: radii.lg,
+        backgroundColor: colors.card,
+        ...shadows.soft,
+    },
+    rateBtnIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: "#FFF7DC",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    rateBtnTextBlock: {
+        flex: 1,
+        minWidth: 0,
+        gap: 2,
+    },
+    rateBtnTitle: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    rateBtnBody: {
+        fontFamily: typography.bodyMedium,
+        color: colors.outline,
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    ratingCard: {
+        padding: 14,
+        borderRadius: radii.lg,
+        backgroundColor: colors.card,
+        gap: 10,
+        ...shadows.soft,
+    },
+    ratingHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    ratingHeaderText: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    ratingStars: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    ratingComment: {
+        fontFamily: typography.bodyMedium,
+        color: colors.onSurface,
+        fontSize: 13,
+        lineHeight: 18,
+    },
     trackBtn: {
         flexDirection: "row",
         alignItems: "center",
@@ -1229,6 +1673,59 @@ const styles = StyleSheet.create({
         marginTop: 2,
         fontFamily: typography.bodyMedium,
         color: "rgba(255,255,255,0.85)",
+        fontSize: 12,
+        lineHeight: 15,
+    },
+    // Inert (non-tappable) twin of `pickDriverBtn`, used while we wait for
+    // the driver to accept. Same look as the picker, but with a spinner and
+    // no chevron — there's nothing to do here until the driver replies.
+    waitingDriverCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: radii.lg,
+        borderWidth: 1.5,
+        borderColor: colors.primary,
+        backgroundColor: colors.faintPrimary,
+        marginBottom: 8,
+    },
+    // Lower-emphasis variant of `trackBtn`. Filled in primary-faint instead of
+    // solid primary because this button is optional ("you can pick a driver if
+    // you want"), while the tracking button is the primary action once a
+    // driver exists.
+    pickDriverBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: radii.lg,
+        borderWidth: 1.5,
+        borderColor: colors.primary,
+        backgroundColor: colors.faintPrimary,
+        marginBottom: 8,
+    },
+    pickDriverIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.surface,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    pickDriverTitle: {
+        fontFamily: typography.headlineSemi,
+        color: colors.primary,
+        fontSize: 14,
+        lineHeight: 18,
+    },
+    pickDriverBody: {
+        marginTop: 2,
+        fontFamily: typography.bodyMedium,
+        color: colors.primary,
+        opacity: 0.85,
         fontSize: 12,
         lineHeight: 15,
     },

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, Filter, Eye, ShoppingBag,
-  Clock, CheckCircle, Bike, XCircle, Package,
+  Clock, CheckCircle, Bike, XCircle, Package, PackageCheck, Undo2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { adminOrdersApi } from "@/lib/api";
@@ -17,7 +17,16 @@ import { queryKeys } from "@/lib/queryClient";
 import { formatDateTime, formatCurrency } from "@/lib/utils";
 import { OrderDetailsDialog } from "@/components/orders/OrderDetailsDialog";
 
-type OrderStatus = "all" | "pending" | "confirmed" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
+type OrderStatus =
+  | "all"
+  | "pending"
+  | "confirmed"
+  | "preparing"
+  | "ready_for_pickup"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled"
+  | "refunded";
 
 interface AdminOrder {
   id: string;
@@ -25,7 +34,15 @@ interface AdminOrder {
   customerName: string;
   restaurantName: string;
   driverName?: string;
-  status: "pending" | "confirmed" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
+  status:
+    | "pending"
+    | "confirmed"
+    | "preparing"
+    | "ready_for_pickup"
+    | "out_for_delivery"
+    | "delivered"
+    | "cancelled"
+    | "refunded";
   totalAmount: number;
   itemsCount: number;
   city: string;
@@ -46,9 +63,11 @@ const statusConfig: Record<AdminOrder["status"], { label: string; variant: "succ
   pending:          { label: "بانتظار التأكيد", variant: "warning",  icon: <Clock className="w-3.5 h-3.5" /> },
   confirmed:        { label: "مؤكّد",           variant: "info",     icon: <CheckCircle className="w-3.5 h-3.5" /> },
   preparing:        { label: "قيد التحضير",     variant: "default",  icon: <Package className="w-3.5 h-3.5" /> },
+  ready_for_pickup: { label: "جاهز للاستلام",   variant: "info",     icon: <PackageCheck className="w-3.5 h-3.5" /> },
   out_for_delivery: { label: "في الطريق",        variant: "info",     icon: <Bike className="w-3.5 h-3.5" /> },
   delivered:        { label: "مكتمل",            variant: "success",  icon: <CheckCircle className="w-3.5 h-3.5" /> },
   cancelled:        { label: "ملغي",             variant: "error",    icon: <XCircle className="w-3.5 h-3.5" /> },
+  refunded:         { label: "مُسترجع",          variant: "muted",    icon: <Undo2 className="w-3.5 h-3.5" /> },
 };
 
 const filterLabels: Record<OrderStatus, string> = {
@@ -56,9 +75,11 @@ const filterLabels: Record<OrderStatus, string> = {
   pending:          "معلّقة",
   confirmed:        "مؤكّدة",
   preparing:        "قيد التحضير",
+  ready_for_pickup: "جاهز للاستلام",
   out_for_delivery: "في الطريق",
   delivered:        "مكتملة",
   cancelled:        "ملغاة",
+  refunded:         "مُسترجعة",
 };
 
 export default function OrdersPage() {
@@ -80,7 +101,7 @@ export default function OrdersPage() {
         customerName: o.customerName,
         restaurantName: o.restaurantName,
         driverName: o.driverName ?? undefined,
-        status: o.status as AdminOrder["status"],
+        status: String(o.status ?? "").toLowerCase() as AdminOrder["status"],
         totalAmount: o.totalAmount,
         itemsCount: o.itemsCount,
         city: o.city,
@@ -108,9 +129,11 @@ export default function OrdersPage() {
     pending:          orders.filter((o) => o.status === "pending").length,
     confirmed:        orders.filter((o) => o.status === "confirmed").length,
     preparing:        orders.filter((o) => o.status === "preparing").length,
+    ready_for_pickup: orders.filter((o) => o.status === "ready_for_pickup").length,
     out_for_delivery: orders.filter((o) => o.status === "out_for_delivery").length,
     delivered:        orders.filter((o) => o.status === "delivered").length,
     cancelled:        orders.filter((o) => o.status === "cancelled").length,
+    refunded:         orders.filter((o) => o.status === "refunded").length,
   };
 
   return (
@@ -190,7 +213,11 @@ export default function OrdersPage() {
                   </tr>
                 ) : (
                   filtered.map((order) => {
-                    const cfg = statusConfig[order.status];
+                    const cfg = statusConfig[order.status] ?? {
+                      label: order.status ?? "غير معروف",
+                      variant: "muted" as const,
+                      icon: <Package className="w-3.5 h-3.5" />,
+                    };
                     return (
                       <tr key={order.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 font-mono font-semibold text-foreground text-xs">

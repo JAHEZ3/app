@@ -36,6 +36,28 @@ export class GeneralSettingsDto {
 
   @IsOptional() @IsString()
   logoUrl?: string;
+
+  // ─── Social media URLs (send null or "" to clear) ─────────────────────
+  @IsOptional() @IsString() facebookUrl?: string | null;
+  @IsOptional() @IsString() instagramUrl?: string | null;
+  @IsOptional() @IsString() xUrl?: string | null;
+  @IsOptional() @IsString() youtubeUrl?: string | null;
+  @IsOptional() @IsString() tiktokUrl?: string | null;
+  @IsOptional() @IsString() snapchatUrl?: string | null;
+
+  // ─── App store URLs ───────────────────────────────────────────────────
+  @IsOptional() @IsString() appStoreUrl?: string | null;
+  @IsOptional() @IsString() googlePlayUrl?: string | null;
+
+  // ─── Public website CTA button URLs ───────────────────────────────────
+  @IsOptional() @IsString() restaurantSignupUrl?: string | null;
+  @IsOptional() @IsString() driverSignupUrl?: string | null;
+  @IsOptional() @IsString() appDownloadUrl?: string | null;
+
+  // ─── SEO metadata (title template, description, OG image URL) ─────────
+  @IsOptional() @IsString() seoTitleTemplate?: string | null;
+  @IsOptional() @IsString() seoDescription?: string | null;
+  @IsOptional() @IsString() seoOgImageUrl?: string | null;
 }
 
 export class FeesSettingsDto {

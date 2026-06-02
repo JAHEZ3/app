@@ -99,6 +99,7 @@ export default function ScanOrderPage({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [submittedOrder, setSubmittedOrder] = useState<{ orderNumber: string } | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const subtotal = useMemo(
     () => Object.values(cart).reduce((s, e) => s + Number(e.meal.basePrice) * e.qty, 0),
@@ -207,20 +208,33 @@ export default function ScanOrderPage({
 
   const { table, restaurant } = tableQuery.data;
   const menus = menuQuery.data?.menus ?? [];
+  const showLogo = restaurant.logoUrl && !logoFailed;
+  const initial = (restaurant.name ?? "?").trim().charAt(0) || "?";
 
   return (
     <div className="min-h-screen bg-muted/20 pb-32">
-      <div className="bg-white border-b border-border px-4 py-4 flex items-center gap-3">
-        {restaurant.logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={restaurant.logoUrl} alt={restaurant.name} className="w-12 h-12 rounded-lg object-cover" />
-        )}
-        <div className="flex-1">
-          <h1 className="text-lg font-black">{restaurant.name}</h1>
-          <p className="text-xs text-muted-foreground">
-            طاولة {table.number}
-            {table.section ? ` · ${table.section}` : ""}
-          </p>
+      <div className="bg-gradient-to-l from-primary to-primary/85 text-white px-4 pt-5 pb-6 shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className="relative w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm ring-2 ring-white/25 overflow-hidden flex items-center justify-center shrink-0">
+            {showLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={restaurant.logoUrl!}
+                alt={restaurant.name}
+                className="w-full h-full object-cover"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : (
+              <span className="text-xl font-black text-white">{initial}</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-black truncate">{restaurant.name}</h1>
+            <p className="text-xs text-white/85 mt-0.5">
+              طاولة {table.number}
+              {table.section ? ` · ${table.section}` : ""}
+            </p>
+          </div>
         </div>
       </div>
 

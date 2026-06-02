@@ -16,8 +16,29 @@ async function bootstrap() {
   const app = await NestFactory.create(CustomerServiceModule);
   const config = app.get(ConfigService);
 
+  // CORS — strict allowlist + LAN/localhost fallback in dev. Without the
+  // regex fallback, any phone/dashboard hitting the dev box from its LAN
+  // IP (e.g. 10.5.x.x) gets a CORS preflight failure even though the IP
+  // is on the same Wi-Fi as the dev machine.
+  const rawOrigins = config.get<string>("CORS_ORIGINS", "");
+  const allowedOrigins = rawOrigins
+    ? rawOrigins.split(",").map((o) => o.trim()).filter(Boolean)
+    : [];
+  const isProd = config.get<string>("NODE_ENV") === "production";
+  const LOCALHOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+  const LAN_RE =
+    /^https?:\/\/(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[0-1])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2})(:\d+)?$/;
+
   app.enableCors({
-    origin: config.get<string>("CORS_ORIGINS", "*").split(","),
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0 || allowedOrigins.includes("*"))
+        return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!isProd && (LOCALHOST_RE.test(origin) || LAN_RE.test(origin)))
+        return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     allowedHeaders: "Content-Type,Authorization",

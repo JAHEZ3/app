@@ -25,6 +25,7 @@ import { OrderService } from './order/order.service';
 import {
   CheckoutDto,
   UpdateOrderStatusDto,
+  UpdatePaymentStatusDto,
   AssignDeliveryDto,
   RateOrderDto,
   OrderFilterDto,
@@ -172,9 +173,48 @@ export class OrderServiceController {
     return { data: order, message: 'تم تحديث حالة الطلب' };
   }
 
+  /**
+   * PATCH /api/order/orders/:id/payment-status
+   *
+   * Restaurant owner / manager flips `paymentStatus` after verifying the
+   * customer's uploaded bank-transfer / wallet receipt. Body:
+   *
+   *   { "paymentStatus": "paid" | "unpaid", "note"?: "..." }
+   *
+   * For online orders, marking paid is rejected until the customer has
+   * uploaded a payment proof. Marking back to `unpaid` is allowed regardless.
+   */
+  @Patch('orders/:id/payment-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner', 'manager')
+  async updatePaymentStatus(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdatePaymentStatusDto,
+  ) {
+    const order = await this.orderService.updatePaymentStatus(
+      id,
+      req.user.sub,
+      req.user.role,
+      dto,
+    );
+    return { data: order, message: 'تم تحديث حالة الدفع' };
+  }
+
+  /**
+   * PATCH /api/order/orders/:id/delivery
+   *
+   * Assign a delivery agent. Available to:
+   *   - manager           — any order
+   *   - restaurant_owner  — only their own orders
+   *   - customer          — only their own order, only before a driver is
+   *                         already set, only while early lifecycle (the
+   *                         service enforces this so customers can't yank
+   *                         a driver mid-delivery).
+   */
   @Patch('orders/:id/delivery')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('manager', 'restaurant_owner')
+  @Roles('manager', 'restaurant_owner', 'customer')
   async assignDelivery(
     @Req() req: any,
     @Param('id') id: string,
@@ -182,6 +222,45 @@ export class OrderServiceController {
   ) {
     const result = await this.orderService.assignDelivery(id, req.user.sub, req.user.role, dto);
     return { data: result, message: 'تم تعيين عامل التوصيل' };
+  }
+
+  /**
+   * POST /api/order/orders/:id/delivery/accept
+   * Delivery agent confirms they'll take the order. Only valid while
+   * acceptance is PENDING (customer self-pick path); manager/owner-assigned
+   * orders are already auto-accepted and this endpoint is a no-op.
+   */
+  @Post('orders/:id/delivery/accept')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('delivery')
+  async acceptDelivery(@Req() req: any, @Param('id') id: string) {
+    const result = await this.orderService.acceptDeliveryAssignment(
+      id,
+      req.user.sub,
+    );
+    return { data: result, message: 'تم قبول الطلب' };
+  }
+
+  /**
+   * POST /api/order/orders/:id/delivery/reject
+   * Delivery agent declines. Clears `deliveryAgentId` so the customer can
+   * pick someone else. Optional `reason` (max 500 chars) ships in the
+   * broadcast event for analytics but isn't persisted on the order.
+   */
+  @Post('orders/:id/delivery/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('delivery')
+  async rejectDelivery(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    const result = await this.orderService.rejectDeliveryAssignment(
+      id,
+      req.user.sub,
+      body?.reason,
+    );
+    return { data: result, message: 'تم رفض الطلب' };
   }
 
   @Post('orders/:id/rate')
@@ -296,6 +375,44 @@ export class OrderServiceController {
   @Roles('manager')
   async deletePromoCode(@Param('id') id: string) {
     await this.promoService.remove(id);
+    return { data: null, message: 'تم حذف كود الخصم' };
+  }
+
+  // ─── Restaurant-owner scoped (auto-resolves their restaurantId) ──────────
+
+  @Get('restaurant/promo-codes')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner')
+  async listOwnerPromoCodes(@Req() req: any) {
+    const codes = await this.promoService.listForOwner(req.user.sub);
+    return { data: codes, message: null };
+  }
+
+  @Post('restaurant/promo-codes')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner')
+  async createOwnerPromoCode(@Req() req: any, @Body() dto: CreatePromoCodeDto) {
+    const code = await this.promoService.createForOwner(req.user.sub, dto);
+    return { data: code, message: 'تم إنشاء كود الخصم' };
+  }
+
+  @Patch('restaurant/promo-codes/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner')
+  async updateOwnerPromoCode(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdatePromoCodeDto,
+  ) {
+    const code = await this.promoService.updateForOwner(req.user.sub, id, dto);
+    return { data: code, message: 'تم تحديث كود الخصم' };
+  }
+
+  @Delete('restaurant/promo-codes/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('restaurant_owner')
+  async deleteOwnerPromoCode(@Req() req: any, @Param('id') id: string) {
+    await this.promoService.removeForOwner(req.user.sub, id);
     return { data: null, message: 'تم حذف كود الخصم' };
   }
 

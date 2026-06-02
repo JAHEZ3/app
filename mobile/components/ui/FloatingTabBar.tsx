@@ -13,7 +13,7 @@ import AnimatedPressable from "./AnimatedPressable";
 import { colors, radii, shadows, typography } from "./theme";
 import { getCartQuantity, useCartStore } from "@/store/useCartStore";
 
-type TabKey = "categories" | "home" | "cart" | "profile";
+type TabKey = "orders" | "favorites" | "home" | "cart" | "profile";
 
 interface TabConfig {
   key: TabKey;
@@ -25,11 +25,18 @@ interface TabConfig {
 
 const tabs: TabConfig[] = [
   {
-    key: "categories",
-    route: "/restaurants",
-    icon: "grid-outline",
-    activeIcon: "grid",
-    activePath: (path) => path.startsWith("/restaurants"),
+    key: "orders",
+    route: "/orders",
+    icon: "receipt-outline",
+    activeIcon: "receipt",
+    activePath: (path) => path.startsWith("/orders"),
+  },
+  {
+    key: "favorites",
+    route: "/favorites",
+    icon: "heart-outline",
+    activeIcon: "heart",
+    activePath: (path) => path.startsWith("/favorites"),
   },
   {
     key: "home",
@@ -54,6 +61,9 @@ const tabs: TabConfig[] = [
   },
 ];
 
+const FAV_COLOR       = colors.primary;
+const FAV_COLOR_LIGHT = colors.faintPrimary;
+
 interface TabButtonProps {
   tab: TabConfig;
   active: boolean;
@@ -62,57 +72,79 @@ interface TabButtonProps {
 }
 
 const TabButton = memo(({ tab, active, isHome, badgeCount = 0 }: TabButtonProps) => {
+  const isFav = tab.key === "favorites";
   const progress = useSharedValue(active ? 1 : 0);
 
   useEffect(() => {
     progress.value = withSpring(active ? 1 : 0, {
-      damping: 16,
-      stiffness: 210,
+      damping: 15,
+      stiffness: 220,
       mass: 0.7,
     });
   }, [active, progress]);
 
   const bubbleStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [{ scale: interpolate(progress.value, [0, 1], [0.7, 1]) }],
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.6, 1]) }],
+    backgroundColor: isFav ? FAV_COLOR : colors.primary,
   }));
 
   const shellStyle = useAnimatedStyle(() => ({
     transform: [
-      {
-        translateY: interpolate(progress.value, [0, 1], [0, isHome ? -2 : -1]),
-      },
-      {
-        scale: interpolate(progress.value, [0, 1], [1, isHome ? 1.08 : 1.03]),
-      },
+      { translateY: interpolate(progress.value, [0, 1], [0, isHome ? -2 : -1]) },
+      { scale: interpolate(progress.value, [0, 1], [1, isHome ? 1.08 : 1.04]) },
     ],
   }));
 
-  const handlePress = () => {
-    router.navigate(tab.route as never);
-  };
+  // Fav tab gets a soft rose tint background even when inactive
+  const favRest = useAnimatedStyle(() => ({
+    backgroundColor: isFav && !active
+      ? FAV_COLOR_LIGHT
+      : "transparent",
+    borderRadius: 24,
+  }));
 
-  const iconColor = active ? colors.onPrimary : colors.outline;
+  const handlePress = () => router.navigate(tab.route as never);
+
+  const iconColor = active
+    ? colors.onPrimary
+    : isFav
+    ? FAV_COLOR
+    : colors.outline;
+
+  const iconSize = isHome ? 25 : isFav ? 23 : 22;
 
   return (
     <AnimatedPressable
       onPress={handlePress}
       haptic="impact"
-      scaleTo={0.92}
+      scaleTo={0.9}
       accessibilityRole="button"
       accessibilityLabel={tab.key}
       style={[styles.tabButton, isHome && styles.homeButton]}
     >
       <Animated.View style={[styles.iconShell, isHome && styles.homeIconShell, shellStyle]}>
+        {/* Soft rose rest-state tint for favorites */}
+        {isFav && !isHome ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, { borderRadius: 24 }, favRest]}
+          />
+        ) : null}
+
+        {/* Active bubble */}
         <Animated.View
           pointerEvents="none"
           style={[styles.activeBubble, isHome && styles.homeActiveBubble, bubbleStyle]}
         />
+
         <Ionicons
           name={active ? tab.activeIcon : tab.icon}
-          size={isHome ? 25 : 22}
+          size={iconSize}
           color={iconColor}
         />
+
+        {/* Badge — only cart shows a count; favorites uses the heart icon alone */}
         {tab.key === "cart" && badgeCount > 0 ? (
           <View style={styles.badge}>
             <Animated.Text style={styles.badgeText}>
@@ -121,6 +153,19 @@ const TabButton = memo(({ tab, active, isHome, badgeCount = 0 }: TabButtonProps)
           </View>
         ) : null}
       </Animated.View>
+
+      {/* Label — shown only under the favorites icon */}
+      {isFav ? (
+        <Animated.Text
+          style={[
+            styles.favLabel,
+            { color: active ? FAV_COLOR : colors.outline, opacity: 0.9 },
+          ]}
+          numberOfLines={1}
+        >
+          {active ? "Saved" : "Save"}
+        </Animated.Text>
+      ) : null}
     </AnimatedPressable>
   );
 });
@@ -131,15 +176,16 @@ function FloatingTabBar() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const items = useCartStore((state) => state.items);
-  const badgeCount = getCartQuantity(items);
+  const cartCount = getCartQuantity(items);
 
-  const barWidth = Math.min(width - 32, 380);
+  const barWidth = Math.min(width - 32, 420);
   const homeLeft = barWidth / 2 - 32;
 
-  const categories = tabs[0];
-  const home = tabs[1];
-  const cart = tabs[2];
-  const profile = tabs[3];
+  const orders    = tabs[0];
+  const favorites = tabs[1];
+  const home      = tabs[2];
+  const cart      = tabs[3];
+  const profile   = tabs[4];
 
   return (
     <View
@@ -148,14 +194,15 @@ function FloatingTabBar() {
     >
       <View style={[styles.bar, { width: barWidth }]}>
         <View style={styles.leftSlot}>
-          <TabButton tab={categories} active={categories.activePath(pathname)} />
+          <TabButton tab={orders} active={orders.activePath(pathname)} />
+          <TabButton tab={favorites} active={favorites.activePath(pathname)} />
         </View>
 
         <View style={styles.rightSlot}>
           <TabButton
             tab={cart}
             active={cart.activePath(pathname)}
-            badgeCount={badgeCount}
+            badgeCount={cartCount}
           />
           <TabButton tab={profile} active={profile.activePath(pathname)} />
         </View>
@@ -177,8 +224,8 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   bar: {
-    height: 72,
-    borderRadius: 36,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: colors.softSurface,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.78)",
@@ -206,11 +253,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+    alignItems: "center",
   },
   homeButton: {
     width: 64,
     height: 64,
     borderRadius: 32,
+  },
+  favLabel: {
+    fontFamily: typography.bodyBold,
+    fontSize: 9,
+    lineHeight: 11,
+    marginTop: 2,
+    letterSpacing: 0.2,
   },
   iconShell: {
     width: 48,

@@ -2,7 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UploadedFiles,
@@ -17,6 +20,8 @@ import {
   CustomerCreatedPayload,
 } from "./customer-service.service";
 import { CompleteCustomerProfileDto } from "./dto/complete-profile.dto";
+import { CreateAddressDto, UpdateAddressDto } from "./dto/address.dto";
+import { AddressService } from "./address.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentUser } from "./decorators/current-user.decorator";
 
@@ -37,7 +42,10 @@ const multerOptions = {
 
 @Controller()
 export class CustomerServiceController {
-  constructor(private readonly service: CustomerServiceService) {}
+  constructor(
+    private readonly service: CustomerServiceService,
+    private readonly addresses: AddressService,
+  ) {}
 
   // ─── NATS: reserve profile stub on registration ───────────────────────────────
 
@@ -95,5 +103,57 @@ export class CustomerServiceController {
     @UploadedFiles() files: { avatar?: Express.Multer.File[] },
   ) {
     return this.service.updateProfile(userId, dto, files?.avatar?.[0]);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Customer address book — CRUD for the per-customer saved-addresses list
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/customer/addresses — list addresses (default first, then newest). */
+  @Get("addresses")
+  @UseGuards(JwtAuthGuard)
+  listAddresses(@CurrentUser("sub") userId: string) {
+    return this.addresses.list(userId);
+  }
+
+  /** POST /api/customer/addresses — create. First address becomes default. */
+  @Post("addresses")
+  @UseGuards(JwtAuthGuard)
+  createAddress(
+    @CurrentUser("sub") userId: string,
+    @Body() dto: CreateAddressDto,
+  ) {
+    return this.addresses.create(userId, dto);
+  }
+
+  /** PATCH /api/customer/addresses/:id — partial update. */
+  @Patch("addresses/:id")
+  @UseGuards(JwtAuthGuard)
+  updateAddress(
+    @CurrentUser("sub") userId: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateAddressDto,
+  ) {
+    return this.addresses.update(userId, id, dto);
+  }
+
+  /** PATCH /api/customer/addresses/:id/default — promote this address to default. */
+  @Patch("addresses/:id/default")
+  @UseGuards(JwtAuthGuard)
+  setDefaultAddress(
+    @CurrentUser("sub") userId: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.addresses.setDefault(userId, id);
+  }
+
+  /** DELETE /api/customer/addresses/:id — remove. Promotes next-most-recent on default removal. */
+  @Delete("addresses/:id")
+  @UseGuards(JwtAuthGuard)
+  deleteAddress(
+    @CurrentUser("sub") userId: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.addresses.remove(userId, id);
   }
 }

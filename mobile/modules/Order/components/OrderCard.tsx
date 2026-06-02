@@ -82,7 +82,8 @@ function OrderCard({ order, onPress, index = 0 }: OrderCardProps) {
     }, [order.itemCount, order.items]);
 
     const itemsLabel = itemCount > 0 ? tCart("items.count", { count: itemCount }) : null;
-    const orderNumber = order.orderNumber ?? order.orderId.slice(0, 8).toUpperCase();
+    const orderNumber =
+        order.orderNumber ?? (order.orderId ?? "").slice(0, 8).toUpperCase();
     const summaryLabel = itemsLabel
         ? `${itemsLabel} · ${formatPrice(order.total ?? 0, currency)}`
         : formatPrice(order.total ?? 0, currency);

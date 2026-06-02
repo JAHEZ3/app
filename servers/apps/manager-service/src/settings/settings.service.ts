@@ -83,6 +83,24 @@ export class SettingsService implements OnModuleInit {
         defaultLanguage: general.defaultLanguage,
         currency: general.currency,
         logoUrl: await this.s3.resolveImageUrl(general.logoUrl),
+        // Social media
+        facebookUrl: general.facebookUrl,
+        instagramUrl: general.instagramUrl,
+        xUrl: general.xUrl,
+        youtubeUrl: general.youtubeUrl,
+        tiktokUrl: general.tiktokUrl,
+        snapchatUrl: general.snapchatUrl,
+        // App stores
+        appStoreUrl: general.appStoreUrl,
+        googlePlayUrl: general.googlePlayUrl,
+        // Public website CTA button URLs
+        restaurantSignupUrl: general.restaurantSignupUrl,
+        driverSignupUrl: general.driverSignupUrl,
+        appDownloadUrl: general.appDownloadUrl,
+        // SEO
+        seoTitleTemplate: general.seoTitleTemplate,
+        seoDescription: general.seoDescription,
+        seoOgImageUrl: general.seoOgImageUrl,
       },
       fees: {
         restaurantCommission: Number(fees.restaurantCommission),
@@ -123,7 +141,10 @@ export class SettingsService implements OnModuleInit {
     };
   }
 
-  /** Public contact info — read-only subset of general settings + logo. */
+  /** Public website config — read-only subset of general settings used by the
+   *  public marketing site (footer contact, social links, app-store badges,
+   *  SEO metadata). All fields are nullable; the website skips any that are
+   *  empty so unconfigured rows degrade gracefully. */
   async getPublicContactInfo() {
     const general = await this.ensureRow(this.generalRepo);
     return {
@@ -134,6 +155,24 @@ export class SettingsService implements OnModuleInit {
       supportAddress: general.supportAddress,
       supportHours: general.supportHours,
       logoUrl: await this.s3.resolveImageUrl(general.logoUrl),
+      // Social media
+      facebookUrl: general.facebookUrl,
+      instagramUrl: general.instagramUrl,
+      xUrl: general.xUrl,
+      youtubeUrl: general.youtubeUrl,
+      tiktokUrl: general.tiktokUrl,
+      snapchatUrl: general.snapchatUrl,
+      // App stores
+      appStoreUrl: general.appStoreUrl,
+      googlePlayUrl: general.googlePlayUrl,
+      // Public website CTA button URLs
+      restaurantSignupUrl: general.restaurantSignupUrl,
+      driverSignupUrl: general.driverSignupUrl,
+      appDownloadUrl: general.appDownloadUrl,
+      // SEO
+      seoTitleTemplate: general.seoTitleTemplate,
+      seoDescription: general.seoDescription,
+      seoOgImageUrl: general.seoOgImageUrl,
     };
   }
 

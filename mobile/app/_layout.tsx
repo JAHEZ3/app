@@ -26,6 +26,7 @@ import { createDeliveryModule } from "@/modules/delivery/index";
 import { createRestaurantsModule } from "@/modules/Restaurants/index";
 import { createCartModule } from "@/modules/Cart/index";
 import { createOrderModule } from "@/modules/Order/index";
+import { createCustomerModule } from "@/modules/Customer/index";
 
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 
@@ -37,6 +38,7 @@ const { Provider: DeliveryProvider } = createDeliveryModule();
 const { Provider: RestaurantsProvider } = createRestaurantsModule();
 const { Provider: CartProvider } = createCartModule();
 const { Provider: OrderProvider } = createOrderModule();
+const { Provider: CustomerProvider } = createCustomerModule();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +84,7 @@ export default function RootLayout() {
             <DeliveryProvider>
               <RestaurantsProvider>
                 <CartProvider>
+                  <CustomerProvider>
                   <OrderProvider>
                     <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
                       <Stack.Screen name="index" />
@@ -103,9 +106,12 @@ export default function RootLayout() {
                         name="orders/[id]/track"
                         options={{ animation: "fade", presentation: "modal" }}
                       />
+                      <Stack.Screen name="orders/[id]/chat" />
+                      <Stack.Screen name="orders/[id]/pick-driver" />
                       <Stack.Screen name="profile/index" />
                     </Stack>
                   </OrderProvider>
+                  </CustomerProvider>
                 </CartProvider>
               </RestaurantsProvider>
             </DeliveryProvider>
