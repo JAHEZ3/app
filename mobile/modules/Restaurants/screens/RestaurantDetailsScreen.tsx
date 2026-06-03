@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,21 +27,23 @@ import { useLanguageStore } from "@/store/useLanguageStore";
 import { useRestaurantDetails } from "../hooks/useRestaurantDetails";
 import { useRestaurantMenus } from "../hooks/useRestaurantMenus";
 import { useMenuSections } from "../hooks/useMenuSections";
-import { useFavorites } from "../hooks/useFavorites";
+import { useIsFavorite } from "../hooks/useFavorites";
 import { useToggleFavorite } from "../hooks/useToggleFavorite";
-import { useRateRestaurant } from "../hooks/useRateRestaurant";
 import { RestaurantDetails } from "../entities/RestaurantDetails";
-import { MenuSection } from "../entities/MenuSection";
 import { formatCuisineType, imageSource } from "../utils/foodImages";
 import { getCategoryLabel, getCategoryMeta } from "../utils/categoryMeta";
 import DetailsHeroSkeleton from "../components/DetailsHeroSkeleton";
 import ListErrorState from "../components/ListErrorState";
 import MenuTabs from "../components/MenuTabs";
 import MealsList from "../components/MealsList";
-import RestaurantRatingDialog from "../components/RestaurantRatingDialog";
+import FavoriteButton from "../components/FavoriteButton";
+import StarRating from "../components/StarRating";
+import CategoryChips, { ChipItem } from "../components/CategoryChips";
 
 const COVER_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
-const HERO_HEIGHT = 290;
+const HERO_HEIGHT = 300;
+const STICKY_FADE_START = HERO_HEIGHT - 150;
+const STICKY_FADE_END = HERO_HEIGHT - 80;
 
 const formatAddress = (restaurant: RestaurantDetails) => {
   if (restaurant.address) return restaurant.address;
@@ -53,93 +54,35 @@ const formatAddress = (restaurant: RestaurantDetails) => {
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
-function StatCell({
-  icon,
-  label,
-  value,
-  tint,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-  tint?: string;
-}) {
-  return (
-    <View style={styles.statCell}>
-      <Ionicons name={icon} size={18} color={tint ?? colors.primary} />
-      <Text style={styles.statValue} numberOfLines={1}>
-        {value}
-      </Text>
-      <Text style={styles.statLabel} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
+// ── Small presentational helpers ──────────────────────────────────────────────
 
-function SectionTabs({
-  sections,
-  selectedSectionId,
-  onSelect,
-  isLoading,
+function MetaPill({
+  icon,
+  value,
+  label,
+  tint,
   isRTL,
 }: {
-  sections: MenuSection[];
-  selectedSectionId: string | null;
-  onSelect: (id: string) => void;
-  isLoading: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  value: string;
+  label: string;
+  tint?: string;
   isRTL: boolean;
 }) {
-  if (isLoading) {
-    return (
-      <Animated.ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.sectionTabsRow}
-      >
-        {[112, 94, 128].map((width) => (
-          <View key={width} style={[styles.sectionTabSkeleton, { width }]} />
-        ))}
-      </Animated.ScrollView>
-    );
-  }
-
-  if (!sections.length) return null;
-
   return (
-    <Animated.ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={[styles.sectionTabsRow, isRTL && styles.rowReverse]}
-    >
-      {sections.map((section) => {
-        const selected = section.id === selectedSectionId;
-        return (
-          <AnimatedPressable
-            key={section.id}
-            onPress={() => onSelect(section.id)}
-            scaleTo={0.95}
-            style={[
-              styles.sectionTab,
-              isRTL && styles.rowReverse,
-              selected && styles.sectionTabSelected,
-            ]}
-          >
-            <Text
-              style={[styles.sectionTabText, selected && styles.sectionTabTextSelected]}
-              numberOfLines={1}
-            >
-              {section.name}
-            </Text>
-            <View style={[styles.sectionCount, selected && styles.sectionCountSelected]}>
-              <Text style={[styles.sectionCountText, selected && styles.sectionCountTextSelected]}>
-                {section.meals.length}
-              </Text>
-            </View>
-          </AnimatedPressable>
-        );
-      })}
-    </Animated.ScrollView>
+    <View style={[styles.metaPill, isRTL && styles.rowReverse]}>
+      <View style={[styles.metaPillIcon, tint ? { backgroundColor: `${tint}1A` } : null]}>
+        <Ionicons name={icon} size={15} color={tint ?? colors.primary} />
+      </View>
+      <View>
+        <Text style={[styles.metaPillValue, { textAlign: isRTL ? "right" : "left" }]} numberOfLines={1}>
+          {value}
+        </Text>
+        <Text style={[styles.metaPillLabel, { textAlign: isRTL ? "right" : "left" }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -173,6 +116,7 @@ function InfoRow({
 const RestaurantDetailsScreen = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useHomeT();
+  const insets = useSafeAreaInsets();
   const addCartItem = useCartStore((state) => state.addItem);
   const isRTL = useLanguageStore((s) => s.isRTL);
   const language = useLanguageStore((s) => s.language);
@@ -181,10 +125,10 @@ const RestaurantDetailsScreen = () => {
   const textAlign = isRTL ? "right" : "left";
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [ratingDialogVisible, setRatingDialogVisible] = useState(false);
-  const [ratedSuccessfully, setRatedSuccessfully] = useState(false);
 
   const scrollY = useSharedValue(0);
+  // Y position (within the scroll content) where the menu chips begin.
+  const menuAnchorY = useSharedValue(99999);
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollY.value = event.contentOffset.y;
   });
@@ -201,35 +145,13 @@ const RestaurantDetailsScreen = () => {
     refetch: refetchMenus,
   } = useRestaurantMenus(id);
 
-  const { isFavorite } = useFavorites();
-  const { mutate: toggleFavorite, isPending: isTogglingFavorite } = useToggleFavorite();
-  const { mutate: rateRestaurant, isPending: isRatingLoading } = useRateRestaurant();
-
-  const favorited = id ? isFavorite(id) : false;
+  const favorited = useIsFavorite(id);
+  const { mutate: toggleFavorite } = useToggleFavorite();
 
   const handleToggleFavorite = useCallback(() => {
-    if (!id) return;
-    toggleFavorite({ restaurantId: id, isFavorite: favorited });
-  }, [id, favorited, toggleFavorite]);
-
-  const handleRateSubmit = useCallback(
-    (rating: number, comment?: string) => {
-      if (!id) return;
-      rateRestaurant(
-        { restaurantId: id, rating, comment },
-        {
-          onSuccess: () => {
-            setRatingDialogVisible(false);
-            setRatedSuccessfully(true);
-          },
-          onError: () => {
-            Alert.alert(t("favorite.errorTitle"), t("favorite.ratingError"));
-          },
-        },
-      );
-    },
-    [id, rateRestaurant, t],
-  );
+    if (!data) return;
+    toggleFavorite(data);
+  }, [data, toggleFavorite]);
 
   const {
     data: sections = [],
@@ -266,6 +188,11 @@ const RestaurantDetailsScreen = () => {
     [sections, selectedSectionId],
   );
 
+  const sectionChips = useMemo<ChipItem[]>(
+    () => sections.map((s) => ({ id: s.id, label: s.name, count: s.meals.length })),
+    [sections],
+  );
+
   // ── Animations ────────────────────────────────────────────────────────────
   // Cover parallax: zooms when over-scrolling down, drifts up on scroll.
   const coverStyle = useAnimatedStyle(() => ({
@@ -288,7 +215,7 @@ const RestaurantDetailsScreen = () => {
   const stickyStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       scrollY.value,
-      [HERO_HEIGHT - 140, HERO_HEIGHT - 80],
+      [STICKY_FADE_START, STICKY_FADE_END],
       [0, 1],
       Extrapolation.CLAMP,
     ),
@@ -296,13 +223,34 @@ const RestaurantDetailsScreen = () => {
       {
         translateY: interpolate(
           scrollY.value,
-          [HERO_HEIGHT - 140, HERO_HEIGHT - 80],
-          [-8, 0],
+          [STICKY_FADE_START, STICKY_FADE_END],
+          [-10, 0],
           Extrapolation.CLAMP,
         ),
       },
     ],
   }));
+
+  // The top overlay back/fav row fades OUT as the sticky header takes over.
+  const overlayControlsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollY.value,
+      [STICKY_FADE_START, STICKY_FADE_END],
+      [1, 0],
+      Extrapolation.CLAMP,
+    ),
+  }));
+
+  // Sticky category bar appears once the menu chips reach the header.
+  const headerOffset = insets.top + 52;
+  const stickyChipsStyle = useAnimatedStyle(() => {
+    const pinPoint = menuAnchorY.value - headerOffset;
+    const show = scrollY.value >= pinPoint ? 1 : 0;
+    return {
+      opacity: show,
+      transform: [{ translateY: show ? 0 : -12 }],
+    };
+  });
 
   if (isLoading) {
     return (
@@ -372,7 +320,8 @@ const RestaurantDetailsScreen = () => {
           style={styles.cover}
         />
         <LinearGradient
-          colors={["rgba(20,20,20,0.34)", "rgba(20,20,20,0.05)", "rgba(20,20,20,0.55)"]}
+          colors={["rgba(15,15,15,0.42)", "rgba(15,15,15,0.04)", "rgba(15,15,15,0.62)"]}
+          locations={[0, 0.4, 1]}
           style={StyleSheet.absoluteFill}
         />
       </Animated.View>
@@ -392,32 +341,30 @@ const RestaurantDetailsScreen = () => {
           />
         }
       >
-        {/* Spacer the height of the hero so content starts below it. */}
+        {/* Hero zone — back + the single favourite control overlaid on the cover. */}
         <View style={styles.heroSpacer}>
           <SafeAreaView edges={["top"]} pointerEvents="box-none">
-            <View style={[styles.topBarOverlay, isRTL && styles.rowReverse]}>
+            <Animated.View
+              style={[styles.topBarOverlay, isRTL && styles.rowReverse, overlayControlsStyle]}
+              pointerEvents="box-none"
+            >
               <AnimatedPressable onPress={handleBack} scaleTo={0.88} style={styles.overlayIconButton}>
                 <Ionicons name={isRTL ? "chevron-forward" : "chevron-back"} size={22} color={colors.onPrimary} />
               </AnimatedPressable>
-              <AnimatedPressable
-                onPress={handleToggleFavorite}
-                style={[styles.overlayIconButton, favorited && styles.overlayIconButtonFav]}
-                haptic="impact"
-                scaleTo={0.88}
-                disabled={isTogglingFavorite}
-              >
-                <Ionicons
-                  name={favorited ? "heart" : "heart-outline"}
-                  size={20}
-                  color={favorited ? colors.primary : colors.onPrimary}
-                />
-              </AnimatedPressable>
-            </View>
+
+              {/* THE single favourite button — premium burst micro-interaction. */}
+              <FavoriteButton
+                favorited={favorited}
+                onToggle={handleToggleFavorite}
+                variant="overlay"
+              />
+            </Animated.View>
           </SafeAreaView>
         </View>
 
         {/* Body sheet overlaps the hero with a rounded top. */}
         <View style={styles.sheet}>
+          {/* Logo floats half over the cover; name + meta sit safely on the sheet. */}
           <View style={[styles.identityRow, isRTL && styles.rowReverse]}>
             <View style={styles.logoWrap}>
               <Image
@@ -427,93 +374,73 @@ const RestaurantDetailsScreen = () => {
                 style={styles.logo}
               />
             </View>
-            <View style={styles.identityCopy}>
-              <Text style={[styles.name, { textAlign }]} numberOfLines={2}>
-                {name}
+            <View style={[styles.statusPill, isOpen ? styles.openStatus : styles.closedStatus]}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>
+                {isOpen ? t("restaurant.openNow") : t("restaurant.closedNow")}
               </Text>
-              <View style={[styles.identityMetaRow, isRTL && styles.rowReverse]}>
-                <View style={[styles.cuisineChip, { backgroundColor: `${meta.gradient[1]}1A` }]}>
-                  <Text style={styles.cuisineEmoji}>{meta.emoji}</Text>
-                  <Text style={[styles.cuisineText, { color: meta.gradient[1] }]} numberOfLines={1}>
-                    {cuisineLabel}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.statusPill,
-                    isRTL && styles.rowReverse,
-                    isOpen ? styles.openStatus : styles.closedStatus,
-                  ]}
-                >
-                  <View style={styles.statusDot} />
-                  <Text style={styles.statusText}>
-                    {isOpen ? t("restaurant.openNow") : t("restaurant.closedNow")}
-                  </Text>
-                </View>
+            </View>
+          </View>
+
+          {/* Restaurant name — always on the sheet, full width, never overlapped. */}
+          <View style={styles.titleBlock}>
+            <Text style={[styles.name, { textAlign }]} numberOfLines={2}>
+              {name}
+            </Text>
+            <View style={[styles.cuisineRow, isRTL && styles.rowReverse]}>
+              <View style={[styles.cuisineChip, { backgroundColor: `${meta.gradient[1]}1A` }]}>
+                <Text style={styles.cuisineEmoji}>{meta.emoji}</Text>
+                <Text style={[styles.cuisineText, { color: meta.gradient[1] }]} numberOfLines={1}>
+                  {cuisineLabel}
+                </Text>
               </View>
             </View>
           </View>
 
-          {/* Horizontal stat row */}
-          <View style={[styles.statRow, isRTL && styles.rowReverse]}>
-            <StatCell
-              icon="star"
-              tint="#E8A300"
-              label={t("details.rating")}
-              value={t("details.ratingCount", { rating: rating.toFixed(1), count: totalRatings })}
+          {/* Premium rating block + rate CTA */}
+          <View style={[styles.ratingCard, isRTL && styles.rowReverse]}>
+            <StarRating
+              rating={rating}
+              caption={t("details.reviewsCount", { count: totalRatings })}
+              starSize={16}
+              align={isRTL ? "flex-end" : "flex-start"}
             />
-            <View style={styles.statSeparator} />
-            <StatCell
-              icon="bag-handle-outline"
-              label={t("details.minOrder")}
-              value={formatPrice(minOrderAmount, currency)}
-            />
-            {estimatedDeliveryTime != null ? (
-              <>
-                <View style={styles.statSeparator} />
-                <StatCell
-                  icon="time-outline"
-                  label={t("details.eta")}
-                  value={t("details.etaValue", { min: estimatedDeliveryTime })}
-                />
-              </>
-            ) : null}
+            {/* Ratings are submitted from a delivered order, so this is a
+                read-only hint rather than an action that would 404. */}
+            <View style={[styles.rateHint, isRTL && styles.rowReverse]}>
+              <Ionicons name="receipt-outline" size={14} color={colors.outline} />
+              <Text style={styles.rateHintText}>
+                {t("details.rateFromOrder", { defaultValue: "Rate from your order" })}
+              </Text>
+            </View>
           </View>
 
-          {/* Action row */}
-          <View style={[styles.actionRow, isRTL && styles.rowReverse]}>
-            <AnimatedPressable
-              onPress={() => { setRatingDialogVisible(true); setRatedSuccessfully(false); }}
-              style={[styles.actionBtn, isRTL && styles.rowReverse, ratedSuccessfully && styles.actionBtnSuccess]}
-              scaleTo={0.96}
-              haptic="impact"
-            >
-              <Ionicons
-                name={ratedSuccessfully ? "checkmark-circle" : "star-outline"}
-                size={16}
-                color={ratedSuccessfully ? "#16A34A" : colors.primary}
+          {/* Horizontal meta pills */}
+          <View style={[styles.metaRow, isRTL && styles.rowReverse]}>
+            <MetaPill
+              icon="bag-handle-outline"
+              value={formatPrice(minOrderAmount, currency)}
+              label={t("details.minOrder")}
+              isRTL={isRTL}
+            />
+            {estimatedDeliveryTime != null ? (
+              <MetaPill
+                icon="time-outline"
+                value={t("details.etaValue", { min: estimatedDeliveryTime })}
+                label={t("details.eta")}
+                tint="#2563EB"
+                isRTL={isRTL}
               />
-              <Text style={[styles.actionBtnText, ratedSuccessfully && { color: "#16A34A" }]}>
-                {ratedSuccessfully ? t("details.rated") : t("details.rate")}
-              </Text>
-            </AnimatedPressable>
-
-            <AnimatedPressable
-              onPress={handleToggleFavorite}
-              style={[styles.actionBtn, isRTL && styles.rowReverse, favorited && styles.actionBtnFav]}
-              scaleTo={0.96}
-              haptic="impact"
-              disabled={isTogglingFavorite}
-            >
-              <Ionicons
-                name={favorited ? "heart" : "heart-outline"}
-                size={16}
-                color={favorited ? colors.primary : colors.onSurface}
+            ) : null}
+            {deliveryFee != null ? (
+              <MetaPill
+                icon="bicycle-outline"
+                value={formatPrice(deliveryFee, currency)}
+                label={t("details.deliveryFee")}
+                tint="#16A34A"
+                isRTL={isRTL}
               />
-              <Text style={[styles.actionBtnText, favorited && { color: colors.primary }]}>
-                {favorited ? t("details.saved") : t("details.save")}
-              </Text>
-            </AnimatedPressable>
+            ) : null}
           </View>
 
           {description ? (
@@ -540,13 +467,20 @@ const RestaurantDetailsScreen = () => {
               isError={menusError}
               onRetry={refetchMenus}
             />
-            <SectionTabs
-              sections={sections}
-              selectedSectionId={selectedSectionId}
-              onSelect={setSelectedSectionId}
-              isLoading={sectionsLoading}
-              isRTL={isRTL}
-            />
+            {/* Anchor: when this rail reaches the header, the sticky bar pins. */}
+            <View
+              onLayout={(e) => {
+                menuAnchorY.value = e.nativeEvent.layout.y;
+              }}
+            >
+              <CategoryChips
+                items={sectionChips}
+                selectedId={selectedSectionId}
+                onSelect={setSelectedSectionId}
+                isLoading={sectionsLoading}
+                isRTL={isRTL}
+              />
+            </View>
           </View>
 
           <MealsList
@@ -576,12 +510,6 @@ const RestaurantDetailsScreen = () => {
                 value={isOpen ? t("restaurant.openNow") : t("restaurant.closedNow")}
                 isRTL={isRTL}
               />
-              {deliveryFee != null ? (
-                <>
-                  <View style={styles.infoDivider} />
-                  <InfoRow icon="bicycle-outline" label={t("details.deliveryFee")} value={formatPrice(deliveryFee, currency)} isRTL={isRTL} />
-                </>
-              ) : null}
               {openingHours ? (
                 <>
                   <View style={styles.infoDivider} />
@@ -599,7 +527,7 @@ const RestaurantDetailsScreen = () => {
         </View>
       </Animated.ScrollView>
 
-      {/* Compact sticky header — fades in on scroll */}
+      {/* Compact sticky header — fades in on scroll. Holds back + favourite. */}
       <Animated.View style={[styles.stickyHeader, stickyStyle]} pointerEvents="box-none">
         <SafeAreaView edges={["top"]} style={styles.stickyInner}>
           <View style={[styles.stickyRow, isRTL && styles.rowReverse]}>
@@ -609,30 +537,26 @@ const RestaurantDetailsScreen = () => {
             <Text style={[styles.stickyTitle, { textAlign }]} numberOfLines={1}>
               {name}
             </Text>
-            <AnimatedPressable
-              onPress={handleToggleFavorite}
-              scaleTo={0.88}
-              style={styles.stickyBackBtn}
-              disabled={isTogglingFavorite}
-            >
-              <Ionicons
-                name={favorited ? "heart" : "heart-outline"}
-                size={20}
-                color={favorited ? colors.primary : colors.onSurface}
-              />
-            </AnimatedPressable>
+            <FavoriteButton
+              favorited={favorited}
+              onToggle={handleToggleFavorite}
+              variant="plain"
+              size={20}
+            />
           </View>
+
+          {/* Sticky category chips pin under the header for the menu zone. */}
+          <Animated.View style={[styles.stickyChips, stickyChipsStyle]} pointerEvents="box-none">
+            <CategoryChips
+              items={sectionChips}
+              selectedId={selectedSectionId}
+              onSelect={setSelectedSectionId}
+              isRTL={isRTL}
+              compact
+            />
+          </Animated.View>
         </SafeAreaView>
       </Animated.View>
-
-      <RestaurantRatingDialog
-        visible={ratingDialogVisible}
-        restaurantName={name}
-        isRTL={isRTL}
-        onClose={() => setRatingDialogVisible(false)}
-        onSubmit={handleRateSubmit}
-        isLoading={isRatingLoading}
-      />
 
       <FloatingTabBar />
     </View>
@@ -689,15 +613,11 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(20,20,20,0.4)",
+    backgroundColor: "rgba(20,20,20,0.42)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  overlayIconButtonFav: {
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderColor: "rgba(245,89,5,0.2)",
   },
   sheet: {
     marginTop: -30,
@@ -706,19 +626,20 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingTop: 16,
     paddingBottom: 8,
-    gap: 18,
+    gap: 16,
   },
   identityRow: {
     paddingHorizontal: screen.horizontal,
     flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 14,
-    marginTop: -52,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: -54,
   },
   logoWrap: {
-    width: 78,
-    height: 78,
-    borderRadius: 24,
+    width: 84,
+    height: 84,
+    borderRadius: 26,
     backgroundColor: colors.card,
     padding: 4,
     ...shadows.card,
@@ -726,20 +647,20 @@ const styles = StyleSheet.create({
   logo: {
     width: "100%",
     height: "100%",
-    borderRadius: 20,
+    borderRadius: 22,
   },
-  identityCopy: {
-    flex: 1,
-    gap: 8,
-    paddingBottom: 6,
+  titleBlock: {
+    paddingHorizontal: screen.horizontal,
+    gap: 9,
+    marginTop: -4,
   },
   name: {
     fontFamily: typography.headline,
     color: colors.onSurface,
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 23,
+    lineHeight: 30,
   },
-  identityMetaRow: {
+  cuisineRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -785,67 +706,73 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
     fontSize: 10,
   },
-  statRow: {
+
+  // Premium rating card
+  ratingCard: {
     marginHorizontal: screen.horizontal,
     backgroundColor: colors.card,
     borderRadius: radii.xl,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     ...shadows.soft,
   },
-  statCell: {
-    flex: 1,
+  rateHint: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-  },
-  statValue: {
-    fontFamily: typography.bodyBold,
-    color: colors.onSurface,
-    fontSize: 14,
-  },
-  statLabel: {
-    fontFamily: typography.bodyMedium,
-    color: colors.outline,
-    fontSize: 11,
-  },
-  statSeparator: {
-    width: 1,
-    height: 34,
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
     backgroundColor: colors.surfaceContainer,
   },
-  actionRow: {
+  rateHintText: {
+    fontFamily: typography.bodyBold,
+    color: colors.outline,
+    fontSize: 12,
+  },
+
+  // Meta pills
+  metaRow: {
     paddingHorizontal: screen.horizontal,
     flexDirection: "row",
     gap: 10,
+    flexWrap: "wrap",
   },
-  actionBtn: {
-    flex: 1,
+  metaPill: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    height: 46,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: "#ECECEC",
+    gap: 9,
     backgroundColor: colors.card,
-    ...shadows.soft,
+    borderRadius: radii.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainerHighest,
+    flexGrow: 1,
+    flexBasis: "30%",
   },
-  actionBtnFav: {
-    borderColor: colors.primary,
+  metaPillIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: colors.faintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  actionBtnSuccess: {
-    borderColor: "#16A34A",
-    backgroundColor: "#F0FDF4",
-  },
-  actionBtnText: {
+  metaPillValue: {
     fontFamily: typography.bodyBold,
     color: colors.onSurface,
     fontSize: 13,
   },
+  metaPillLabel: {
+    fontFamily: typography.bodyMedium,
+    color: colors.outline,
+    fontSize: 10.5,
+  },
+
   block: {
     paddingHorizontal: screen.horizontal,
     gap: 9,
@@ -880,60 +807,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     gap: 12,
   },
-  sectionTabsRow: {
-    paddingHorizontal: screen.horizontal,
-    gap: 10,
-    paddingBottom: 4,
-  },
-  sectionTab: {
-    minHeight: 40,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: "#ECECEC",
-  },
-  sectionTabSelected: {
-    backgroundColor: colors.onSurface,
-    borderColor: colors.onSurface,
-  },
-  sectionTabText: {
-    maxWidth: 150,
-    fontFamily: typography.bodyBold,
-    color: colors.onSurface,
-    fontSize: 13,
-  },
-  sectionTabTextSelected: {
-    color: colors.onPrimary,
-  },
-  sectionCount: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainer,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 5,
-  },
-  sectionCountSelected: {
-    backgroundColor: "rgba(255,255,255,0.24)",
-  },
-  sectionCountText: {
-    fontFamily: typography.bodyBold,
-    color: colors.outline,
-    fontSize: 10,
-  },
-  sectionCountTextSelected: {
-    color: colors.onPrimary,
-  },
-  sectionTabSkeleton: {
-    height: 40,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainerHighest,
-  },
+
   infoSection: {
     paddingHorizontal: screen.horizontal,
     paddingTop: 12,
@@ -976,6 +850,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainer,
     marginHorizontal: 14,
   },
+
   stickyHeader: {
     position: "absolute",
     top: 0,
@@ -1009,6 +884,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.headlineSemi,
     color: colors.onSurface,
     fontSize: 16,
+  },
+  stickyChips: {
+    paddingTop: 6,
   },
 });
 

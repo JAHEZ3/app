@@ -11,11 +11,6 @@ export interface RestaurantsPage {
     meta: PaginationMeta;
 }
 
-export interface RestaurantRatingPayload {
-    rating: number;
-    comment?: string;
-}
-
 export interface RestaurantsRepository {
     getRestaurants: (params?: RestaurantsQueryParams) => Promise<RestaurantsPage>;
     getCategories: () => Promise<Category[]>;
@@ -24,9 +19,4 @@ export interface RestaurantsRepository {
     getMenuSections: (restaurantId: string, menuId: string) => Promise<MenuSection[]>;
     /** All available meals across every menu of a restaurant (flattened). */
     getRestaurantMeals: (restaurantId: string) => Promise<Meal[]>;
-    rateRestaurant: (id: string, payload: RestaurantRatingPayload) => Promise<void>;
-    getFavorites: () => Promise<string[]>;
-    getFavoriteRestaurants: () => Promise<Restaurant[]>;
-    addFavorite: (restaurantId: string) => Promise<void>;
-    removeFavorite: (restaurantId: string) => Promise<void>;
 }

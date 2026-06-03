@@ -79,12 +79,18 @@
     "phone": "الهاتف",
     "rate": "قيّم",
     "rated": "تم التقييم",
+    "rateFromOrder": "قيّم من طلبك",
     "save": "حفظ",
     "saved": "محفوظ",
     "loadError": "تعذّر تحميل المطعم",
     "loadErrorMessage": "يرجى المحاولة بعد قليل.",
     "noMenus": "لا توجد قوائم متاحة بعد.",
-    "ratingCount": "{{rating}} ({{count}})"
+    "ratingCount": "{{rating}} ({{count}})",
+    "reviewsCount_one": "تقييم واحد",
+    "reviewsCount_two": "تقييمان",
+    "reviewsCount_few": "{{count}} تقييمات",
+    "reviewsCount_many": "{{count}} تقييماً",
+    "reviewsCount_other": "{{count}} تقييم"
   },
   "empty": {
     "title": "لا توجد نتائج",

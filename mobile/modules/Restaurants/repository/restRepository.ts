@@ -19,16 +19,6 @@ const BASE = '/api/restaurant/mobile/restaurants';
 const MENU_BASE = '/api/restaurant/mobile/menus';
 const CATEGORIES_BASE = '/api/restaurant/categories';
 
-const toId = (item: unknown): string | null => {
-    if (typeof item === 'string') return item;
-    if (item && typeof item === 'object') {
-        const o = item as Record<string, unknown>;
-        const id = o.id ?? o.restaurantId ?? o.restaurant_id;
-        return typeof id === 'string' ? id : null;
-    }
-    return null;
-};
-
 export const restRepository = (): RestaurantsRepository => ({
     getRestaurants: async (params): Promise<RestaurantsPage> => {
         const res = await restaurantApi.get<RestaurantsResponseDTO>(BASE, { params });
@@ -91,46 +81,5 @@ export const restRepository = (): RestaurantsRepository => ({
                 .flatMap((section) => section.meals)
                 .filter((meal) => meal.isAvailable);
         });
-    },
-
-    rateRestaurant: async (id, payload) => {
-        await restaurantApi.post(`${BASE}/${id}/rate`, payload);
-    },
-
-    getFavorites: async (): Promise<string[]> => {
-        try {
-            const res = await restaurantApi.get<{ data: unknown }>(`${BASE}/favorites`);
-            const raw = res.data?.data ?? res.data;
-            if (Array.isArray(raw)) {
-                return raw.map(toId).filter((id): id is string => id !== null);
-            }
-            return [];
-        } catch (err: any) {
-            if (err?.response?.status === 404) return [];
-            throw err;
-        }
-    },
-
-    getFavoriteRestaurants: async () => {
-        try {
-            const res = await restaurantApi.get<{ data: unknown }>(`${BASE}/favorites`);
-            const raw = res.data?.data ?? res.data;
-            if (!Array.isArray(raw)) return [];
-            // Server may return full objects or just IDs. Map whichever shape we get.
-            return raw
-                .filter((item) => item && typeof item === 'object' && 'name' in item)
-                .map(toRestaurantAdapter);
-        } catch (err: any) {
-            if (err?.response?.status === 404) return [];
-            throw err;
-        }
-    },
-
-    addFavorite: async (restaurantId) => {
-        await restaurantApi.post(`${BASE}/${restaurantId}/favorite`);
-    },
-
-    removeFavorite: async (restaurantId) => {
-        await restaurantApi.delete(`${BASE}/${restaurantId}/favorite`);
     },
 });

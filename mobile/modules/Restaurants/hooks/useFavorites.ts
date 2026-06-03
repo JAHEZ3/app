@@ -1,23 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
-import { useRestaurantsRepository } from '..';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useCallback } from "react";
+import { useFavoritesStore, useIsFavorite } from "@/store/useFavoritesStore";
 
-export const FAVORITES_QUERY_KEY = ['restaurants', 'favorites'] as const;
-
+/**
+ * Favourites are stored locally (single source of truth: useFavoritesStore).
+ * This hook keeps the original public surface so existing call sites keep
+ * working, but now reads/writes the store instead of a dead REST endpoint.
+ */
 export const useFavorites = () => {
-    const { getFavorites } = useRestaurantsRepository();
-    const isAuthenticated = useAuthStore((s) => s.status === 'authenticated');
+  const byId = useFavoritesStore((s) => s.byId);
+  const hydrated = useFavoritesStore((s) => s.hydrated);
 
-    const query = useQuery({
-        queryKey: FAVORITES_QUERY_KEY,
-        queryFn: getFavorites,
-        enabled: isAuthenticated,
-        staleTime: 1000 * 60 * 5,
-        gcTime: 1000 * 60 * 30,
-    });
+  const isFavorite = useCallback(
+    (restaurantId: string): boolean => !!byId[restaurantId],
+    [byId],
+  );
 
-    const isFavorite = (restaurantId: string): boolean =>
-        query.data?.includes(restaurantId) ?? false;
-
-    return { ...query, isFavorite };
+  return { isFavorite, isLoading: !hydrated };
 };
+
+/** Subscribe to a single restaurant's favourite flag (minimal re-renders). */
+export { useIsFavorite };

@@ -75,12 +75,15 @@
     "phone": "Phone",
     "rate": "Rate",
     "rated": "Rated",
+    "rateFromOrder": "Rate from your order",
     "save": "Save",
     "saved": "Saved",
     "loadError": "Couldn't load restaurant",
     "loadErrorMessage": "Please try again in a moment.",
     "noMenus": "No menus available yet.",
-    "ratingCount": "{{rating}} ({{count}})"
+    "ratingCount": "{{rating}} ({{count}})",
+    "reviewsCount_one": "{{count}} review",
+    "reviewsCount_other": "{{count}} reviews"
   },
   "empty": {
     "title": "No results found",

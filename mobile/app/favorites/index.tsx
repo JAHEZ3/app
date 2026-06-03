@@ -1,58 +1,79 @@
-import React, { useCallback } from "react";
+import React, { memo, useCallback } from "react";
 import {
     FlatList,
     ListRenderItem,
-    RefreshControl,
     StatusBar,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Image } from "expo-image";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+    FadeIn,
+    FadeInDown,
+    LinearTransition,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withRepeat,
+    withTiming,
+    interpolate,
+} from "react-native-reanimated";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import { useFavoriteRestaurants } from "@/modules/Restaurants/hooks/useFavoriteRestaurants";
-import { useFavorites } from "@/modules/Restaurants/hooks/useFavorites";
 import { useToggleFavorite } from "@/modules/Restaurants/hooks/useToggleFavorite";
 import { Restaurant } from "@/modules/Restaurants/entities/Restaurant";
 import { imageSource, formatCuisineType } from "@/modules/Restaurants/utils/foodImages";
-import RestaurantCardSkeleton from "@/modules/Restaurants/components/RestaurantCardSkeleton";
 
 const COVER_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
-const SKELETONS = Array.from({ length: 4 }, (_, i) => `sk-${i}`);
+const CARD_HEIGHT = 132;
+const CARD_GAP = 14;
+const SKELETONS = ["s0", "s1", "s2", "s3", "s4"];
+
+const t = (isRTL: boolean, en: string, ar: string) => (isRTL ? ar : en);
 
 // ─── Header ──────────────────────────────────────────────────────────────────
 
-function ScreenHeader({ isRTL }: { isRTL: boolean }) {
+function ScreenHeader({ isRTL, count }: { isRTL: boolean; count: number }) {
     const dir = isRTL ? "rtl" : "ltr";
     return (
         <View style={[styles.header, isRTL && styles.rowReverse]}>
-            <TouchableOpacity
-                onPress={() => (router.canGoBack() ? router.back() : router.replace("/home/Home" as never))}
+            <AnimatedPressable
+                onPress={() =>
+                    router.canGoBack() ? router.back() : router.replace("/home/Home" as never)
+                }
                 style={styles.backBtn}
-                hitSlop={8}
+                scaleTo={0.9}
+                haptic="selection"
             >
                 <Ionicons
                     name={isRTL ? "chevron-forward" : "chevron-back"}
                     size={22}
                     color={colors.onSurface}
                 />
-            </TouchableOpacity>
+            </AnimatedPressable>
 
             <View style={{ flex: 1 }}>
                 <Text style={[styles.headerEyebrow, { writingDirection: dir }]}>
-                    {isRTL ? "مطاعمك" : "Your restaurants"}
+                    {t(isRTL, "Your collection", "مجموعتك")}
                 </Text>
-                <Text style={[styles.headerTitle, { writingDirection: dir }]}>
-                    {isRTL ? "المحفوظات" : "Saved"}
-                </Text>
+                <View style={[styles.headerTitleRow, isRTL && styles.rowReverse]}>
+                    <Text style={[styles.headerTitle, { writingDirection: dir }]}>
+                        {t(isRTL, "Favorites", "المفضلة")}
+                    </Text>
+                    {count > 0 ? (
+                        <View style={styles.countBadge}>
+                            <Text style={styles.countBadgeText}>{count}</Text>
+                        </View>
+                    ) : null}
+                </View>
             </View>
 
             <View style={styles.headerIconWrap}>
@@ -66,18 +87,34 @@ function ScreenHeader({ isRTL }: { isRTL: boolean }) {
 
 function EmptyState({ isRTL }: { isRTL: boolean }) {
     const dir = isRTL ? "rtl" : "ltr";
+
+    // Gentle breathing pulse behind the heart for a touch of life.
+    const pulse = useSharedValue(0);
+    React.useEffect(() => {
+        pulse.value = withRepeat(withTiming(1, { duration: 1800 }), -1, true);
+    }, [pulse]);
+    const pulseStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: 0.9 + pulse.value * 0.18 }],
+        opacity: 0.18 + pulse.value * 0.12,
+    }));
+
     return (
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.emptyWrap}>
-            <View style={styles.emptyIcon}>
-                <Ionicons name="heart-outline" size={44} color={colors.outline} />
+        <Animated.View entering={FadeIn.duration(420)} style={styles.emptyWrap}>
+            <View style={styles.emptyIconStack}>
+                <Animated.View style={[styles.emptyPulse, pulseStyle]} />
+                <View style={styles.emptyIcon}>
+                    <Ionicons name="heart" size={42} color={colors.primary} />
+                </View>
             </View>
             <Text style={[styles.emptyTitle, { writingDirection: dir }]}>
-                {isRTL ? "لا توجد مطاعم محفوظة" : "No saved restaurants yet"}
+                {t(isRTL, "No favorites yet", "لا توجد مفضلات بعد")}
             </Text>
             <Text style={[styles.emptySubtitle, { writingDirection: dir }]}>
-                {isRTL
-                    ? "اضغط على قلب أي مطعم لحفظه وإيجاده هنا بسرعة."
-                    : "Tap the heart on any restaurant to save it here for quick access."}
+                {t(
+                    isRTL,
+                    "Tap the heart on any restaurant to save it here for quick, one-tap ordering.",
+                    "اضغط على القلب في أي مطعم لحفظه هنا والطلب منه بسرعة بضغطة واحدة.",
+                )}
             </Text>
             <AnimatedPressable
                 onPress={() => router.replace("/restaurants" as never)}
@@ -85,175 +122,197 @@ function EmptyState({ isRTL }: { isRTL: boolean }) {
                 scaleTo={0.96}
                 haptic="impact"
             >
-                <Ionicons name="storefront-outline" size={16} color={colors.onPrimary} />
+                <Ionicons name="compass-outline" size={18} color={colors.onPrimary} />
                 <Text style={styles.browseBtnText}>
-                    {isRTL ? "استعرض المطاعم" : "Browse restaurants"}
+                    {t(isRTL, "Explore restaurants", "استكشف المطاعم")}
                 </Text>
             </AnimatedPressable>
         </Animated.View>
     );
 }
 
-// ─── Restaurant row card ─────────────────────────────────────────────────────
+// ─── Loading skeleton (matches the real card) ────────────────────────────────
 
-function FavoriteRow({
+function SkeletonShimmer({ style }: { style?: any }) {
+    const progress = useSharedValue(0);
+    React.useEffect(() => {
+        progress.value = withRepeat(withTiming(1, { duration: 1100 }), -1, false);
+    }, [progress]);
+    const animated = useAnimatedStyle(() => ({
+        opacity: interpolate(progress.value, [0, 0.5, 1], [0.5, 1, 0.5]),
+    }));
+    return <Animated.View style={[styles.skelBlock, animated, style]} />;
+}
+
+function FavoriteSkeleton() {
+    return (
+        <View style={styles.card}>
+            <SkeletonShimmer style={styles.skelThumb} />
+            <View style={styles.skelBody}>
+                <SkeletonShimmer style={styles.skelLineWide} />
+                <SkeletonShimmer style={styles.skelLineNarrow} />
+                <View style={styles.skelChips}>
+                    <SkeletonShimmer style={styles.skelChip} />
+                    <SkeletonShimmer style={styles.skelChip} />
+                </View>
+            </View>
+        </View>
+    );
+}
+
+// ─── Premium favorite card ───────────────────────────────────────────────────
+
+const FavoriteCard = memo(function FavoriteCard({
     restaurant,
-    isFavorited,
     onToggle,
     onPress,
     isRTL,
 }: {
     restaurant: Restaurant;
-    isFavorited: boolean;
-    onToggle: () => void;
-    onPress: () => void;
+    onToggle: (r: Restaurant) => void;
+    onPress: (r: Restaurant) => void;
     isRTL: boolean;
 }) {
     const dir = isRTL ? "rtl" : "ltr";
 
+    // Heart pop when this card mounts already-favorited it's filled instantly;
+    // the pop plays on the tap that removes it for tactile feedback.
+    const heartScale = useSharedValue(1);
+    const heartStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: heartScale.value }],
+    }));
+
+    const handleToggle = useCallback(() => {
+        heartScale.value = withSpring(1.35, { damping: 5, stiffness: 320 }, () => {
+            heartScale.value = withSpring(1, { damping: 9, stiffness: 260 });
+        });
+        onToggle(restaurant);
+    }, [onToggle, restaurant, heartScale]);
+
+    const handlePress = useCallback(() => onPress(restaurant), [onPress, restaurant]);
+
     return (
         <AnimatedPressable
-            onPress={onPress}
-            haptic="impact"
-            scaleTo={0.98}
-            style={[styles.row, isRTL && styles.rowReverse]}
+            onPress={handlePress}
+            haptic="selection"
+            scaleTo={0.985}
+            style={[styles.card, isRTL && styles.rowReverse]}
         >
-            {/* Cover thumbnail */}
-            <View style={styles.rowThumb}>
+            {/* Image with gradient + status */}
+            <View style={styles.thumb}>
                 <Image
                     source={imageSource(restaurant.coverUrl || restaurant.logoUrl, restaurant.cuisineType)}
                     placeholder={COVER_BLURHASH}
                     contentFit="cover"
-                    transition={200}
-                    style={styles.rowThumbImage}
+                    transition={220}
+                    style={styles.thumbImage}
+                />
+                <LinearGradient
+                    colors={["transparent", "rgba(0,0,0,0.45)"]}
+                    style={styles.thumbScrim}
                 />
                 <View
                     style={[
-                        styles.rowStatusDot,
-                        { backgroundColor: restaurant.isOpen ? "#16A34A" : "#9CA3AF" },
-                        isRTL ? styles.rowStatusDotRTL : styles.rowStatusDotLTR,
+                        styles.statusPill,
+                        { backgroundColor: restaurant.isOpen ? "rgba(22,163,74,0.95)" : "rgba(82,82,82,0.92)" },
                     ]}
-                />
+                >
+                    <View style={styles.statusDot} />
+                    <Text style={styles.statusText}>
+                        {restaurant.isOpen ? t(isRTL, "Open", "مفتوح") : t(isRTL, "Closed", "مغلق")}
+                    </Text>
+                </View>
             </View>
 
             {/* Info */}
-            <View style={styles.rowInfo}>
-                <Text
-                    style={[styles.rowName, { writingDirection: dir }]}
-                    numberOfLines={1}
-                >
+            <View style={styles.info}>
+                <Text style={[styles.name, { writingDirection: dir }]} numberOfLines={1}>
                     {restaurant.name}
                 </Text>
-                <Text
-                    style={[styles.rowCuisine, { writingDirection: dir }]}
-                    numberOfLines={1}
-                >
+                <Text style={[styles.cuisine, { writingDirection: dir }]} numberOfLines={1}>
                     {formatCuisineType(restaurant.cuisineType)}
+                    {restaurant.city ? `  ·  ${restaurant.city}` : ""}
                 </Text>
-                <View style={[styles.rowMeta, isRTL && styles.rowReverse]}>
+
+                <View style={[styles.metaRow, isRTL && styles.rowReverse]}>
                     <View style={styles.ratingChip}>
                         <Ionicons name="star" size={11} color="#D68A00" />
                         <Text style={styles.ratingText}>{restaurant.rating.toFixed(1)}</Text>
                         <Text style={styles.ratingCount}>({restaurant.totalRatings})</Text>
                     </View>
                     <View style={styles.minChip}>
-                        <Ionicons name="cart-outline" size={11} color={colors.primary} />
+                        <Ionicons name="bag-handle-outline" size={11} color={colors.primary} />
                         <Text style={styles.minText}>
-                            {`${restaurant.minOrderAmount.toFixed(0)} ILS`}
-                        </Text>
-                    </View>
-                    <View
-                        style={[
-                            styles.openChip,
-                            { backgroundColor: restaurant.isOpen ? "#DCFCE7" : "#F3F4F6" },
-                        ]}
-                    >
-                        <Text
-                            style={[
-                                styles.openText,
-                                { color: restaurant.isOpen ? "#16A34A" : "#9CA3AF" },
-                            ]}
-                        >
-                            {restaurant.isOpen
-                                ? (isRTL ? "مفتوح" : "Open")
-                                : (isRTL ? "مغلق" : "Closed")}
+                            {t(isRTL, "Min", "الحد")} {restaurant.minOrderAmount.toFixed(0)} ILS
                         </Text>
                     </View>
                 </View>
             </View>
 
             {/* Heart toggle */}
-            <TouchableOpacity
-                onPress={(e) => { e.stopPropagation?.(); onToggle(); }}
-                style={[styles.heartBtn, isFavorited && styles.heartBtnActive]}
-                hitSlop={8}
-                activeOpacity={0.8}
+            <AnimatedPressable
+                onPress={handleToggle}
+                haptic="none"
+                scaleTo={0.85}
+                style={styles.heartBtn}
+                containerStyle={styles.heartHit}
+                hitSlop={10}
             >
-                <Ionicons
-                    name={isFavorited ? "heart" : "heart-outline"}
-                    size={18}
-                    color={isFavorited ? colors.primary : colors.outline}
-                />
-            </TouchableOpacity>
+                <Animated.View style={heartStyle}>
+                    <Ionicons name="heart" size={20} color={colors.primary} />
+                </Animated.View>
+            </AnimatedPressable>
         </AnimatedPressable>
     );
-}
+});
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function FavoritesScreen() {
     const isRTL = useLanguageStore((s) => s.isRTL);
-    const dir = isRTL ? "rtl" : "ltr";
 
-    const { data: restaurants = [], isLoading, refetch, isRefetching } = useFavoriteRestaurants();
-    const { isFavorite } = useFavorites();
+    const { data: restaurants, isLoading } = useFavoriteRestaurants();
     const { mutate: toggleFavorite } = useToggleFavorite();
 
     const handleToggle = useCallback(
-        (restaurant: Restaurant) => {
-            toggleFavorite({ restaurantId: restaurant.id, isFavorite: isFavorite(restaurant.id) });
-        },
-        [toggleFavorite, isFavorite],
+        (restaurant: Restaurant) => toggleFavorite(restaurant),
+        [toggleFavorite],
+    );
+
+    const handleOpen = useCallback(
+        (restaurant: Restaurant) => router.push(`/restaurants/${restaurant.id}` as never),
+        [],
     );
 
     const renderItem: ListRenderItem<Restaurant> = useCallback(
         ({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(index * 50).duration(320)}>
-                <FavoriteRow
+            <Animated.View
+                entering={FadeInDown.delay(Math.min(index, 8) * 45).duration(320)}
+                layout={LinearTransition.springify().damping(18).stiffness(180)}
+            >
+                <FavoriteCard
                     restaurant={item}
-                    isFavorited={isFavorite(item.id)}
-                    onToggle={() => handleToggle(item)}
-                    onPress={() => router.push(`/restaurants/${item.id}` as never)}
+                    onToggle={handleToggle}
+                    onPress={handleOpen}
                     isRTL={isRTL}
                 />
             </Animated.View>
         ),
-        [isFavorite, handleToggle, isRTL],
+        [handleToggle, handleOpen, isRTL],
     );
 
-    const ListHeader = useCallback(
-        () => (
-            <Text style={[styles.countLabel, { writingDirection: dir, textAlign: isRTL ? "right" : "left" }]}>
-                {restaurants.length > 0
-                    ? (isRTL
-                        ? `${restaurants.length} ${restaurants.length === 1 ? "مطعم محفوظ" : "مطاعم محفوظة"}`
-                        : `${restaurants.length} saved restaurant${restaurants.length === 1 ? "" : "s"}`)
-                    : ""}
-            </Text>
-        ),
-        [restaurants.length, isRTL, dir],
-    );
+    const keyExtractor = useCallback((item: Restaurant) => item.id, []);
 
     return (
         <SafeAreaView style={styles.safe} edges={["top"]}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-            <ScreenHeader isRTL={isRTL} />
+            <ScreenHeader isRTL={isRTL} count={restaurants.length} />
 
             {isLoading ? (
                 <View style={styles.skeletonWrap}>
                     {SKELETONS.map((k) => (
-                        <RestaurantCardSkeleton key={k} />
+                        <FavoriteSkeleton key={k} />
                     ))}
                 </View>
             ) : restaurants.length === 0 ? (
@@ -261,19 +320,14 @@ export default function FavoritesScreen() {
             ) : (
                 <FlatList
                     data={restaurants}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={keyExtractor}
                     renderItem={renderItem}
-                    ListHeaderComponent={ListHeader}
                     contentContainerStyle={styles.list}
                     showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={isRefetching}
-                            onRefresh={refetch}
-                            tintColor={colors.primary}
-                            colors={[colors.primary]}
-                        />
-                    }
+                    removeClippedSubviews
+                    initialNumToRender={8}
+                    maxToRenderPerBatch={8}
+                    windowSize={9}
                 />
             )}
 
@@ -298,9 +352,7 @@ const styles = StyleSheet.create({
         gap: 14,
         paddingHorizontal: screen.horizontal,
         paddingTop: 10,
-        paddingBottom: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.surfaceContainer,
+        paddingBottom: 16,
     },
     backBtn: {
         width: 42,
@@ -313,15 +365,35 @@ const styles = StyleSheet.create({
     },
     headerEyebrow: {
         fontFamily: typography.bodyBold,
-        color: colors.outline,
+        color: colors.primary,
         fontSize: 11,
         lineHeight: 14,
+        letterSpacing: 0.3,
+    },
+    headerTitleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
     },
     headerTitle: {
         fontFamily: typography.headline,
         color: colors.onSurface,
-        fontSize: 24,
-        lineHeight: 30,
+        fontSize: 25,
+        lineHeight: 32,
+    },
+    countBadge: {
+        minWidth: 24,
+        height: 24,
+        paddingHorizontal: 7,
+        borderRadius: 12,
+        backgroundColor: colors.faintPrimary,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    countBadgeText: {
+        fontFamily: typography.bodyBold,
+        color: colors.primary,
+        fontSize: 12,
     },
     headerIconWrap: {
         width: 42,
@@ -334,20 +406,16 @@ const styles = StyleSheet.create({
 
     // List
     list: {
-        paddingTop: 12,
+        paddingTop: 4,
+        paddingHorizontal: screen.horizontal,
         paddingBottom: screen.bottomTabSpace + 24,
-        gap: 0,
-    },
-    countLabel: {
-        fontFamily: typography.bodyMedium,
-        color: colors.outline,
-        fontSize: 12,
-        marginHorizontal: screen.horizontal,
-        marginBottom: 8,
+        gap: CARD_GAP,
     },
     skeletonWrap: {
         flex: 1,
-        paddingTop: 12,
+        paddingTop: 4,
+        paddingHorizontal: screen.horizontal,
+        gap: CARD_GAP,
     },
 
     // Empty state
@@ -356,39 +424,53 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 40,
-        gap: 12,
+        gap: 14,
         paddingBottom: screen.bottomTabSpace,
     },
-    emptyIcon: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
-        backgroundColor: colors.faintPrimary,
+    emptyIconStack: {
+        width: 120,
+        height: 120,
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 4,
     },
+    emptyPulse: {
+        position: "absolute",
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: colors.primary,
+    },
+    emptyIcon: {
+        width: 92,
+        height: 92,
+        borderRadius: 46,
+        backgroundColor: colors.faintPrimary,
+        alignItems: "center",
+        justifyContent: "center",
+    },
     emptyTitle: {
         fontFamily: typography.headlineSemi,
         color: colors.onSurface,
-        fontSize: 18,
+        fontSize: 20,
         textAlign: "center",
-        lineHeight: 24,
+        lineHeight: 26,
     },
     emptySubtitle: {
         fontFamily: typography.bodyMedium,
         color: colors.outline,
-        fontSize: 13,
-        lineHeight: 19,
+        fontSize: 13.5,
+        lineHeight: 20,
         textAlign: "center",
+        maxWidth: 300,
     },
     browseBtn: {
-        marginTop: 8,
+        marginTop: 10,
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
-        paddingHorizontal: 22,
-        height: 48,
+        gap: 9,
+        paddingHorizontal: 24,
+        height: 52,
         borderRadius: radii.pill,
         backgroundColor: colors.primary,
         ...shadows.primary,
@@ -396,66 +478,83 @@ const styles = StyleSheet.create({
     browseBtnText: {
         fontFamily: typography.bodyBold,
         color: colors.onPrimary,
-        fontSize: 14,
+        fontSize: 15,
     },
 
-    // Row card
-    row: {
+    // Card
+    card: {
         flexDirection: "row",
         alignItems: "center",
         gap: 14,
-        marginHorizontal: screen.horizontal,
-        marginBottom: 12,
+        height: CARD_HEIGHT,
         backgroundColor: colors.card,
         borderRadius: radii.xl,
         padding: 12,
         ...shadows.soft,
     },
-    rowThumb: {
-        width: 72,
-        height: 72,
-        borderRadius: 16,
+    thumb: {
+        width: 108,
+        height: 108,
+        borderRadius: 18,
         overflow: "hidden",
         backgroundColor: colors.surfaceContainerHighest,
-        position: "relative",
         flexShrink: 0,
     },
-    rowThumbImage: {
+    thumbImage: {
         width: "100%",
         height: "100%",
     },
-    rowStatusDot: {
+    thumbScrim: {
         position: "absolute",
-        bottom: 6,
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        borderWidth: 1.5,
-        borderColor: colors.card,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: "55%",
     },
-    rowStatusDotLTR: { left: 6 },
-    rowStatusDotRTL: { right: 6 },
-    rowInfo: {
-        flex: 1,
-        gap: 3,
+    statusPill: {
+        position: "absolute",
+        bottom: 8,
+        left: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: radii.pill,
     },
-    rowName: {
+    statusDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: colors.onPrimary,
+    },
+    statusText: {
         fontFamily: typography.bodyBold,
-        color: colors.onSurface,
-        fontSize: 15,
-        lineHeight: 20,
+        color: colors.onPrimary,
+        fontSize: 10,
     },
-    rowCuisine: {
-        fontFamily: typography.body,
+    info: {
+        flex: 1,
+        gap: 4,
+        justifyContent: "center",
+    },
+    name: {
+        fontFamily: typography.headlineSemi,
+        color: colors.onSurface,
+        fontSize: 16,
+        lineHeight: 21,
+    },
+    cuisine: {
+        fontFamily: typography.bodyMedium,
         color: colors.outline,
         fontSize: 12,
     },
-    rowMeta: {
+    metaRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        flexWrap: "wrap",
         marginTop: 4,
+        flexWrap: "wrap",
     },
     ratingChip: {
         flexDirection: "row",
@@ -490,25 +589,35 @@ const styles = StyleSheet.create({
         color: colors.primary,
         fontSize: 11,
     },
-    openChip: {
-        paddingHorizontal: 7,
-        paddingVertical: 3,
-        borderRadius: 8,
-    },
-    openText: {
-        fontFamily: typography.bodyBold,
-        fontSize: 11,
-    },
-    heartBtn: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        backgroundColor: colors.surfaceContainer,
-        alignItems: "center",
-        justifyContent: "center",
+    heartHit: {
         flexShrink: 0,
     },
-    heartBtnActive: {
+    heartBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: colors.faintPrimary,
+        alignItems: "center",
+        justifyContent: "center",
     },
+
+    // Skeleton
+    skelBlock: {
+        backgroundColor: "#E7E7E9",
+        borderRadius: 8,
+    },
+    skelThumb: {
+        width: 108,
+        height: 108,
+        borderRadius: 18,
+    },
+    skelBody: {
+        flex: 1,
+        gap: 9,
+        justifyContent: "center",
+    },
+    skelLineWide: { width: "70%", height: 16, borderRadius: 6 },
+    skelLineNarrow: { width: "45%", height: 12, borderRadius: 6 },
+    skelChips: { flexDirection: "row", gap: 8, marginTop: 4 },
+    skelChip: { width: 64, height: 22, borderRadius: 8 },
 });

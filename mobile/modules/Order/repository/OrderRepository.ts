@@ -29,8 +29,14 @@ export interface ChatMessageDto {
     sentAt: string;
 }
 
+/**
+ * Mirrors the backend `RateOrderDto` (order-service):
+ *   POST /api/order/orders/:id/rate  (role: customer, order must be DELIVERED)
+ * Both scores are required and must be >= 1. `comment` is optional free text.
+ */
 export interface RateOrderPayload {
-    rating: number;
+    foodRating: number;
+    deliveryRating: number;
     comment?: string;
 }
 

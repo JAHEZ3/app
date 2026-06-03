@@ -10,7 +10,7 @@ import Animated, {
 import AppText from '@/components/ui/AppText';
 import AnimatedPressable from '@/components/ui/AnimatedPressable';
 import { Restaurant } from '../entities/Restaurant';
-import { useFavorites } from '../hooks/useFavorites';
+import { useIsFavorite } from '../hooks/useFavorites';
 import { useToggleFavorite } from '../hooks/useToggleFavorite';
 
 const COVER_BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
@@ -23,9 +23,8 @@ interface RestaurantCardProps {
 const RestaurantCardComponent = ({ restaurant, onPress }: RestaurantCardProps) => {
     const handlePress = useCallback(() => onPress?.(restaurant), [onPress, restaurant]);
 
-    const { isFavorite } = useFavorites();
-    const { mutate: toggleFavorite, isPending } = useToggleFavorite();
-    const favorited = isFavorite(restaurant.id);
+    const favorited = useIsFavorite(restaurant.id);
+    const { mutate: toggleFavorite } = useToggleFavorite();
 
     // Spring-pop the heart icon whenever the favorited state flips
     const heartScale = useSharedValue(1);
@@ -39,8 +38,8 @@ const RestaurantCardComponent = ({ restaurant, onPress }: RestaurantCardProps) =
     }));
 
     const handleFavorite = useCallback(() => {
-        toggleFavorite({ restaurantId: restaurant.id, isFavorite: favorited });
-    }, [restaurant.id, favorited, toggleFavorite]);
+        toggleFavorite(restaurant);
+    }, [restaurant, toggleFavorite]);
 
     const {
         name,
@@ -90,7 +89,6 @@ const RestaurantCardComponent = ({ restaurant, onPress }: RestaurantCardProps) =
 
                 <AnimatedPressable
                     onPress={handleFavorite}
-                    disabled={isPending}
                     scaleTo={0.86}
                     haptic="selection"
                     style={[styles.heartBtn, favorited && styles.heartBtnActive]}

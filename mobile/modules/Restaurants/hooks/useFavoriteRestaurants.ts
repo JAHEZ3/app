@@ -1,19 +1,24 @@
-import { useQuery } from '@tanstack/react-query';
-import { useRestaurantsRepository } from '..';
-import { useAuthStore } from '@/store/useAuthStore';
-import { FAVORITES_QUERY_KEY } from './useFavorites';
+import { useMemo } from "react";
+import { useFavoritesStore } from "@/store/useFavoritesStore";
+import { Restaurant } from "../entities/Restaurant";
 
-export const FAVORITE_RESTAURANTS_QUERY_KEY = [...FAVORITES_QUERY_KEY, 'details'] as const;
-
+/**
+ * The list of favourited restaurants, newest-first, read straight from the
+ * local store. No network, no skeleton-forever bug — the data is already there.
+ * `isLoading` only reflects the brief storage rehydration on cold start.
+ */
 export const useFavoriteRestaurants = () => {
-    const { getFavoriteRestaurants } = useRestaurantsRepository();
-    const isAuthenticated = useAuthStore((s) => s.status === 'authenticated');
+  const byId = useFavoritesStore((s) => s.byId);
+  const addedAt = useFavoritesStore((s) => s.addedAt);
+  const hydrated = useFavoritesStore((s) => s.hydrated);
 
-    return useQuery({
-        queryKey: FAVORITE_RESTAURANTS_QUERY_KEY,
-        queryFn: getFavoriteRestaurants,
-        enabled: isAuthenticated,
-        staleTime: 1000 * 60 * 5,
-        gcTime: 1000 * 60 * 30,
-    });
+  const data = useMemo<Restaurant[]>(
+    () =>
+      Object.values(byId).sort(
+        (a, b) => (addedAt[b.id] ?? 0) - (addedAt[a.id] ?? 0),
+      ),
+    [byId, addedAt],
+  );
+
+  return { data, isLoading: !hydrated };
 };

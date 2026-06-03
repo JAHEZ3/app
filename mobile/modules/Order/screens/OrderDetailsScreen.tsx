@@ -216,6 +216,9 @@ function OrderDetailsScreen() {
     const { openReceipt, isLoading: isOpeningReceipt } = useOrderReceipt();
     const [showFullId, setShowFullId] = useState(false);
     const [ratingOpen, setRatingOpen] = useState(false);
+    // The order details endpoint doesn't echo the rating back, so we track a
+    // successful submit locally to flip the UI from "rate" to "rated".
+    const [justRated, setJustRated] = useState(false);
     const socketStatus = useSocketStatus();
     const isLive = socketStatus === "open";
 
@@ -935,7 +938,7 @@ function OrderDetailsScreen() {
                 ) : null}
 
                 {/* Rate order (delivered + not yet rated) */}
-                {order.status === "DELIVERED" && !order.rating ? (
+                {order.status === "DELIVERED" && !order.rating && !justRated ? (
                     <Animated.View entering={FadeInUp.delay(295).duration(360)}>
                         <AnimatedPressable
                             onPress={() => setRatingOpen(true)}
@@ -974,8 +977,9 @@ function OrderDetailsScreen() {
                     </Animated.View>
                 ) : null}
 
-                {/* Existing rating display */}
-                {order.rating ? (
+                {/* Existing rating display — either from the server (order.rating)
+                    or right after a successful local submit (justRated). */}
+                {order.rating || justRated ? (
                     <Animated.View entering={FadeInUp.delay(295).duration(360)}>
                         <View style={styles.ratingCard}>
                             <View style={[styles.ratingHeader, isRTL && styles.rowReverse]}>
@@ -983,21 +987,25 @@ function OrderDetailsScreen() {
                                 <Text
                                     style={[styles.ratingHeaderText, { writingDirection }]}
                                 >
-                                    {t("rate.yourRating", {
-                                        defaultValue: "Your rating",
-                                    })}
+                                    {order.rating
+                                        ? t("rate.yourRating", { defaultValue: "Your rating" })
+                                        : t("rate.successTitle", {
+                                              defaultValue: "Thanks for your feedback!",
+                                          })}
                                 </Text>
                             </View>
-                            <View style={[styles.ratingStars, isRTL && styles.rowReverse]}>
-                                {[1, 2, 3, 4, 5].map((n) => (
-                                    <Ionicons
-                                        key={n}
-                                        name={n <= (order.rating ?? 0) ? "star" : "star-outline"}
-                                        size={22}
-                                        color={n <= (order.rating ?? 0) ? "#F5B400" : colors.outline}
-                                    />
-                                ))}
-                            </View>
+                            {order.rating ? (
+                                <View style={[styles.ratingStars, isRTL && styles.rowReverse]}>
+                                    {[1, 2, 3, 4, 5].map((n) => (
+                                        <Ionicons
+                                            key={n}
+                                            name={n <= (order.rating ?? 0) ? "star" : "star-outline"}
+                                            size={22}
+                                            color={n <= (order.rating ?? 0) ? "#F5B400" : colors.outline}
+                                        />
+                                    ))}
+                                </View>
+                            ) : null}
                             {order.ratingComment ? (
                                 <Text
                                     style={[
@@ -1142,6 +1150,7 @@ function OrderDetailsScreen() {
                     orderId={orderId}
                     visible={ratingOpen}
                     onClose={() => setRatingOpen(false)}
+                    onSubmitted={() => setJustRated(true)}
                 />
             ) : null}
 

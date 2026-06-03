@@ -791,9 +791,7 @@ function HomeScreen() {
                   <FavoriteCard
                     restaurant={restaurant}
                     isFavorited={isFavorite(restaurant.id)}
-                    onToggle={() =>
-                      toggleFavorite({ restaurantId: restaurant.id, isFavorite: isFavorite(restaurant.id) })
-                    }
+                    onToggle={() => toggleFavorite(restaurant)}
                     onPress={() =>
                       router.push({ pathname: "/restaurants/[id]", params: { id: restaurant.id } } as never)
                     }
@@ -871,12 +869,7 @@ function HomeScreen() {
                     restaurant={restaurant}
                     width={restaurantCardWidth}
                     isFavorited={isFavorite(restaurant.id)}
-                    onToggleFavorite={() =>
-                      toggleFavorite({
-                        restaurantId: restaurant.id,
-                        isFavorite: isFavorite(restaurant.id),
-                      })
-                    }
+                    onToggleFavorite={() => toggleFavorite(restaurant)}
                   />
                 </FadeInView>
               ))}

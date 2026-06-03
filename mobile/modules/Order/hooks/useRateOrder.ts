@@ -21,15 +21,20 @@ export const getRateErrorMessage = (err: unknown): string | null => {
     return null;
 };
 
+/** True when the server says this order was already rated (HTTP 409). */
+export const isAlreadyRatedError = (err: unknown): boolean =>
+    err instanceof AxiosError && err.response?.status === 409;
+
 export const useRateOrder = () => {
     const { rateOrder } = useOrderRepository();
     const queryClient = useQueryClient();
 
     return useMutation<void, AxiosError, Variables>({
-        mutationFn: ({ orderId, rating, comment }) =>
-            rateOrder(orderId, { rating, comment }),
+        mutationFn: ({ orderId, foodRating, deliveryRating, comment }) =>
+            rateOrder(orderId, { foodRating, deliveryRating, comment }),
         retry: 0,
         onSuccess: (_data, { orderId }) => {
+            // Refresh the order (so the rating gate flips) and any list views.
             queryClient.invalidateQueries({ queryKey: [...ORDER_DETAILS_QUERY_KEY, orderId] });
             queryClient.invalidateQueries({ queryKey: ['orders'] });
         },

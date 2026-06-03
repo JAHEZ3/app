@@ -1,40 +1,32 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRestaurantsRepository } from '..';
-import { FAVORITES_QUERY_KEY } from './useFavorites';
+import { useCallback } from "react";
+import * as Haptics from "expo-haptics";
+import { useFavoritesStore } from "@/store/useFavoritesStore";
+import { Restaurant } from "../entities/Restaurant";
 
+/**
+ * Toggle a restaurant's favourite state. Local-first, so the update is
+ * synchronous and instant — no optimistic/rollback dance needed and nothing
+ * can fail with a 404. Persistence to SecureStore happens transparently.
+ *
+ * We accept the full `Restaurant` so the favourites list can render straight
+ * from the store with no extra fetch. A light haptic confirms the action.
+ */
 export const useToggleFavorite = () => {
-    const { addFavorite, removeFavorite } = useRestaurantsRepository();
-    const queryClient = useQueryClient();
+  const toggle = useFavoritesStore((s) => s.toggle);
 
-    return useMutation({
-        mutationFn: ({
-            restaurantId,
-            isFavorite,
-        }: {
-            restaurantId: string;
-            isFavorite: boolean;
-        }) =>
-            isFavorite ? removeFavorite(restaurantId) : addFavorite(restaurantId),
+  const mutate = useCallback(
+    (restaurant: Restaurant) => {
+      const nowFavorited = toggle(restaurant);
+      Haptics.impactAsync(
+        nowFavorited
+          ? Haptics.ImpactFeedbackStyle.Medium
+          : Haptics.ImpactFeedbackStyle.Light,
+      ).catch(() => undefined);
+      return nowFavorited;
+    },
+    [toggle],
+  );
 
-        onMutate: async ({ restaurantId, isFavorite }) => {
-            await queryClient.cancelQueries({ queryKey: FAVORITES_QUERY_KEY });
-            const prev = queryClient.getQueryData<string[]>(FAVORITES_QUERY_KEY);
-            queryClient.setQueryData<string[]>(FAVORITES_QUERY_KEY, (old = []) =>
-                isFavorite
-                    ? old.filter((id) => id !== restaurantId)
-                    : [...old, restaurantId],
-            );
-            return { prev };
-        },
-
-        onError: (_err, _vars, ctx) => {
-            if (ctx?.prev !== undefined) {
-                queryClient.setQueryData(FAVORITES_QUERY_KEY, ctx.prev);
-            }
-        },
-
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: FAVORITES_QUERY_KEY });
-        },
-    });
+  // `isPending` kept for API compatibility; local writes are never pending.
+  return { mutate, isPending: false };
 };
