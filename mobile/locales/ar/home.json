@@ -35,6 +35,9 @@
   "price": {
     "currency": "شيكل"
   },
+  "meal": {
+    "popular": "الأكثر طلباً"
+  },
   "sections": {
     "categories": "الفئات",
     "restaurants": "المطاعم",
@@ -54,17 +57,41 @@
   "restaurant": {
     "open": "مفتوح",
     "closed": "مغلق",
+    "openNow": "مفتوح الآن",
+    "closedNow": "مغلق حالياً",
     "minOrderAmount": "الحد الأدنى {{amount}} {{currency}}",
     "minOrder": "أقل طلب",
     "deliveryTime": "{{min}}-{{max}} دقيقة",
     "deliveryFee": "رسوم التوصيل"
+  },
+  "details": {
+    "rating": "التقييم",
+    "minOrder": "أقل طلب",
+    "eta": "التوصيل",
+    "etaValue": "{{min}} دقيقة",
+    "about": "عن المطعم",
+    "menu": "القائمة",
+    "information": "معلومات",
+    "address": "العنوان",
+    "status": "الحالة",
+    "deliveryFee": "رسوم التوصيل",
+    "hours": "ساعات العمل",
+    "phone": "الهاتف",
+    "rate": "قيّم",
+    "rated": "تم التقييم",
+    "save": "حفظ",
+    "saved": "محفوظ",
+    "loadError": "تعذّر تحميل المطعم",
+    "loadErrorMessage": "يرجى المحاولة بعد قليل.",
+    "noMenus": "لا توجد قوائم متاحة بعد.",
+    "ratingCount": "{{rating}} ({{count}})"
   },
   "empty": {
     "title": "لا توجد نتائج",
     "subtitle": "جرّب مصطلح بحث مختلف",
     "noCategories": "لا توجد فئات متاحة حالياً.",
     "restaurantsInCategory": "لا توجد مطاعم في هذه الفئة.",
-    "mealsForRestaurant": "لا توجد وجبات لعرضها لهذا المطعم حالياً."
+    "mealsForRestaurant": "لا توجد وجبات لعرضها حالياً."
   },
   "mealModal": {
     "mealDetails": "تفاصيل الوجبة",

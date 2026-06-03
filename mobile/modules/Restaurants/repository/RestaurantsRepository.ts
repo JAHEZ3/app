@@ -3,6 +3,7 @@ import { RestaurantDetails } from '../entities/RestaurantDetails';
 import { Category } from '../entities/Category';
 import { Menu } from '../entities/Menu';
 import { MenuSection } from '../entities/MenuSection';
+import { Meal } from '../entities/Meal';
 import { PaginationMeta, RestaurantsQueryParams } from '../types';
 
 export interface RestaurantsPage {
@@ -21,6 +22,8 @@ export interface RestaurantsRepository {
     getRestaurantById: (id: string) => Promise<RestaurantDetails>;
     getRestaurantMenus: (restaurantId: string) => Promise<Menu[]>;
     getMenuSections: (restaurantId: string, menuId: string) => Promise<MenuSection[]>;
+    /** All available meals across every menu of a restaurant (flattened). */
+    getRestaurantMeals: (restaurantId: string) => Promise<Meal[]>;
     rateRestaurant: (id: string, payload: RestaurantRatingPayload) => Promise<void>;
     getFavorites: () => Promise<string[]>;
     getFavoriteRestaurants: () => Promise<Restaurant[]>;

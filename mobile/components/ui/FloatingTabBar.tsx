@@ -1,5 +1,5 @@
 import React, { memo, useEffect } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,9 +8,12 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import AnimatedPressable from "./AnimatedPressable";
 import { colors, radii, shadows, typography } from "./theme";
+import { useCommonT } from "@/hooks/useAppTranslation";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import { getCartQuantity, useCartStore } from "@/store/useCartStore";
 
 type TabKey = "orders" | "favorites" | "home" | "cart" | "profile";
@@ -25,6 +28,13 @@ interface TabConfig {
 
 const tabs: TabConfig[] = [
   {
+    key: "home",
+    route: "/home/Home",
+    icon: "home-outline",
+    activeIcon: "home",
+    activePath: (path) => path === "/home/Home" || path === "/home",
+  },
+  {
     key: "orders",
     route: "/orders",
     icon: "receipt-outline",
@@ -37,13 +47,6 @@ const tabs: TabConfig[] = [
     icon: "heart-outline",
     activeIcon: "heart",
     activePath: (path) => path.startsWith("/favorites"),
-  },
-  {
-    key: "home",
-    route: "/home/Home",
-    icon: "home-outline",
-    activeIcon: "home",
-    activePath: (path) => path === "/home/Home" || path === "/home",
   },
   {
     key: "cart",
@@ -61,18 +64,14 @@ const tabs: TabConfig[] = [
   },
 ];
 
-const FAV_COLOR       = colors.primary;
-const FAV_COLOR_LIGHT = colors.faintPrimary;
-
 interface TabButtonProps {
   tab: TabConfig;
   active: boolean;
-  isHome?: boolean;
+  label: string;
   badgeCount?: number;
 }
 
-const TabButton = memo(({ tab, active, isHome, badgeCount = 0 }: TabButtonProps) => {
-  const isFav = tab.key === "favorites";
+const TabButton = memo(({ tab, active, label, badgeCount = 0 }: TabButtonProps) => {
   const progress = useSharedValue(active ? 1 : 0);
 
   useEffect(() => {
@@ -83,36 +82,23 @@ const TabButton = memo(({ tab, active, isHome, badgeCount = 0 }: TabButtonProps)
     });
   }, [active, progress]);
 
+  // The tinted bubble behind the icon fades/scales in when active.
   const bubbleStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [{ scale: interpolate(progress.value, [0, 1], [0.6, 1]) }],
-    backgroundColor: isFav ? FAV_COLOR : colors.primary,
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.5, 1]) }],
   }));
 
-  const shellStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(progress.value, [0, 1], [0, isHome ? -2 : -1]) },
-      { scale: interpolate(progress.value, [0, 1], [1, isHome ? 1.08 : 1.04]) },
-    ],
+  // The whole icon lifts slightly when active.
+  const iconLiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -2]) }],
   }));
 
-  // Fav tab gets a soft rose tint background even when inactive
-  const favRest = useAnimatedStyle(() => ({
-    backgroundColor: isFav && !active
-      ? FAV_COLOR_LIGHT
-      : "transparent",
-    borderRadius: 24,
+  const labelStyle = useAnimatedStyle(() => ({
+    color: active ? colors.primary : colors.outline,
+    opacity: withTiming(active ? 1 : 0.85, { duration: 150 }),
   }));
 
   const handlePress = () => router.navigate(tab.route as never);
-
-  const iconColor = active
-    ? colors.onPrimary
-    : isFav
-    ? FAV_COLOR
-    : colors.outline;
-
-  const iconSize = isHome ? 25 : isFav ? 23 : 22;
 
   return (
     <AnimatedPressable
@@ -120,52 +106,29 @@ const TabButton = memo(({ tab, active, isHome, badgeCount = 0 }: TabButtonProps)
       haptic="impact"
       scaleTo={0.9}
       accessibilityRole="button"
-      accessibilityLabel={tab.key}
-      style={[styles.tabButton, isHome && styles.homeButton]}
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      style={styles.tabButton}
     >
-      <Animated.View style={[styles.iconShell, isHome && styles.homeIconShell, shellStyle]}>
-        {/* Soft rose rest-state tint for favorites */}
-        {isFav && !isHome ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[StyleSheet.absoluteFillObject, { borderRadius: 24 }, favRest]}
-          />
-        ) : null}
-
-        {/* Active bubble */}
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.activeBubble, isHome && styles.homeActiveBubble, bubbleStyle]}
-        />
+      <Animated.View style={[styles.iconShell, iconLiftStyle]}>
+        <Animated.View pointerEvents="none" style={[styles.activeBubble, bubbleStyle]} />
 
         <Ionicons
           name={active ? tab.activeIcon : tab.icon}
-          size={iconSize}
-          color={iconColor}
+          size={22}
+          color={active ? colors.onPrimary : colors.outline}
         />
 
-        {/* Badge — only cart shows a count; favorites uses the heart icon alone */}
         {tab.key === "cart" && badgeCount > 0 ? (
           <View style={styles.badge}>
-            <Animated.Text style={styles.badgeText}>
-              {badgeCount > 9 ? "9+" : badgeCount}
-            </Animated.Text>
+            <Text style={styles.badgeText}>{badgeCount > 9 ? "9+" : badgeCount}</Text>
           </View>
         ) : null}
       </Animated.View>
 
-      {/* Label — shown only under the favorites icon */}
-      {isFav ? (
-        <Animated.Text
-          style={[
-            styles.favLabel,
-            { color: active ? FAV_COLOR : colors.outline, opacity: 0.9 },
-          ]}
-          numberOfLines={1}
-        >
-          {active ? "Saved" : "Save"}
-        </Animated.Text>
-      ) : null}
+      <Animated.Text style={[styles.label, labelStyle]} numberOfLines={1}>
+        {label}
+      </Animated.Text>
     </AnimatedPressable>
   );
 });
@@ -175,41 +138,28 @@ function FloatingTabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { t } = useCommonT();
+  const isRTL = useLanguageStore((s) => s.isRTL);
   const items = useCartStore((state) => state.items);
   const cartCount = getCartQuantity(items);
 
-  const barWidth = Math.min(width - 32, 420);
-  const homeLeft = barWidth / 2 - 32;
-
-  const orders    = tabs[0];
-  const favorites = tabs[1];
-  const home      = tabs[2];
-  const cart      = tabs[3];
-  const profile   = tabs[4];
+  const barWidth = Math.min(width - 24, 440);
 
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.wrap, { bottom: Math.max(insets.bottom, 10) + 8 }]}
+      style={[styles.wrap, { bottom: Math.max(insets.bottom, 8) + 6 }]}
     >
-      <View style={[styles.bar, { width: barWidth }]}>
-        <View style={styles.leftSlot}>
-          <TabButton tab={orders} active={orders.activePath(pathname)} />
-          <TabButton tab={favorites} active={favorites.activePath(pathname)} />
-        </View>
-
-        <View style={styles.rightSlot}>
+      <View style={[styles.bar, { width: barWidth }, isRTL && styles.barRtl]}>
+        {tabs.map((tab) => (
           <TabButton
-            tab={cart}
-            active={cart.activePath(pathname)}
-            badgeCount={cartCount}
+            key={tab.key}
+            tab={tab}
+            active={tab.activePath(pathname)}
+            label={t(`tabs.${tab.key}`)}
+            badgeCount={tab.key === "cart" ? cartCount : 0}
           />
-          <TabButton tab={profile} active={profile.activePath(pathname)} />
-        </View>
-
-        <View style={[styles.homeSlot, { left: homeLeft }]}>
-          <TabButton tab={home} active={home.activePath(pathname)} isHome />
-        </View>
+        ))}
       </View>
     </View>
   );
@@ -224,80 +174,55 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   bar: {
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: colors.softSurface,
+    borderRadius: 28,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.78)",
+    borderColor: "rgba(0,0,0,0.05)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 22,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     ...shadows.card,
   },
-  leftSlot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  rightSlot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  homeSlot: {
-    position: "absolute",
-    top: 7,
+  barRtl: {
+    flexDirection: "row-reverse",
   },
   tabButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    flex: 1,
     alignItems: "center",
-  },
-  homeButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  favLabel: {
-    fontFamily: typography.bodyBold,
-    fontSize: 9,
-    lineHeight: 11,
-    marginTop: 2,
-    letterSpacing: 0.2,
+    gap: 4,
+    paddingVertical: 2,
   },
   iconShell: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 32,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
-  homeIconShell: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.card,
-    ...shadows.primary,
-  },
   activeBubble: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
+    ...shadows.primary,
   },
-  homeActiveBubble: {
-    borderRadius: 32,
+  label: {
+    fontFamily: typography.bodyBold,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.1,
+    textAlign: "center",
   },
   badge: {
     position: "absolute",
-    top: 6,
-    right: 5,
+    top: -2,
+    right: 4,
     minWidth: 17,
     height: 17,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.error,
     borderWidth: 2,
     borderColor: colors.card,
     alignItems: "center",

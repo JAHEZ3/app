@@ -491,10 +491,12 @@ function RestaurantPreviewCard({
 
 function MealPreviewCard({
   meal,
+  restaurantName,
   width,
   onPress,
 }: {
   meal: Meal;
+  restaurantName?: string;
   width: number;
   onPress: (meal: Meal) => void;
 }) {
@@ -502,6 +504,10 @@ function MealPreviewCard({
   const { isRTL } = useLanguageStore();
   const textAlign = isRTL ? "right" : "left";
   const currency = t("price.currency");
+  const hasDiscount =
+    typeof meal.discountPrice === "number" &&
+    typeof meal.basePrice === "number" &&
+    meal.discountPrice < meal.basePrice;
 
   return (
     <AnimatedPressable
@@ -509,23 +515,50 @@ function MealPreviewCard({
       disabled={!meal.isAvailable}
       disabledStyle={styles.disabledCard}
       haptic="impact"
+      scaleTo={0.96}
       style={[styles.mealPreviewCard, { width }]}
     >
-      <Image
-        source={getMealImageSource(meal.imageUrl, meal.tags)}
-        placeholder={IMAGE_BLURHASH}
-        contentFit="cover"
-        transition={220}
-        style={styles.mealPreviewImage}
-      />
+      <View style={styles.mealImageWrap}>
+        <Image
+          source={getMealImageSource(meal.imageUrl, meal.tags)}
+          placeholder={IMAGE_BLURHASH}
+          contentFit="cover"
+          transition={220}
+          style={styles.mealPreviewImage}
+        />
+        {meal.isFeatured ? (
+          <View style={[styles.mealBadge, isRTL && styles.mealBadgeRtl]}>
+            <Ionicons name="flame" size={11} color={colors.onPrimary} />
+            <Text style={styles.mealBadgeText}>{t("meal.popular")}</Text>
+          </View>
+        ) : null}
+      </View>
+
       <View style={styles.mealPreviewBody}>
-        <Text style={[styles.mealPreviewName, { textAlign }]} numberOfLines={2}>
+        <Text style={[styles.mealPreviewName, { textAlign }]} numberOfLines={1}>
           {meal.name}
         </Text>
+
+        {restaurantName ? (
+          <View style={[styles.mealStoreRow, isRTL && styles.mealStoreRowRtl]}>
+            <Ionicons name="storefront-outline" size={11} color={colors.outline} />
+            <Text style={[styles.mealStoreText, { textAlign }]} numberOfLines={1}>
+              {restaurantName}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={[styles.mealPreviewFooter, isRTL && styles.mealPreviewFooterRtl]}>
-          <Text style={[styles.mealPreviewPrice, { textAlign }]}>
-            {formatPrice(meal.price, currency)}
-          </Text>
+          <View style={[styles.mealPriceWrap, isRTL && styles.mealStoreRowRtl]}>
+            <Text style={[styles.mealPreviewPrice, { textAlign }]}>
+              {formatPrice(hasDiscount ? (meal.discountPrice as number) : meal.price, currency)}
+            </Text>
+            {hasDiscount ? (
+              <Text style={styles.mealOldPrice}>
+                {formatPrice(meal.basePrice as number, currency)}
+              </Text>
+            ) : null}
+          </View>
           <View style={styles.addBubble}>
             <Ionicons name="add" size={16} color={colors.onPrimary} />
           </View>
@@ -558,19 +591,25 @@ function FavoriteCard({
           transition={200}
           style={styles.favImage}
         />
-        <View style={[styles.favStatus, restaurant.isOpen ? styles.openBadge : styles.closedBadge]}>
+        <View
+          style={[
+            styles.favStatus,
+            isRTL && styles.favStatusRtl,
+            restaurant.isOpen ? styles.openBadge : styles.closedBadge,
+          ]}
+        >
           <View style={styles.statusDot} />
         </View>
         <AnimatedPressable
           onPress={(e) => { (e as any).stopPropagation?.(); onToggle(); }}
           haptic="selection"
           scaleTo={0.84}
-          style={styles.favHeart}
+          style={[styles.favHeart, isRTL && styles.favHeartRtl]}
         >
           <Ionicons name={isFavorited ? "heart" : "heart-outline"} size={14} color={isFavorited ? "#F55905" : "#fff"} />
         </AnimatedPressable>
       </View>
-      <View style={styles.favBody}>
+      <View style={[styles.favBody, isRTL && styles.favBodyRtl]}>
         <Text style={[styles.favName, { textAlign: isRTL ? "right" : "left" }]} numberOfLines={1}>
           {restaurant.name}
         </Text>
@@ -583,7 +622,15 @@ function FavoriteCard({
   );
 }
 
-function RailSkeleton({ count = 3, width = 144, height = 168 }: { count?: number; width?: number; height?: number }) {
+function RailSkeleton({
+  count = 3,
+  width = 144,
+  height = 168,
+}: {
+  count?: number;
+  width?: number;
+  height?: number;
+}) {
   return (
     <ScrollView
       horizontal
@@ -666,16 +713,16 @@ function HomeScreen() {
 
   const popularMeals = useMemo(
     () =>
-      feed.meals
-        .filter((meal) => {
+      feed.popularMeals
+        .filter(({ meal }) => {
           if (!normalizedSearch) return true;
           return (
             meal.name.toLowerCase().includes(normalizedSearch) ||
             (meal.description ?? "").toLowerCase().includes(normalizedSearch)
           );
         })
-        .slice(0, 5),
-    [feed.meals, normalizedSearch],
+        .slice(0, 8),
+    [feed.popularMeals, normalizedSearch],
   );
 
   const handleCategoryPress = useCallback(
@@ -847,11 +894,14 @@ function HomeScreen() {
 
         <FadeInView delay={320}>
           <SectionHeader
-            title={t("sections.popularMeals")}
-            action={feed.selectedRestaurant?.name}
+            title={
+              activeCategoryLabel
+                ? `${t("sections.popularMeals")} · ${activeCategoryLabel}`
+                : t("sections.popularMeals")
+            }
           />
           {feed.isMealsLoading && !popularMeals.length ? (
-            <RailSkeleton count={3} width={mealCardWidth} height={214} />
+            <RailSkeleton count={3} width={mealCardWidth} height={234} />
           ) : popularMeals.length ? (
             <ScrollView
               horizontal
@@ -859,9 +909,14 @@ function HomeScreen() {
               contentContainerStyle={styles.rail}
               decelerationRate="fast"
             >
-              {popularMeals.map((meal, index) => (
-                <FadeInView key={meal.id} delay={350 + index * 50}>
-                  <MealPreviewCard meal={meal} width={mealCardWidth} onPress={setActiveMeal} />
+              {popularMeals.map(({ meal, restaurant }, index) => (
+                <FadeInView key={`${restaurant.id}:${meal.id}`} delay={350 + index * 50}>
+                  <MealPreviewCard
+                    meal={meal}
+                    restaurantName={restaurant.name}
+                    width={mealCardWidth}
+                    onPress={setActiveMeal}
+                  />
                 </FadeInView>
               ))}
             </ScrollView>
@@ -1389,23 +1444,66 @@ const styles = StyleSheet.create({
   disabledCard: {
     opacity: 0.55,
   },
-  mealPreviewImage: {
+  mealImageWrap: {
     width: "100%",
     height: 124,
     backgroundColor: colors.surfaceContainer,
+    position: "relative",
+  },
+  mealPreviewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  mealBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
+  },
+  mealBadgeRtl: {
+    left: undefined,
+    right: 8,
+    flexDirection: "row-reverse",
+  },
+  mealBadgeText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onPrimary,
+    fontSize: 9,
   },
   mealPreviewBody: {
-    padding: 12,
-    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 6,
   },
   mealPreviewName: {
-    minHeight: 39,
     fontFamily: typography.headlineSemi,
     color: colors.onSurface,
     fontSize: 14,
     lineHeight: 19,
   },
+  mealStoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  mealStoreRowRtl: {
+    flexDirection: "row-reverse",
+  },
+  mealStoreText: {
+    flex: 1,
+    fontFamily: typography.bodyMedium,
+    color: colors.outline,
+    fontSize: 11,
+  },
   mealPreviewFooter: {
+    marginTop: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1414,19 +1512,31 @@ const styles = StyleSheet.create({
   mealPreviewFooterRtl: {
     flexDirection: "row-reverse",
   },
-  mealPreviewPrice: {
+  mealPriceWrap: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  mealPreviewPrice: {
     fontFamily: typography.bodyBold,
     color: colors.primary,
-    fontSize: 13,
+    fontSize: 14,
+  },
+  mealOldPrice: {
+    fontFamily: typography.bodyMedium,
+    color: colors.outline,
+    fontSize: 11,
+    textDecorationLine: "line-through",
   },
   addBubble: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.primary,
   },
   skeletonCard: {
     borderRadius: radii.xl,
@@ -1434,7 +1544,6 @@ const styles = StyleSheet.create({
   },
   favCard: {
     width: 130,
-    marginLeft: screen.horizontal,
     borderRadius: radii.xl,
     backgroundColor: colors.card,
     overflow: 'hidden',
@@ -1457,6 +1566,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#fff',
   },
+  favStatusRtl: {
+    left: undefined,
+    right: 8,
+  },
   favHeart: {
     position: 'absolute',
     top: 6,
@@ -1468,10 +1581,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  favHeartRtl: {
+    right: undefined,
+    left: 6,
+  },
   favBody: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 4,
+  },
+  favBodyRtl: {
+    alignItems: 'flex-end',
   },
   favName: {
     fontFamily: typography.bodyBold,

@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRestaurants } from "./useRestaurants";
-import { useRestaurantMenus } from "./useRestaurantMenus";
-import { useMenuSections } from "./useMenuSections";
 import { useCategories } from "./useCategories";
-import { Meal } from "../entities/Meal";
+import { usePopularMeals } from "./usePopularMeals";
 import { Restaurant } from "../entities/Restaurant";
 import { Category } from "../entities/Category";
 import { normalizeCuisineKey } from "../utils/categoryMeta";
@@ -22,21 +20,6 @@ export interface HomeCategory {
   count: number;
 }
 
-export interface HomeFeaturedMeal {
-  type: "meal";
-  id: string;
-  meal: Meal;
-  restaurant: Restaurant;
-}
-
-export interface HomeFeaturedRestaurant {
-  type: "restaurant";
-  id: string;
-  restaurant: Restaurant;
-}
-
-export type HomeFeaturedItem = HomeFeaturedMeal | HomeFeaturedRestaurant;
-
 export const useRestaurantHomeFeed = () => {
   // Base feed: every active restaurant (no cuisine filter). Used for the "All"
   // view and to count restaurants per category.
@@ -47,7 +30,6 @@ export const useRestaurantHomeFeed = () => {
   const categoryData = categoriesQuery.data;
   const categoryCatalogue = useMemo<Category[]>(() => categoryData ?? [], [categoryData]);
 
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(null);
   const [selectedCuisineType, setSelectedCuisineType] = useState<string | null>(null);
 
   // Filtered feed: only fires when a specific category is selected. The server
@@ -114,52 +96,10 @@ export const useRestaurantHomeFeed = () => {
     [selectedCuisineType, filteredQuery.restaurants, allRestaurants],
   );
 
-  useEffect(() => {
-    if (!filteredRestaurants.length) {
-      setSelectedRestaurantId(null);
-      return;
-    }
-
-    const stillExists = filteredRestaurants.some((restaurant) => restaurant.id === selectedRestaurantId);
-    if (!stillExists) {
-      setSelectedRestaurantId(filteredRestaurants[0].id);
-    }
-  }, [filteredRestaurants, selectedRestaurantId]);
-
-  const selectedRestaurant = useMemo(
-    () =>
-      filteredRestaurants.find((restaurant) => restaurant.id === selectedRestaurantId) ??
-      filteredRestaurants[0],
-    [filteredRestaurants, selectedRestaurantId],
-  );
-
-  const menusQuery = useRestaurantMenus(selectedRestaurant?.id);
-  const sectionsQuery = useMenuSections(
-    selectedRestaurant?.id,
-    menusQuery.selectedMenuId ?? undefined,
-  );
-
-  const meals = useMemo(() => {
-    const allMeals = (sectionsQuery.data ?? []).flatMap((section) => section.meals);
-    return [...allMeals].sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured));
-  }, [sectionsQuery.data]);
-
-  const featuredItems = useMemo<HomeFeaturedItem[]>(() => {
-    if (selectedRestaurant && meals.length) {
-      return meals.slice(0, 5).map((meal) => ({
-        type: "meal",
-        id: meal.id,
-        meal,
-        restaurant: selectedRestaurant,
-      }));
-    }
-
-    return filteredRestaurants.slice(0, 5).map((restaurant) => ({
-      type: "restaurant",
-      id: restaurant.id,
-      restaurant,
-    }));
-  }, [meals, filteredRestaurants, selectedRestaurant]);
+  // Popular meals: mixed across restaurants. When "All" is active we shuffle for
+  // variety; when a category is active we keep meals only from that category's
+  // restaurants (no shuffle — featured surfaces first).
+  const popular = usePopularMeals(filteredRestaurants, selectedCuisineType === null);
 
   // The restaurants section is loading when the relevant query is loading: the
   // filtered one when a category is active, otherwise the base one.
@@ -172,37 +112,22 @@ export const useRestaurantHomeFeed = () => {
     filteredRestaurants,
     categories,
     totalRestaurants: baseQuery.total,
-    featuredItems,
-    meals,
-    selectedRestaurant,
-    selectedRestaurantId,
-    setSelectedRestaurantId,
+    popularMeals: popular.meals,
     selectedCuisineType,
     setSelectedCuisineType,
-    menus: menusQuery.menus,
-    selectedMenuId: menusQuery.selectedMenuId,
-    selectMenu: menusQuery.selectMenu,
     isLoading: restaurantsLoading,
     isCategoriesLoading: categoriesQuery.isLoading && categoryCatalogue.length === 0,
     isRestaurantsLoading: restaurantsLoading,
-    isMealsLoading: menusQuery.isLoading || sectionsQuery.isLoading,
+    isMealsLoading: popular.isLoading,
     isRefreshing:
       baseQuery.isRefetching ||
       filteredQuery.isRefetching ||
-      categoriesQuery.isRefetching ||
-      menusQuery.isLoading ||
-      sectionsQuery.isRefetching,
-    isError:
-      baseQuery.isError ||
-      filteredQuery.isError ||
-      menusQuery.isError ||
-      sectionsQuery.isError,
+      categoriesQuery.isRefetching,
+    isError: baseQuery.isError || filteredQuery.isError,
     refetch: () => {
       baseQuery.refetch();
       categoriesQuery.refetch();
       if (selectedCuisineType) filteredQuery.refetch();
-      menusQuery.refetch();
-      sectionsQuery.refetch();
     },
   };
 };

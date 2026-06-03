@@ -17,5 +17,12 @@
   },
   "loading": "Loading...",
   "success": "Done successfully",
-  "appName": "Jahez"
+  "appName": "Jahez",
+  "tabs": {
+    "orders": "Orders",
+    "favorites": "Saved",
+    "home": "Home",
+    "cart": "Cart",
+    "profile": "Profile"
+  }
 }

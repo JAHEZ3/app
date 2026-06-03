@@ -31,6 +31,9 @@
   "price": {
     "currency": "ILS"
   },
+  "meal": {
+    "popular": "Popular"
+  },
   "sections": {
     "categories": "Categories",
     "restaurants": "Restaurants",
@@ -50,17 +53,41 @@
   "restaurant": {
     "open": "Open",
     "closed": "Closed",
+    "openNow": "Open now",
+    "closedNow": "Currently closed",
     "minOrderAmount": "Min {{amount}} {{currency}}",
     "minOrder": "Min. order",
     "deliveryTime": "{{min}}-{{max}} min",
     "deliveryFee": "Delivery fee"
+  },
+  "details": {
+    "rating": "Rating",
+    "minOrder": "Min order",
+    "eta": "Delivery",
+    "etaValue": "{{min}} min",
+    "about": "About",
+    "menu": "Menu",
+    "information": "Information",
+    "address": "Address",
+    "status": "Status",
+    "deliveryFee": "Delivery fee",
+    "hours": "Hours",
+    "phone": "Phone",
+    "rate": "Rate",
+    "rated": "Rated",
+    "save": "Save",
+    "saved": "Saved",
+    "loadError": "Couldn't load restaurant",
+    "loadErrorMessage": "Please try again in a moment.",
+    "noMenus": "No menus available yet.",
+    "ratingCount": "{{rating}} ({{count}})"
   },
   "empty": {
     "title": "No results found",
     "subtitle": "Try a different search term",
     "noCategories": "No categories available yet.",
     "restaurantsInCategory": "No restaurants in this category.",
-    "mealsForRestaurant": "No meals to show for this restaurant yet."
+    "mealsForRestaurant": "No meals to show yet."
   },
   "mealModal": {
     "mealDetails": "Meal details",
