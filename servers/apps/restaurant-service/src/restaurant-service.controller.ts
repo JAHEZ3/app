@@ -68,6 +68,9 @@ import { AnalyticsReportDto, ReportPeriod } from "./dto/analytics-report.dto";
 import { ListRestaurantsDto } from "./dto/list-restaurants.dto";
 import { MobileListRestaurantsDto } from "./dto/mobile-list-restaurants.dto";
 import { ListReviewsDto } from "./dto/list-reviews.dto";
+import { RestaurantRatingsService } from "./ratings/restaurant-ratings.service";
+import { RateRestaurantDto } from "./dto/rate-restaurant.dto";
+import { ListRestaurantReviewsDto } from "./dto/list-restaurant-reviews.dto";
 
 const multerOptions = {
   storage: memoryStorage(), // files arrive as file.buffer — uploaded to S3 in the service
@@ -96,6 +99,7 @@ export class RestaurantServiceController {
     private readonly tables: TablesService,
     private readonly accounting: AccountingService,
     private readonly inventory: InventoryService,
+    private readonly ratings: RestaurantRatingsService,
   ) {}
 
   // ─── NATS: create profile stub on registration ────────────────────────────────
@@ -755,6 +759,37 @@ export class RestaurantServiceController {
     return this.analytics.listOwnerReviews(userId, query.page, query.limit);
   }
 
+  // ─── Standalone restaurant reviews (restaurant_ratings) ────────────────────
+  // The customer-app ratings (single score + comment), owner-scoped via JWT.
+
+  /**
+   * GET /api/restaurant/analytics/restaurant-reviews?page=1&limit=20&sort=latest
+   * Paginated, sortable (latest | highest | lowest) list of customer restaurant
+   * ratings for the owner's restaurant, plus summary + distribution.
+   */
+  @Get("analytics/restaurant-reviews")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  async getRestaurantReviews(
+    @CurrentUser("sub") userId: string,
+    @Query() query: ListRestaurantReviewsDto,
+  ) {
+    const data = await this.ratings.listOwnerReviews(userId, query);
+    return { data };
+  }
+
+  /**
+   * GET /api/restaurant/analytics/restaurant-ratings/summary
+   * Average + total + 5→1 distribution for the owner's restaurant (no list).
+   */
+  @Get("analytics/restaurant-ratings/summary")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("restaurant_owner")
+  async getRestaurantRatingsSummary(@CurrentUser("sub") userId: string) {
+    const data = await this.ratings.getOwnerSummary(userId);
+    return { data };
+  }
+
   /** GET /api/restaurant/analytics/delivery */
   @Get("analytics/delivery")
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -895,6 +930,44 @@ export class RestaurantServiceController {
     @Query() query: ListReviewsDto,
   ) {
     return this.analytics.listReviews(id, query.page, query.limit);
+  }
+
+  // ─── Restaurant ratings (customer-facing) ─────────────────────────────────
+  // Standalone ratings: a logged-in customer rates a restaurant directly.
+  // Source of truth is `restaurant_ratings`; the restaurant aggregate
+  // (rating + total_ratings) is recomputed on each write.
+
+  /**
+   * POST /api/restaurant/restaurants/:restaurantId/rate
+   * Body: { rating: 1..5, comment?: string }. One rating per customer per
+   * restaurant — submitting again updates the previous rating.
+   */
+  @Post("restaurants/:restaurantId/rate")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("customer")
+  async rateRestaurant(
+    @Param("restaurantId", ParseUUIDPipe) restaurantId: string,
+    @CurrentUser("sub") userId: string,
+    @Body() dto: RateRestaurantDto,
+  ) {
+    const result = await this.ratings.rate(restaurantId, userId, dto);
+    return { data: result, message: "شكراً على تقييمك" };
+  }
+
+  /**
+   * GET /api/restaurant/restaurants/:restaurantId/my-rating
+   * The caller's own rating for this restaurant (or null) — lets the app show
+   * "you rated 4★" and pre-fill the dialog instead of re-asking.
+   */
+  @Get("restaurants/:restaurantId/my-rating")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("customer")
+  async getMyRestaurantRating(
+    @Param("restaurantId", ParseUUIDPipe) restaurantId: string,
+    @CurrentUser("sub") userId: string,
+  ) {
+    const data = await this.ratings.getMyRating(restaurantId, userId);
+    return { data };
   }
 
   // ─── Tables (POS QR-ordering) ─────────────────────────────────────────────

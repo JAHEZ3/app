@@ -29,6 +29,8 @@ import { useRestaurantMenus } from "../hooks/useRestaurantMenus";
 import { useMenuSections } from "../hooks/useMenuSections";
 import { useIsFavorite } from "../hooks/useFavorites";
 import { useToggleFavorite } from "../hooks/useToggleFavorite";
+import { useMyRestaurantRating } from "../hooks/useMyRestaurantRating";
+import RestaurantRatingSheet from "../components/RestaurantRatingSheet";
 import { RestaurantDetails } from "../entities/RestaurantDetails";
 import { formatCuisineType, imageSource } from "../utils/foodImages";
 import { getCategoryLabel, getCategoryMeta } from "../utils/categoryMeta";
@@ -125,6 +127,7 @@ const RestaurantDetailsScreen = () => {
   const textAlign = isRTL ? "right" : "left";
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [ratingSheetOpen, setRatingSheetOpen] = useState(false);
 
   const scrollY = useSharedValue(0);
   // Y position (within the scroll content) where the menu chips begin.
@@ -147,6 +150,7 @@ const RestaurantDetailsScreen = () => {
 
   const favorited = useIsFavorite(id);
   const { mutate: toggleFavorite } = useToggleFavorite();
+  const { data: myRating } = useMyRestaurantRating(id);
 
   const handleToggleFavorite = useCallback(() => {
     if (!data) return;
@@ -405,14 +409,23 @@ const RestaurantDetailsScreen = () => {
               starSize={16}
               align={isRTL ? "flex-end" : "flex-start"}
             />
-            {/* Ratings are submitted from a delivered order, so this is a
-                read-only hint rather than an action that would 404. */}
-            <View style={[styles.rateHint, isRTL && styles.rowReverse]}>
-              <Ionicons name="receipt-outline" size={14} color={colors.outline} />
-              <Text style={styles.rateHintText}>
-                {t("details.rateFromOrder", { defaultValue: "Rate from your order" })}
+            <AnimatedPressable
+              onPress={() => setRatingSheetOpen(true)}
+              style={[styles.rateBtn, isRTL && styles.rowReverse, myRating ? styles.rateBtnRated : null]}
+              scaleTo={0.95}
+              haptic="impact"
+            >
+              <Ionicons
+                name={myRating ? "checkmark-circle" : "star"}
+                size={15}
+                color={myRating ? "#16A34A" : colors.onPrimary}
+              />
+              <Text style={[styles.rateBtnText, myRating ? styles.rateBtnTextRated : null]}>
+                {myRating
+                  ? t("details.rated", { defaultValue: "Rated" })
+                  : t("details.rate", { defaultValue: "Rate" })}
               </Text>
-            </View>
+            </AnimatedPressable>
           </View>
 
           {/* Horizontal meta pills */}
@@ -557,6 +570,16 @@ const RestaurantDetailsScreen = () => {
           </Animated.View>
         </SafeAreaView>
       </Animated.View>
+
+      <RestaurantRatingSheet
+        visible={ratingSheetOpen}
+        restaurantId={id}
+        restaurantName={name}
+        isRTL={isRTL}
+        initialRating={myRating?.rating}
+        initialComment={myRating?.comment}
+        onClose={() => setRatingSheetOpen(false)}
+      />
 
       <FloatingTabBar />
     </View>
@@ -719,19 +742,28 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     ...shadows.soft,
   },
-  rateHint: {
+  rateBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     height: 40,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.primary,
+    ...shadows.primary,
   },
-  rateHintText: {
+  rateBtnRated: {
+    backgroundColor: "#F0FDF4",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  rateBtnText: {
     fontFamily: typography.bodyBold,
-    color: colors.outline,
-    fontSize: 12,
+    color: colors.onPrimary,
+    fontSize: 13,
+  },
+  rateBtnTextRated: {
+    color: "#16A34A",
   },
 
   // Meta pills

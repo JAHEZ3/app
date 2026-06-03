@@ -36,6 +36,8 @@ import { OrderRead } from './analytics/read-models/order.read';
 import { OrderItemRead } from './analytics/read-models/order-item.read';
 import { DeliveryRead } from './analytics/read-models/delivery.read';
 import { OrderRatingRead } from './analytics/read-models/order-rating.read';
+import { RestaurantRating } from './entities/restaurant-rating.entity';
+import { RestaurantRatingsService } from './ratings/restaurant-ratings.service';
 
 @Module({
   imports: [
@@ -63,6 +65,7 @@ import { OrderRatingRead } from './analytics/read-models/order-rating.read';
       RestaurantExpense,
       InventoryItem,
       InventoryMovement,
+      RestaurantRating,
       OrderRead, OrderItemRead, DeliveryRead, OrderRatingRead,
     ]),
 
@@ -95,6 +98,6 @@ import { OrderRatingRead } from './analytics/read-models/order-rating.read';
     }),
   ],
   controllers: [RestaurantServiceController],
-  providers: [RestaurantServiceService, AiMenuImportService, AiCoverImageService, AiMealImageService, RestaurantAnalyticsService, CategoriesService, TablesService, AccountingService, InventoryService, JwtAuthGuard, RolesGuard, S3Service],
+  providers: [RestaurantServiceService, AiMenuImportService, AiCoverImageService, AiMealImageService, RestaurantAnalyticsService, CategoriesService, TablesService, AccountingService, InventoryService, RestaurantRatingsService, JwtAuthGuard, RolesGuard, S3Service],
 })
 export class RestaurantServiceModule {}

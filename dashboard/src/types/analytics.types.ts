@@ -124,6 +124,34 @@ export interface ReviewsList {
   summary: RatingsAnalytics;
 }
 
+// ── Standalone restaurant ratings (customer-app, single score + comment) ──────
+
+export type RestaurantReviewSort = "latest" | "highest" | "lowest";
+
+export interface RestaurantReview {
+  id: string;
+  userId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RestaurantRatingSummary {
+  average: number;
+  total: number;
+  /** Always 5 rows, stars 5→1, zero-filled. */
+  distribution: { stars: number; count: number }[];
+}
+
+export interface RestaurantReviewsList {
+  items: RestaurantReview[];
+  total: number;
+  page: number;
+  limit: number;
+  summary: RestaurantRatingSummary;
+}
+
 export interface DeliveryAnalytics {
   total: number;
   completed: number;
