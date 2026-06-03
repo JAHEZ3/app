@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
     socketService,
     type SocketEventName,
+    type SocketError,
     type SocketStatus,
 } from '@/socket/socket.service';
 
@@ -53,6 +54,33 @@ export function useSocketStatus(): SocketStatus {
     const [status, setStatus] = useState<SocketStatus>(() => socketService.getStatus());
     useEffect(() => socketService.onStatus(setStatus), []);
     return status;
+}
+
+/**
+ * Surface the last gateway-side error (AUTH_FAILED / ACCOUNT_INACTIVE /
+ * CONNECT_ERROR …). `null` while the socket is healthy. Returns a `clear()`
+ * helper so the UI can dismiss the banner after showing it once.
+ */
+export function useSocketError(): {
+    error: SocketError | null;
+    clear: () => void;
+    /** Manually retry the connection after a `GAVE_UP` error. */
+    retry: () => void;
+} {
+    const [error, setError] = useState<SocketError | null>(null);
+    useEffect(() => socketService.onError(setError), []);
+    return {
+        error,
+        clear: () => {
+            socketService.clearError();
+            setError(null);
+        },
+        retry: () => {
+            socketService.clearError();
+            setError(null);
+            socketService.reconnect();
+        },
+    };
 }
 
 /**

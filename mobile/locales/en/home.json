@@ -9,7 +9,8 @@
   },
   "accessibility": {
     "notifications": "Notifications",
-    "cart": "Cart"
+    "cart": "Cart",
+    "orders": "My orders"
   },
   "actions": {
     "seeAll": "See All"
@@ -23,33 +24,73 @@
   },
   "category": {
     "all": "All",
+    "showAll": "Show all restaurants",
     "placesCount_one": "{{count}} place",
     "placesCount_other": "{{count}} places"
   },
   "price": {
     "currency": "ILS"
   },
+  "meal": {
+    "popular": "Popular"
+  },
   "sections": {
     "categories": "Categories",
     "restaurants": "Restaurants",
     "popularMeals": "Popular Meals",
     "nearYou": "Near You",
-    "featured": "Featured"
+    "featured": "Featured",
+    "saved": "Saved Restaurants"
+  },
+  "favorite": {
+    "save": "Save",
+    "saved": "Saved",
+    "rate": "Rate restaurant",
+    "rated": "Thanks for rating!",
+    "ratingError": "Could not submit your rating. Please try again.",
+    "errorTitle": "Error"
   },
   "restaurant": {
     "open": "Open",
     "closed": "Closed",
+    "openNow": "Open now",
+    "closedNow": "Currently closed",
     "minOrderAmount": "Min {{amount}} {{currency}}",
     "minOrder": "Min. order",
     "deliveryTime": "{{min}}-{{max}} min",
     "deliveryFee": "Delivery fee"
+  },
+  "details": {
+    "rating": "Rating",
+    "minOrder": "Min order",
+    "eta": "Delivery",
+    "etaValue": "{{min}} min",
+    "about": "About",
+    "menu": "Menu",
+    "information": "Information",
+    "address": "Address",
+    "status": "Status",
+    "deliveryFee": "Delivery fee",
+    "hours": "Hours",
+    "phone": "Phone",
+    "rate": "Rate",
+    "rated": "Rated",
+    "rateFromOrder": "Rate from your order",
+    "save": "Save",
+    "saved": "Saved",
+    "loadError": "Couldn't load restaurant",
+    "loadErrorMessage": "Please try again in a moment.",
+    "noMenus": "No menus available yet.",
+    "ratingCount": "{{rating}} ({{count}})",
+    "reviewsCount_one": "{{count}} review",
+    "reviewsCount_other": "{{count}} reviews"
   },
   "empty": {
     "title": "No results found",
     "subtitle": "Try a different search term",
     "noCategories": "No categories available yet.",
     "restaurantsInCategory": "No restaurants in this category.",
-    "mealsForRestaurant": "No meals to show for this restaurant yet."
+    "mealsForRestaurant": "No meals to show yet."
   },
   "mealModal": {
     "mealDetails": "Meal details",

@@ -5,6 +5,10 @@ const MANAGER_URL =
   process.env.NEXT_PUBLIC_MANAGER_URL ?? "http://localhost:3006/api/manager";
 const RESTAURANT_URL =
   process.env.NEXT_PUBLIC_RESTAURANT_URL ?? "http://localhost:3003";
+// Customer-service routes resolve through the Next.js dev proxy (/api/customer/*).
+// Keeping the base relative ("") means a phone hitting the client origin works
+// without LAN-IP-per-service config.
+const CUSTOMER_URL = process.env.NEXT_PUBLIC_CUSTOMER_URL ?? "";
 
 const sharedHeaders = {
   "Content-Type": "application/json",
@@ -44,3 +48,6 @@ export const managerClient = makeClient(MANAGER_URL);
 
 /** Restaurant-service client — public menu + QR table lookups for the scan flow. */
 export const restaurantClient = makeClient(RESTAURANT_URL);
+
+/** Customer-service client — profile + saved-addresses CRUD (requires JWT). */
+export const customerClient = makeClient(CUSTOMER_URL);

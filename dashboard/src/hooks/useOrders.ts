@@ -61,6 +61,29 @@ export function useUpdateOrderStatus() {
   });
 }
 
+/**
+ * Restaurant owner / manager flips an order's payment status after verifying
+ * the customer's uploaded receipt. Backend rejects "paid" when there's no
+ * proof on file (for online orders).
+ */
+export function useUpdatePaymentStatus() {
+  return useMutation({
+    mutationFn: ({
+      id,
+      paymentStatus,
+      note,
+    }: {
+      id: string;
+      paymentStatus: "paid" | "unpaid";
+      note?: string;
+    }) => ordersApi.updatePaymentStatus(id, { paymentStatus, note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.restaurant.stats });
+    },
+  });
+}
+
 export function useVoidPosOrder() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) =>

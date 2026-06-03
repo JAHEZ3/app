@@ -23,7 +23,11 @@ import { UpdateSupportTicketStatusDto } from './dto/update-support-ticket-status
 export class SupportController {
   constructor(private readonly support: SupportService) {}
 
-  /** POST /api/manager/admin/support/tickets — submit a new ticket. */
+  /** POST /api/manager/admin/support/tickets — submit a new ticket.
+   *  Open to managers and restaurant owners (overrides the class-level @Roles).
+   *  Restaurant owners file tickets from the restaurant dashboard's Support page;
+   *  list/getOne/update remain manager-only via the class-level guard. */
+  @Roles('manager', 'restaurant_owner')
   @Post()
   create(@Body() dto: CreateSupportTicketDto, @Req() req: any) {
     return this.support.create(dto, req.user);

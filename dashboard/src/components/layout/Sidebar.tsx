@@ -17,6 +17,7 @@ import {
   QrCode,
   Wallet,
   Package,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/hooks/useAuth";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/inventory", icon: Package, label: "المخزون" },
   { href: "/ratings", icon: Star, label: "التقييمات" },
   { href: "/notifications", icon: Bell, label: "الإشعارات" },
+  { href: "/support", icon: LifeBuoy, label: "الدعم" },
   { href: "/settings", icon: Settings, label: "الإعدادات" },
 ];
 

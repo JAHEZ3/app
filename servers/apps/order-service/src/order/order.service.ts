@@ -19,7 +19,12 @@ import { OrderItem } from '../entities/order-item.entity';
 import { OrderItemOption } from '../entities/order-item-option.entity';
 import { OrderStatusHistory } from '../entities/order-status-history.entity';
 import { OrderRating } from '../entities/order-rating.entity';
-import { OrderKind, OrderStatus, PaymentStatus } from '../entities/order-enums';
+import {
+  DeliveryAcceptance,
+  OrderKind,
+  OrderStatus,
+  PaymentStatus,
+} from '../entities/order-enums';
 import { CartService } from '../cart/cart.service';
 import { PromoService } from '../promo/promo.service';
 import { RedisLockService } from '../shared/redis-lock.service';
@@ -33,6 +38,7 @@ import {
 import {
   CheckoutDto,
   UpdateOrderStatusDto,
+  UpdatePaymentStatusDto,
   AssignDeliveryDto,
   RateOrderDto,
   OrderFilterDto,
@@ -178,6 +184,15 @@ export class OrderService {
       let order: OnlineOrder;
       try {
         order = await this.dataSource.transaction(async (em) => {
+          // Normalize the new fulfilment fields. Defaults preserve the
+          // delivery-by-default contract for clients that haven't shipped
+          // the new picker yet.
+          const orderType = dto.orderType ?? 'delivery';
+          const scheduledFor =
+            orderType === 'scheduled' && dto.scheduledFor
+              ? new Date(dto.scheduledFor)
+              : null;
+
           const newOrder = em.create(OnlineOrder, {
             orderNumber,
             customerId: userId,
@@ -191,13 +206,15 @@ export class OrderService {
             customerPhoneSnapshot: dto.customerPhone ?? userInfo.phone,
             status: OrderStatus.PENDING,
             subtotal: cart.subtotal,
-            deliveryFee,
+            deliveryFee: orderType === 'pickup' ? 0 : deliveryFee,
             discountAmount,
-            totalAmount,
+            totalAmount: orderType === 'pickup' ? totalAmount - deliveryFee : totalAmount,
             paymentMethod: dto.paymentMethod,
             paymentStatus: PaymentStatus.UNPAID,
             promoCodeId,
             customerNotes: dto.customerNotes,
+            orderType,
+            scheduledFor,
           });
 
           const savedOrder = await em.save(OnlineOrder, newOrder);
@@ -473,24 +490,50 @@ export class OrderService {
   ) {
     const order = await this.orderRepo.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException('الطلب غير موجود');
-    if (role !== 'manager' && role !== 'restaurant_owner') {
-      throw new ForbiddenException('غير مصرح');
-    }
-    // restaurant_owner can only assign to their own orders
-    if (role === 'restaurant_owner' && order.ownerUserId !== userId) {
+
+    // Authorization: manager + restaurant_owner can reassign freely; the
+    // customer may self-pick a driver but ONLY on their own order, ONLY
+    // before a driver has been set, and ONLY while the order is still in
+    // the early lifecycle (pending → ready_for_pickup). This prevents a
+    // customer from yanking a driver off mid-delivery.
+    const isManager = role === 'manager';
+    const isOwner = role === 'restaurant_owner' && order.ownerUserId === userId;
+    const isCustomerSelfPick =
+      role === 'customer' &&
+      order.customerId === userId &&
+      !order.deliveryAgentId &&
+      ([
+        OrderStatus.PENDING,
+        OrderStatus.CONFIRMED,
+        OrderStatus.PREPARING,
+        OrderStatus.READY_FOR_PICKUP,
+      ] as string[]).includes(order.status as string);
+
+    if (!isManager && !isOwner && !isCustomerSelfPick) {
       throw new ForbiddenException('غير مصرح لهذا الطلب');
     }
     if (order.status === OrderStatus.CANCELLED || order.status === OrderStatus.DELIVERED) {
       throw new BadRequestException('لا يمكن تعيين مندوب لطلب منتهٍ');
     }
 
-    await this.orderRepo.update(orderId, { deliveryAgentId: dto.deliveryAgentId });
+    // Manager/owner assignments are treated as auto-accepted (no round trip
+    // needed — dispatcher already chose). Customer self-picks go through
+    // `pending` so the driver has to actively accept or reject.
+    const nextAcceptance = isCustomerSelfPick
+      ? DeliveryAcceptance.PENDING
+      : DeliveryAcceptance.ACCEPTED;
+
+    await this.orderRepo.update(orderId, {
+      deliveryAgentId: dto.deliveryAgentId,
+      deliveryAcceptance: nextAcceptance,
+    });
 
     this.emitSafe('order.delivery.assigned', {
       eventId: randomUUID(),
       orderId,
       orderNumber: order.orderNumber,
       deliveryAgentId: dto.deliveryAgentId,
+      acceptance: nextAcceptance,
       restaurantId: order.restaurantId,
       customerId: order.customerId,
       ownerUserId: order.ownerUserId,
@@ -500,11 +543,108 @@ export class OrderService {
       msg: 'delivery_assigned',
       orderId,
       deliveryAgentId: dto.deliveryAgentId,
+      acceptance: nextAcceptance,
       assignedBy: userId,
       role,
     });
 
-    return { success: true, orderId, deliveryAgentId: dto.deliveryAgentId };
+    return {
+      success: true,
+      orderId,
+      deliveryAgentId: dto.deliveryAgentId,
+      acceptance: nextAcceptance,
+    };
+  }
+
+  /**
+   * Driver taps "Accept" on an incoming assignment. Only the agent the order
+   * is assigned to can call this, and only while acceptance is still PENDING.
+   * On success the acceptance flips to ACCEPTED and the customer's tracking
+   * screen flips out of "waiting" state.
+   */
+  async acceptDeliveryAssignment(orderId: string, userId: string) {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+    if (order.deliveryAgentId !== userId) {
+      throw new ForbiddenException('غير مصرح — هذا الطلب لم يُسنَد إليك');
+    }
+    if (order.deliveryAcceptance === DeliveryAcceptance.ACCEPTED) {
+      // Idempotent — return current state instead of erroring on a retry.
+      return { orderId, acceptance: DeliveryAcceptance.ACCEPTED };
+    }
+    if (order.deliveryAcceptance !== DeliveryAcceptance.PENDING) {
+      throw new BadRequestException('لا توجد دعوة بانتظار القبول لهذا الطلب');
+    }
+
+    await this.orderRepo.update(orderId, {
+      deliveryAcceptance: DeliveryAcceptance.ACCEPTED,
+    });
+
+    this.emitSafe('order.delivery.accepted', {
+      eventId: randomUUID(),
+      orderId,
+      orderNumber: order.orderNumber,
+      deliveryAgentId: userId,
+      restaurantId: order.restaurantId,
+      customerId: order.customerId,
+      ownerUserId: order.ownerUserId,
+      acceptedAt: new Date().toISOString(),
+    });
+
+    this.logger.log({ msg: 'delivery_accepted', orderId, agentId: userId });
+
+    return { orderId, acceptance: DeliveryAcceptance.ACCEPTED };
+  }
+
+  /**
+   * Driver declines the assignment. Clears `deliveryAgentId` so the customer
+   * can pick someone else; emits a NATS event so the customer's UI updates
+   * live. Optional `reason` is included in the event payload for analytics
+   * but isn't persisted on the order itself.
+   */
+  async rejectDeliveryAssignment(
+    orderId: string,
+    userId: string,
+    reason?: string,
+  ) {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+    if (order.deliveryAgentId !== userId) {
+      throw new ForbiddenException('غير مصرح — هذا الطلب لم يُسنَد إليك');
+    }
+    if (order.deliveryAcceptance !== DeliveryAcceptance.PENDING) {
+      throw new BadRequestException(
+        'لا يمكن رفض الطلب — تم قبوله أو إسناده مسبقاً.',
+      );
+    }
+
+    // Wipe the assignment so the customer can re-pick. `null` is the right
+    // value here because the column is nullable; we cast for TS.
+    await this.orderRepo.update(orderId, {
+      deliveryAgentId: null as unknown as string,
+      deliveryAcceptance: DeliveryAcceptance.NONE,
+    });
+
+    this.emitSafe('order.delivery.rejected', {
+      eventId: randomUUID(),
+      orderId,
+      orderNumber: order.orderNumber,
+      deliveryAgentId: userId,
+      reason: reason ?? null,
+      restaurantId: order.restaurantId,
+      customerId: order.customerId,
+      ownerUserId: order.ownerUserId,
+      rejectedAt: new Date().toISOString(),
+    });
+
+    this.logger.log({
+      msg: 'delivery_rejected',
+      orderId,
+      agentId: userId,
+      reason,
+    });
+
+    return { orderId, acceptance: DeliveryAcceptance.NONE };
   }
 
   // ─── Rate order ───────────────────────────────────────────────────────────
@@ -532,6 +672,79 @@ export class OrderService {
     });
 
     return rating;
+  }
+
+  /**
+   * Restaurant owner / manager verifies the customer's uploaded payment proof
+   * and flips `paymentStatus` (unpaid ↔ paid). Customers cannot call this —
+   * payment confirmation is always the restaurant's responsibility.
+   *
+   * For an online order, marking paid is only allowed if the customer already
+   * uploaded a proof (so the restaurant has something to verify). Marking back
+   * to `unpaid` is allowed regardless — useful for reversing mistakes.
+   */
+  async updatePaymentStatus(
+    orderId: string,
+    userId: string,
+    role: string,
+    dto: UpdatePaymentStatusDto,
+  ) {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+
+    const isManager = role === 'manager';
+    const isOwner = role === 'restaurant_owner' && order.ownerUserId === userId;
+    if (!isManager && !isOwner) {
+      throw new ForbiddenException('غير مصرح لتحديث حالة الدفع لهذا الطلب');
+    }
+
+    const next =
+      dto.paymentStatus === 'paid' ? PaymentStatus.PAID : PaymentStatus.UNPAID;
+
+    // Marking paid for an online order requires the proof to be on file.
+    // Cash-on-delivery and card-at-door orders don't need a proof since the
+    // driver collects payment in person.
+    if (
+      next === PaymentStatus.PAID &&
+      order.paymentMethod === 'online' &&
+      !order.paymentProofKey
+    ) {
+      throw new BadRequestException(
+        'لا يمكن وضع علامة "مدفوع" قبل رفع العميل لإيصال الدفع.',
+      );
+    }
+
+    if (order.paymentStatus === next) {
+      // Idempotent — no DB write, but still return the order so the client
+      // can update its cache without thinking.
+      return order;
+    }
+
+    await this.orderRepo.update(orderId, { paymentStatus: next });
+
+    this.emitSafe('order.payment.status.changed', {
+      eventId: randomUUID(),
+      orderId,
+      orderNumber: order.orderNumber,
+      paymentStatus: next,
+      changedBy: userId,
+      changedAt: new Date().toISOString(),
+      note: dto.note ?? null,
+      customerId: order.customerId,
+      restaurantId: order.restaurantId,
+      ownerUserId: order.ownerUserId,
+    });
+
+    this.logger.log({
+      msg: 'payment_status_changed',
+      orderId,
+      from: order.paymentStatus,
+      to: next,
+      role,
+      userId,
+    });
+
+    return { ...order, paymentStatus: next };
   }
 
   // ─── Payment proof upload ─────────────────────────────────────────────────

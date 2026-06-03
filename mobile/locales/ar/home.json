@@ -9,7 +9,8 @@
   },
   "accessibility": {
     "notifications": "الإشعارات",
-    "cart": "السلة"
+    "cart": "السلة",
+    "orders": "طلباتي"
   },
   "actions": {
     "seeAll": "عرض الكل"
@@ -23,6 +24,7 @@
   },
   "category": {
     "all": "الكل",
+    "showAll": "عرض كل المطاعم",
     "placesCount_zero": "لا توجد أماكن",
     "placesCount_one": "مكان واحد",
     "placesCount_two": "مكانان",
@@ -33,27 +35,69 @@
   "price": {
     "currency": "شيكل"
   },
+  "meal": {
+    "popular": "الأكثر طلباً"
+  },
   "sections": {
     "categories": "الفئات",
     "restaurants": "المطاعم",
     "popularMeals": "الوجبات الشائعة",
     "nearYou": "بالقرب منك",
-    "featured": "مميز"
+    "featured": "مميز",
+    "saved": "المطاعم المحفوظة"
+  },
+  "favorite": {
+    "save": "حفظ",
+    "saved": "محفوظ",
+    "rate": "قيّم المطعم",
+    "rated": "شكراً على تقييمك!",
+    "ratingError": "تعذر إرسال تقييمك. حاول مرة أخرى.",
+    "errorTitle": "خطأ"
   },
   "restaurant": {
     "open": "مفتوح",
     "closed": "مغلق",
+    "openNow": "مفتوح الآن",
+    "closedNow": "مغلق حالياً",
     "minOrderAmount": "الحد الأدنى {{amount}} {{currency}}",
     "minOrder": "أقل طلب",
     "deliveryTime": "{{min}}-{{max}} دقيقة",
     "deliveryFee": "رسوم التوصيل"
+  },
+  "details": {
+    "rating": "التقييم",
+    "minOrder": "أقل طلب",
+    "eta": "التوصيل",
+    "etaValue": "{{min}} دقيقة",
+    "about": "عن المطعم",
+    "menu": "القائمة",
+    "information": "معلومات",
+    "address": "العنوان",
+    "status": "الحالة",
+    "deliveryFee": "رسوم التوصيل",
+    "hours": "ساعات العمل",
+    "phone": "الهاتف",
+    "rate": "قيّم",
+    "rated": "تم التقييم",
+    "rateFromOrder": "قيّم من طلبك",
+    "save": "حفظ",
+    "saved": "محفوظ",
+    "loadError": "تعذّر تحميل المطعم",
+    "loadErrorMessage": "يرجى المحاولة بعد قليل.",
+    "noMenus": "لا توجد قوائم متاحة بعد.",
+    "ratingCount": "{{rating}} ({{count}})",
+    "reviewsCount_one": "تقييم واحد",
+    "reviewsCount_two": "تقييمان",
+    "reviewsCount_few": "{{count}} تقييمات",
+    "reviewsCount_many": "{{count}} تقييماً",
+    "reviewsCount_other": "{{count}} تقييم"
   },
   "empty": {
     "title": "لا توجد نتائج",
     "subtitle": "جرّب مصطلح بحث مختلف",
     "noCategories": "لا توجد فئات متاحة حالياً.",
     "restaurantsInCategory": "لا توجد مطاعم في هذه الفئة.",
-    "mealsForRestaurant": "لا توجد وجبات لعرضها لهذا المطعم حالياً."
+    "mealsForRestaurant": "لا توجد وجبات لعرضها حالياً."
   },
   "mealModal": {
     "mealDetails": "تفاصيل الوجبة",

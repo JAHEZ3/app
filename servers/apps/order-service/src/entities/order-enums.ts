@@ -31,6 +31,26 @@ export enum OrderKind {
   LOCAL = 'local',
 }
 
+/**
+ * Tracks whether a delivery agent has accepted/declined an assignment.
+ *
+ *  - `none`     : no driver attached to the order yet (default).
+ *  - `pending`  : customer picked a driver via the self-pick flow — driver
+ *                 hasn't seen the order yet; they get accept/reject buttons.
+ *  - `accepted` : driver tapped accept (or a manager/owner assigned them
+ *                 directly, which is treated as auto-accepted).
+ *  - `rejected` : driver declined. The order's `deliveryAgentId` is cleared
+ *                 and acceptance reset to `none` so the customer can pick
+ *                 again. `rejected` is a transient state surfaced only in
+ *                 the broadcast event payload, not persisted long-term.
+ */
+export enum DeliveryAcceptance {
+  NONE = 'none',
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected',
+}
+
 export enum LocalServiceType {
   DINE_IN = 'dine_in',
   TAKEAWAY = 'takeaway',

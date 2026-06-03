@@ -9,8 +9,10 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, {
+  FadeIn,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -27,6 +29,7 @@ import type { MealSelectionResult, GroupValidation } from "../hooks/useMealOptio
 import { getMealImageSource } from "../utils/foodImages";
 
 const MEAL_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
+const HERO_HEIGHT = 210;
 
 interface MealOptionsModalProps {
   visible: boolean;
@@ -48,6 +51,8 @@ interface OptionRowProps {
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
+// ─── Option row ───────────────────────────────────────────────────────────────
+
 const OptionRow = memo(
   ({ option, selected, selectionType, disabled, onToggle }: OptionRowProps) => {
     const { t } = useHomeT();
@@ -62,9 +67,11 @@ const OptionRow = memo(
     return (
       <AnimatedPressable
         onPress={handlePress}
+        haptic="selection"
+        scaleTo={0.98}
         disabled={disabled || !option.isAvailable}
         disabledStyle={styles.optionRowDisabled}
-        style={[styles.optionRow, isRTL && styles.optionRowRtl, selected && styles.optionRowSelected]}
+        style={[styles.optionRow, isRTL && styles.rowReverse, selected && styles.optionRowSelected]}
       >
         {selectionType === "single" ? (
           <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
@@ -91,13 +98,19 @@ const OptionRow = memo(
         </View>
 
         {option.extraPrice > 0 ? (
-          <Text style={styles.extraPrice}>+{formatPrice(option.extraPrice, currency)}</Text>
+          <View style={[styles.extraPricePill, selected && styles.extraPricePillSelected]}>
+            <Text style={[styles.extraPrice, selected && styles.extraPriceSelected]}>
+              +{formatPrice(option.extraPrice, currency)}
+            </Text>
+          </View>
         ) : null}
       </AnimatedPressable>
     );
   },
 );
 OptionRow.displayName = "OptionRow";
+
+// ─── Group block ──────────────────────────────────────────────────────────────
 
 function OptionGroupBlock({
   group,
@@ -125,6 +138,7 @@ function OptionGroupBlock({
 
   const reachedMax =
     group.selectionType === "multiple" && selectedCount >= group.maxSelections;
+  const complete = selectedCount > 0 && !showError;
 
   const helperText =
     group.selectionType === "single"
@@ -137,9 +151,14 @@ function OptionGroupBlock({
 
   return (
     <View style={styles.groupBlock}>
-      <View style={[styles.groupHeader, isRTL && styles.groupHeaderRtl]}>
+      <View style={[styles.groupHeader, isRTL && styles.rowReverse]}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.groupTitle, { textAlign }]}>{group.name}</Text>
+          <View style={[styles.groupTitleRow, isRTL && styles.rowReverse]}>
+            <Text style={[styles.groupTitle, { textAlign }]}>{group.name}</Text>
+            {complete ? (
+              <Ionicons name="checkmark-circle" size={16} color="#16A34A" />
+            ) : null}
+          </View>
           <Text style={[styles.groupHelper, { textAlign }]}>{helperText}</Text>
         </View>
         <View style={[styles.groupBadge, group.isRequired ? styles.requiredBadge : styles.optionalBadge]}>
@@ -150,10 +169,10 @@ function OptionGroupBlock({
       </View>
 
       {showError && errorMessage ? (
-        <View style={[styles.errorRow, isRTL && styles.errorRowRtl]}>
+        <Animated.View entering={FadeIn.duration(180)} style={[styles.errorRow, isRTL && styles.rowReverse]}>
           <Ionicons name="alert-circle" size={14} color={colors.error} />
           <Text style={[styles.errorText, { textAlign }]}>{errorMessage}</Text>
-        </View>
+        </Animated.View>
       ) : null}
 
       <View style={styles.optionsList}>
@@ -176,6 +195,8 @@ function OptionGroupBlock({
   );
 }
 
+// ─── Quantity stepper ─────────────────────────────────────────────────────────
+
 function QtyStepper({
   quantity,
   onIncrement,
@@ -189,19 +210,22 @@ function QtyStepper({
     <View style={styles.qtyWrap}>
       <AnimatedPressable
         onPress={onDecrement}
+        haptic="selection"
         disabled={quantity <= 1}
         style={styles.qtyBtn}
         disabledStyle={styles.qtyBtnDisabled}
       >
-        <Ionicons name="remove" size={16} color={quantity <= 1 ? colors.outline : colors.onSurface} />
+        <Ionicons name="remove" size={18} color={quantity <= 1 ? colors.outline : colors.onSurface} />
       </AnimatedPressable>
       <Text style={styles.qtyValue}>{quantity}</Text>
-      <AnimatedPressable onPress={onIncrement} style={styles.qtyBtn}>
-        <Ionicons name="add" size={16} color={colors.onSurface} />
+      <AnimatedPressable onPress={onIncrement} haptic="selection" style={styles.qtyBtn}>
+        <Ionicons name="add" size={18} color={colors.onSurface} />
       </AnimatedPressable>
     </View>
   );
 }
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
 
 const MealOptionsModal = ({
   visible,
@@ -215,7 +239,7 @@ const MealOptionsModal = ({
   const { isRTL, language } = useLanguageStore();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const sheetHeight = Math.round(height * 0.56);
+  const sheetHeight = Math.round(height * 0.86);
   const textAlign = isRTL ? "right" : "left";
   const resolvedCurrency = currency ?? t("price.currency");
   const resolvedConfirmLabel = confirmLabel ?? t("mealModal.addToCart");
@@ -248,8 +272,8 @@ const MealOptionsModal = ({
       translateY.value = sheetHeight;
       overlayOpacity.value = 0;
       requestAnimationFrame(() => {
-        translateY.value = withTiming(0, { duration: 320 });
-        overlayOpacity.value = withTiming(1, { duration: 240 });
+        translateY.value = withTiming(0, { duration: 340 });
+        overlayOpacity.value = withTiming(1, { duration: 260 });
       });
       return;
     }
@@ -304,6 +328,12 @@ const MealOptionsModal = ({
 
   if (!mounted || !sheetMeal) return null;
 
+  const hasDiscount =
+    sheetMeal.discountPrice != null && sheetMeal.discountPrice < sheetMeal.price;
+  const basePrice = hasDiscount ? sheetMeal.discountPrice! : sheetMeal.price;
+  const requiredCount = sheetMeal.optionGroups.filter((g) => g.isRequired).length;
+  const ctaDisabled = !isValid && showErrors;
+
   return (
     <Modal
       visible={mounted}
@@ -319,75 +349,108 @@ const MealOptionsModal = ({
 
         <Animated.View
           key={language}
-          style={[
-            styles.sheet,
-            {
-              height: sheetHeight,
-              paddingBottom: Math.max(insets.bottom, 12),
-            },
-            sheetStyle,
-          ]}
+          style={[styles.sheet, { height: sheetHeight }, sheetStyle]}
         >
-          <View style={styles.handleBar} />
-
-          <View style={[styles.headerBar, isRTL && styles.headerBarRtl]}>
-            <View>
-              <Text style={[styles.headerEyebrow, { textAlign }]}>
-                {t("mealModal.mealDetails")}
-              </Text>
-              <Text style={[styles.headerTitle, { textAlign }]} numberOfLines={1}>
-                {t("mealModal.customize")}
-              </Text>
-            </View>
-            <AnimatedPressable onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color={colors.onSurface} />
-            </AnimatedPressable>
-          </View>
-
+          {/* Scrollable content (hero scrolls with the body for an immersive feel). */}
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: 130 + Math.max(insets.bottom, 8) },
+            ]}
+            bounces={false}
           >
-            <View style={[styles.heroRow, isRTL && styles.heroRowRtl]}>
+            {/* Hero image */}
+            <View style={styles.hero}>
               <Image
                 source={getMealImageSource(sheetMeal.imageUrl, sheetMeal.tags)}
                 placeholder={MEAL_BLURHASH}
                 contentFit="cover"
-                transition={220}
-                style={styles.mealImage}
+                transition={240}
+                style={styles.heroImage}
               />
-              <View style={styles.mealIntro}>
-                <Text style={[styles.mealName, { textAlign }]} numberOfLines={2}>
-                  {sheetMeal.name}
-                </Text>
-                <Text style={[styles.mealPrice, { textAlign }]}>
-                  {formatPrice(sheetMeal.price, resolvedCurrency)}
-                </Text>
-                {sheetMeal.calories ? (
-                  <View style={[styles.caloriePill, isRTL && styles.caloriePillRtl]}>
-                    <Ionicons name="flame-outline" size={13} color={colors.primary} />
-                    <Text style={styles.calorieText}>
-                      {t("mealModal.kcal", { count: Math.round(sheetMeal.calories) })}
+              <LinearGradient
+                colors={["rgba(15,15,15,0.32)", "rgba(15,15,15,0)", "rgba(15,15,15,0.30)"]}
+                locations={[0, 0.45, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+
+              {/* Grab handle floats over the hero */}
+              <View style={styles.handleBar} />
+
+              {/* Close button */}
+              <AnimatedPressable onPress={onClose} scaleTo={0.88} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color={colors.onSurface} />
+              </AnimatedPressable>
+
+              {/* Badges */}
+              <View style={[styles.heroBadges, isRTL && styles.heroBadgesRtl]}>
+                {sheetMeal.isFeatured ? (
+                  <View style={styles.featuredBadge}>
+                    <Ionicons name="sparkles" size={11} color={colors.onPrimary} />
+                    <Text style={styles.featuredText}>{t("meal.popular")}</Text>
+                  </View>
+                ) : null}
+                {hasDiscount ? (
+                  <View style={styles.discountBadge}>
+                    <Ionicons name="pricetag" size={11} color={colors.onPrimary} />
+                    <Text style={styles.featuredText}>
+                      {`-${Math.round((1 - basePrice / sheetMeal.price) * 100)}%`}
                     </Text>
                   </View>
                 ) : null}
               </View>
             </View>
 
-            {sheetMeal.description ? (
-              <Text style={[styles.mealDescription, { textAlign }]}>{sheetMeal.description}</Text>
-            ) : null}
+            {/* Title + price card */}
+            <View style={styles.infoCard}>
+              <Text style={[styles.mealName, { textAlign }]}>{sheetMeal.name}</Text>
 
-            {sheetMeal.optionGroups.length > 0 ? (
-              <>
-                <View style={[styles.customizeHeader, isRTL && styles.customizeHeaderRtl]}>
-                  <Text style={[styles.customizeTitle, { textAlign }]}>
-                    {t("mealModal.options")}
-                  </Text>
-                  <Text style={[styles.customizeMeta, { textAlign }]}>
-                    {t("mealModal.groupsCount", { count: sheetMeal.optionGroups.length })}
-                  </Text>
+              <View style={[styles.priceRow, isRTL && styles.rowReverse]}>
+                <View style={[styles.priceCol, isRTL && styles.rowReverse]}>
+                  <Text style={styles.mealPrice}>{formatPrice(basePrice, resolvedCurrency)}</Text>
+                  {hasDiscount ? (
+                    <Text style={styles.mealStrikePrice}>
+                      {formatPrice(sheetMeal.price, resolvedCurrency)}
+                    </Text>
+                  ) : null}
                 </View>
+                {sheetMeal.calories ? (
+                  <View style={[styles.caloriePill, isRTL && styles.rowReverse]}>
+                    <Ionicons name="flame" size={13} color={colors.primary} />
+                    <Text style={styles.calorieText}>
+                      {t("mealModal.kcal", { count: Math.round(sheetMeal.calories) })}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {sheetMeal.description ? (
+                <Text style={[styles.mealDescription, { textAlign }]}>
+                  {sheetMeal.description}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Options */}
+            {sheetMeal.optionGroups.length > 0 ? (
+              <View style={styles.optionsSection}>
+                <View style={[styles.customizeHeader, isRTL && styles.rowReverse]}>
+                  <View style={[styles.customizeTitleRow, isRTL && styles.rowReverse]}>
+                    <View style={styles.customizeIcon}>
+                      <Ionicons name="options" size={15} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.customizeTitle, { textAlign }]}>
+                      {t("mealModal.customize")}
+                    </Text>
+                  </View>
+                  {requiredCount > 0 ? (
+                    <Text style={styles.customizeMeta}>
+                      {t("mealModal.required")}
+                    </Text>
+                  ) : null}
+                </View>
+
                 {sheetMeal.optionGroups.map((group) => {
                   const validation = validationByGroupId[group.id];
                   return (
@@ -402,10 +465,10 @@ const MealOptionsModal = ({
                     />
                   );
                 })}
-              </>
+              </View>
             ) : (
-              <View style={[styles.noOptions, isRTL && styles.noOptionsRtl]}>
-                <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
+              <View style={[styles.noOptions, isRTL && styles.rowReverse]}>
+                <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
                 <Text style={[styles.noOptionsText, { textAlign }]}>
                   {t("mealModal.noCustomizations")}
                 </Text>
@@ -413,30 +476,49 @@ const MealOptionsModal = ({
             )}
           </ScrollView>
 
-          <View style={[styles.footer, isRTL && styles.footerRtl]}>
-            <QtyStepper quantity={quantity} onIncrement={increment} onDecrement={decrement} />
+          {/* Sticky footer */}
+          <View
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(insets.bottom, 14) },
+            ]}
+          >
+            {showErrors && firstInvalidGroupId ? (
+              <Animated.View
+                entering={FadeIn.duration(200)}
+                style={[styles.footerHint, isRTL && styles.rowReverse]}
+              >
+                <Ionicons name="alert-circle" size={14} color={colors.error} />
+                <Text style={styles.footerHintText}>{t("mealModal.completeRequired")}</Text>
+              </Animated.View>
+            ) : null}
 
-            <AnimatedPressable
-              onPress={handleConfirm}
-              haptic="impact"
-              style={[
-                styles.confirmBtn,
-                isRTL && styles.confirmBtnRtl,
-                !isValid && showErrors && styles.confirmBtnInvalid,
-              ]}
-            >
-              <Text style={styles.confirmLabel}>{resolvedConfirmLabel}</Text>
-              <View style={styles.confirmDivider} />
-              <Text style={styles.confirmPrice}>{formatPrice(totalPrice, resolvedCurrency)}</Text>
-            </AnimatedPressable>
-          </View>
+            <View style={[styles.footerRow, isRTL && styles.rowReverse]}>
+              <QtyStepper quantity={quantity} onIncrement={increment} onDecrement={decrement} />
 
-          {showErrors && firstInvalidGroupId ? (
-            <View style={[styles.toast, isRTL && styles.toastRtl]} pointerEvents="none">
-              <Ionicons name="alert-circle" size={16} color={colors.onPrimary} />
-              <Text style={styles.toastText}>{t("mealModal.completeRequired")}</Text>
+              <AnimatedPressable
+                onPress={handleConfirm}
+                haptic="impact"
+                scaleTo={0.97}
+                style={styles.confirmBtnWrap}
+              >
+                <LinearGradient
+                  colors={ctaDisabled ? [colors.outline, colors.outline] : ["#FF7A2F", colors.primary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.confirmBtn, isRTL && styles.rowReverse]}
+                >
+                  <View style={[styles.confirmLeft, isRTL && styles.rowReverse]}>
+                    <Ionicons name="bag-add" size={18} color={colors.onPrimary} />
+                    <Text style={styles.confirmLabel}>{resolvedConfirmLabel}</Text>
+                  </View>
+                  <Text style={styles.confirmPrice}>
+                    {formatPrice(totalPrice, resolvedCurrency)}
+                  </Text>
+                </LinearGradient>
+              </AnimatedPressable>
             </View>
-          ) : null}
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -448,150 +530,201 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
   },
+  rowReverse: {
+    flexDirection: "row-reverse",
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(30,30,30,0.42)",
+    backgroundColor: "rgba(20,20,20,0.55)",
   },
   sheet: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    backgroundColor: colors.card,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    backgroundColor: colors.surface,
     overflow: "hidden",
     ...shadows.card,
   },
+  scrollContent: {
+    paddingBottom: 130,
+  },
+
+  // Hero
+  hero: {
+    height: HERO_HEIGHT,
+    width: "100%",
+    backgroundColor: colors.surfaceContainerHighest,
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+  },
   handleBar: {
+    position: "absolute",
+    top: 10,
     alignSelf: "center",
     width: 44,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.surfaceContainerHighest,
-    marginTop: 10,
-  },
-  headerBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
-  },
-  headerBarRtl: {
-    flexDirection: "row-reverse",
-  },
-  headerEyebrow: {
-    fontFamily: typography.bodyMedium,
-    color: colors.outline,
-    fontSize: 11,
-  },
-  headerTitle: {
-    fontFamily: typography.headlineSemi,
-    color: colors.onSurface,
-    fontSize: 18,
-    marginTop: 1,
+    backgroundColor: "rgba(255,255,255,0.7)",
   },
   closeBtn: {
+    position: "absolute",
+    top: 14,
+    right: 16,
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: "rgba(255,255,255,0.92)",
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.soft,
   },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 18,
-  },
-  heroRow: {
+  heroBadges: {
+    position: "absolute",
+    bottom: 14,
+    left: 16,
     flexDirection: "row",
-    gap: 13,
-    alignItems: "center",
+    gap: 8,
   },
-  heroRowRtl: {
+  heroBadgesRtl: {
+    left: undefined,
+    right: 16,
     flexDirection: "row-reverse",
   },
-  mealImage: {
-    width: 112,
-    height: 112,
-    borderRadius: radii.xl,
-    backgroundColor: colors.surfaceContainer,
+  featuredBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
   },
-  mealIntro: {
-    flex: 1,
-    gap: 7,
+  discountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: "#16A34A",
+  },
+  featuredText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onPrimary,
+    fontSize: 11,
+  },
+
+  // Info card
+  infoCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: 16,
+    gap: 12,
+    ...shadows.soft,
   },
   mealName: {
     fontFamily: typography.headline,
     color: colors.onSurface,
-    fontSize: 21,
-    lineHeight: 27,
+    fontSize: 22,
+    lineHeight: 29,
   },
-  mealPrice: {
-    fontFamily: typography.bodyBold,
-    color: colors.primary,
-    fontSize: 15,
-  },
-  caloriePill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: radii.pill,
-    backgroundColor: colors.faintPrimary,
-  },
-  caloriePillRtl: {
-    alignSelf: "flex-end",
-    flexDirection: "row-reverse",
-  },
-  calorieText: {
-    fontFamily: typography.bodyBold,
-    color: colors.primary,
-    fontSize: 11,
-  },
-  mealDescription: {
-    marginTop: 13,
-    fontFamily: typography.body,
-    color: colors.outline,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  customizeHeader: {
-    marginTop: 18,
-    marginBottom: 2,
+  priceRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  customizeHeaderRtl: {
-    flexDirection: "row-reverse",
+  priceCol: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
   },
-  customizeTitle: {
-    fontFamily: typography.headlineSemi,
-    color: colors.onSurface,
-    fontSize: 17,
+  mealPrice: {
+    fontFamily: typography.headline,
+    color: colors.primary,
+    fontSize: 20,
   },
-  customizeMeta: {
+  mealStrikePrice: {
     fontFamily: typography.bodyMedium,
     color: colors.outline,
+    fontSize: 14,
+    textDecorationLine: "line-through",
+  },
+  caloriePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.faintPrimary,
+  },
+  calorieText: {
+    fontFamily: typography.bodyBold,
+    color: colors.primary,
     fontSize: 12,
   },
+  mealDescription: {
+    fontFamily: typography.body,
+    color: colors.outline,
+    fontSize: 13.5,
+    lineHeight: 21,
+  },
+
+  // Options
+  optionsSection: {
+    paddingHorizontal: 16,
+    paddingTop: 22,
+  },
+  customizeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  customizeTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  customizeIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.faintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customizeTitle: {
+    fontFamily: typography.headline,
+    color: colors.onSurface,
+    fontSize: 18,
+  },
+  customizeMeta: {
+    fontFamily: typography.bodyBold,
+    color: colors.error,
+    fontSize: 11,
+  },
   groupBlock: {
-    paddingTop: 14,
-    gap: 8,
+    paddingTop: 18,
+    gap: 10,
   },
   groupHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
   },
-  groupHeaderRtl: {
-    flexDirection: "row-reverse",
+  groupTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   groupTitle: {
     fontFamily: typography.headlineSemi,
     color: colors.onSurface,
-    fontSize: 15,
+    fontSize: 15.5,
   },
   groupHelper: {
     marginTop: 2,
@@ -626,11 +759,8 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#FFF0EA",
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: radii.md,
-  },
-  errorRowRtl: {
-    flexDirection: "row-reverse",
   },
   errorText: {
     color: colors.error,
@@ -638,33 +768,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   optionsList: {
-    gap: 8,
+    gap: 9,
   },
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
     borderColor: colors.surfaceContainerHighest,
-  },
-  optionRowRtl: {
-    flexDirection: "row-reverse",
   },
   optionRowSelected: {
     borderColor: colors.primary,
     backgroundColor: "#FFF7F1",
+    ...shadows.soft,
   },
   optionRowDisabled: {
-    opacity: 0.55,
+    opacity: 0.5,
   },
   optionName: {
     fontFamily: typography.bodyBold,
     color: colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
   },
   optionMuted: {
     color: colors.outline,
@@ -675,15 +803,27 @@ const styles = StyleSheet.create({
     color: colors.outline,
     fontSize: 11,
   },
+  extraPricePill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceContainer,
+  },
+  extraPricePillSelected: {
+    backgroundColor: colors.faintPrimary,
+  },
   extraPrice: {
     fontFamily: typography.bodyBold,
-    color: colors.primary,
+    color: colors.outline,
     fontSize: 12,
   },
+  extraPriceSelected: {
+    color: colors.primary,
+  },
   radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 23,
+    height: 23,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: colors.surfaceContainerHighest,
     alignItems: "center",
@@ -693,15 +833,15 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
     backgroundColor: colors.primary,
   },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+    width: 23,
+    height: 23,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: colors.surfaceContainerHighest,
     alignItems: "center",
@@ -712,113 +852,111 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   noOptions: {
-    marginTop: 16,
+    marginHorizontal: 16,
+    marginTop: 20,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    padding: 12,
+    gap: 9,
+    padding: 14,
     borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-  },
-  noOptionsRtl: {
-    flexDirection: "row-reverse",
+    backgroundColor: "#F0FDF4",
   },
   noOptionsText: {
     fontFamily: typography.bodyMedium,
-    color: colors.outline,
+    color: "#15803D",
+    fontSize: 13,
+  },
+
+  // Footer
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceContainer,
+    ...shadows.card,
+  },
+  footerHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "center",
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: "#FFF0EA",
+  },
+  footerHintText: {
+    fontFamily: typography.bodyBold,
+    color: colors.error,
     fontSize: 12,
   },
-  footer: {
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.surfaceContainer,
-    backgroundColor: colors.card,
-  },
-  footerRtl: {
-    flexDirection: "row-reverse",
   },
   qtyWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    backgroundColor: colors.surfaceContainer,
+    gap: 2,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainerHighest,
     borderRadius: radii.pill,
     paddingHorizontal: 4,
-    minHeight: 42,
+    height: 52,
   },
   qtyBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
   },
   qtyBtnDisabled: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
   qtyValue: {
     minWidth: 26,
     textAlign: "center",
     color: colors.onSurface,
-    fontFamily: typography.bodyBold,
-    fontSize: 14,
+    fontFamily: typography.headline,
+    fontSize: 16,
+  },
+  confirmBtnWrap: {
+    flex: 1,
+    height: 52,
+    borderRadius: radii.pill,
+    overflow: "hidden",
+    ...shadows.primary,
   },
   confirmBtn: {
     flex: 1,
-    minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 11,
-    backgroundColor: colors.primary,
-    borderRadius: radii.pill,
-    ...shadows.primary,
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
   },
-  confirmBtnRtl: {
-    flexDirection: "row-reverse",
-  },
-  confirmBtnInvalid: {
-    backgroundColor: colors.outline,
-    shadowOpacity: 0,
+  confirmLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   confirmLabel: {
     color: colors.onPrimary,
     fontFamily: typography.bodyBold,
-    fontSize: 14,
-  },
-  confirmDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.42)",
+    fontSize: 15,
   },
   confirmPrice: {
     color: colors.onPrimary,
-    fontFamily: typography.bodyBold,
-    fontSize: 14,
-  },
-  toast: {
-    position: "absolute",
-    bottom: 76,
-    alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: radii.pill,
-    backgroundColor: "rgba(30,30,30,0.92)",
-  },
-  toastRtl: {
-    flexDirection: "row-reverse",
-  },
-  toastText: {
-    color: colors.onPrimary,
-    fontFamily: typography.bodyBold,
-    fontSize: 12,
+    fontFamily: typography.headline,
+    fontSize: 15,
   },
 });
 

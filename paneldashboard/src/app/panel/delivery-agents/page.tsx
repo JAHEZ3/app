@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import {
   Search, Filter, Truck, Bike, Car, Footprints, Inbox, MapPin, Phone,
-  Star, CheckCircle2, XCircle, FileText, Hash,
+  Star, CheckCircle2, XCircle, FileText, Hash, Eye, User, Calendar,
+  IdCard, Banknote, Wallet, ShieldCheck,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
@@ -12,6 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -27,7 +36,7 @@ import {
   useRejectDeliveryApplication,
 } from "@/hooks/useDeliveryAgents";
 import { extractApiErrorMessage } from "@/lib/api";
-import { formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { useToast } from "@/providers/ToastProvider";
 import {
   AgentStatus,
@@ -201,7 +210,7 @@ function AgentsList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {["المندوب", "المركبة", "الهاتف", "المدينة", "تقييم", "التوصيلات", "الحالة", ""].map((h) => (
+                {["المندوب", "المركبة", "الهاتف", "المدينة", "تقييم", "التوصيلات", "الحالة", "تفاصيل", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-right font-semibold text-muted-foreground text-xs">
                     {h}
                   </th>
@@ -212,7 +221,7 @@ function AgentsList() {
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i} className="border-b border-border/50">
-                    {Array.from({ length: 8 }).map((__, j) => (
+                    {Array.from({ length: 9 }).map((__, j) => (
                       <td key={j} className="px-4 py-3">
                         <Skeleton className="h-5 rounded" />
                       </td>
@@ -221,7 +230,7 @@ function AgentsList() {
                 ))
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                     لا يوجد مندوبون يطابقون البحث
                   </td>
                 </tr>
@@ -247,6 +256,7 @@ function AgentRow({ agent }: { agent: DeliveryAgent }) {
   const change = useChangeDeliveryAgentStatus(agent.id);
   const Icon = vehicleIcon(agent.vehicleType);
   const displayName = agent.fullName?.trim() || `${agent.firstName} ${agent.lastName}`;
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   function handleStatus(next: AgentStatus) {
     if (next === agent.status) return;
@@ -310,6 +320,23 @@ function AgentRow({ agent }: { agent: DeliveryAgent }) {
         <Badge variant={STATUS_VARIANT[agent.status]}>{STATUS_LABEL[agent.status]}</Badge>
       </td>
 
+      <td className="px-4 py-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setDetailsOpen(true)}
+          aria-label="عرض تفاصيل المندوب"
+        >
+          <Eye className="w-4 h-4" />
+          عرض
+        </Button>
+        <AgentDetailsDialog
+          agent={agent}
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+        />
+      </td>
+
       <td className="px-4 py-3 w-44">
         <Select
           value={agent.status}
@@ -327,6 +354,189 @@ function AgentRow({ agent }: { agent: DeliveryAgent }) {
         </Select>
       </td>
     </tr>
+  );
+}
+
+// ─── Agent details dialog ────────────────────────────────────────────────────
+
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+  dir,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+  dir?: "ltr" | "rtl";
+}) {
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-border/50 last:border-b-0">
+      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 text-muted-foreground">
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <p
+          className="text-sm font-semibold text-foreground break-words"
+          dir={dir}
+        >
+          {value ?? "—"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AgentDetailsDialog({
+  agent,
+  open,
+  onOpenChange,
+}: {
+  agent: DeliveryAgent;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const displayName = agent.fullName?.trim() || `${agent.firstName} ${agent.lastName}`;
+  const vehicleLabel =
+    VEHICLE_OPTIONS.find((v) => v.value === agent.vehicleType)?.label ?? "—";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shrink-0"
+              style={{ background: "linear-gradient(135deg,#F55905,#FF8C38)" }}
+            >
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <DialogTitle>{displayName}</DialogTitle>
+              <DialogDescription>
+                <Badge variant={STATUS_VARIANT[agent.status]}>
+                  {STATUS_LABEL[agent.status]}
+                </Badge>
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <DialogBody className="grid gap-x-6 md:grid-cols-2">
+          <DetailRow icon={User} label="الاسم الأول" value={agent.firstName} />
+          <DetailRow icon={User} label="اسم العائلة" value={agent.lastName} />
+          <DetailRow
+            icon={Calendar}
+            label="تاريخ الميلاد"
+            value={agent.dateOfBirth ? formatDate(agent.dateOfBirth) : "—"}
+          />
+          <DetailRow
+            icon={Phone}
+            label="رقم الهاتف"
+            value={agent.phone ?? "—"}
+            dir="ltr"
+          />
+          <DetailRow
+            icon={IdCard}
+            label="رقم الهوية"
+            value={agent.idNumber ?? "—"}
+            dir="ltr"
+          />
+          <DetailRow icon={MapPin} label="المدينة" value={agent.city ?? "—"} />
+
+          <DetailRow icon={vehicleIcon(agent.vehicleType)} label="نوع المركبة" value={vehicleLabel} />
+          <DetailRow
+            icon={Hash}
+            label="لوحة المركبة"
+            value={agent.vehiclePlate ?? "—"}
+            dir="ltr"
+          />
+          <DetailRow
+            icon={FileText}
+            label="رقم رخصة المركبة"
+            value={agent.vehicleLicenseNumber ?? "—"}
+            dir="ltr"
+          />
+
+          <DetailRow
+            icon={User}
+            label="جهة الاتصال للطوارئ"
+            value={agent.emergencyContactName ?? "—"}
+          />
+          <DetailRow
+            icon={Phone}
+            label="هاتف الطوارئ"
+            value={agent.emergencyContactPhone ?? "—"}
+            dir="ltr"
+          />
+
+          <DetailRow
+            icon={Star}
+            label="التقييم"
+            value={
+              <span className="inline-flex items-center gap-1">
+                <Star className="w-3 h-3 text-warning" />
+                {Number(agent.rating ?? 0).toFixed(1)}
+              </span>
+            }
+          />
+          <DetailRow
+            icon={CheckCircle2}
+            label="عدد التوصيلات"
+            value={agent.totalDeliveries.toLocaleString("ar-SA")}
+          />
+          <DetailRow
+            icon={Wallet}
+            label="رصيد المحفظة"
+            value={formatCurrency(agent.walletBalance ?? 0)}
+          />
+          <DetailRow
+            icon={ShieldCheck}
+            label="موافق على الشروط"
+            value={agent.termsAccepted ? "نعم" : "لا"}
+          />
+          <DetailRow
+            icon={Calendar}
+            label="تاريخ التسجيل"
+            value={formatDateTime(agent.createdAt)}
+          />
+          <DetailRow
+            icon={Hash}
+            label="معرّف المندوب"
+            value={<span className="text-xs">{agent.id}</span>}
+            dir="ltr"
+          />
+
+          {agent.paymentInfo && (
+            <div className="md:col-span-2 mt-4">
+              <p className="text-xs font-bold text-muted-foreground mb-2 inline-flex items-center gap-1.5">
+                <Banknote className="w-3.5 h-3.5" />
+                معلومات الدفع
+              </p>
+              <div className="grid gap-x-6 md:grid-cols-2 bg-muted/30 rounded-xl px-4">
+                <DetailRow
+                  icon={User}
+                  label="اسم صاحب الحساب"
+                  value={agent.paymentInfo.accountHolder ?? "—"}
+                />
+                <DetailRow
+                  icon={Banknote}
+                  label="اسم البنك"
+                  value={agent.paymentInfo.bankName ?? "—"}
+                />
+                <DetailRow
+                  icon={Hash}
+                  label="IBAN"
+                  value={agent.paymentInfo.iban ?? "—"}
+                  dir="ltr"
+                />
+              </div>
+            </div>
+          )}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -353,7 +563,7 @@ function ApplicationsList() {
             <p className="font-bold text-foreground">لا توجد طلبات قيد المراجعة.</p>
           </div>
         ) : (
-          items.map((app) => <ApplicationRow key={app.id} application={app} />)
+          items.map((app) => <ApplicationRow key={app.requestId} application={app} />)
         )}
       </div>
     </Card>
@@ -368,15 +578,12 @@ function ApplicationRow({ application }: { application: DeliveryApplication }) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
 
-  const agent = application.agent;
-  const Icon = vehicleIcon(agent?.vehicleType ?? null);
-  const displayName =
-    agent?.fullName?.trim() ||
-    (agent ? `${agent.firstName} ${agent.lastName}` : "مندوب");
+  const Icon = vehicleIcon(null);
+  const displayName = application.fullName?.trim() || "مندوب";
   const isPending = approve.isPending || reject.isPending;
 
   function handleApprove() {
-    approve.mutate(application.id, {
+    approve.mutate(application.requestId, {
       onSuccess: () => success("تم القبول", "تم قبول طلب المندوب."),
       onError: (err) =>
         error("فشل القبول", extractApiErrorMessage(err, "تعذّر قبول الطلب")),
@@ -389,7 +596,7 @@ function ApplicationRow({ application }: { application: DeliveryApplication }) {
       return;
     }
     reject.mutate(
-      { id: application.id, payload: { reason: reason.trim() } },
+      { id: application.requestId, payload: { reason: reason.trim() } },
       {
         onSuccess: () => {
           success("تم الرفض", "تم رفض طلب المندوب.");
@@ -421,16 +628,10 @@ function ApplicationRow({ application }: { application: DeliveryApplication }) {
         <div className="flex-1 min-w-0">
           <p className="font-bold text-foreground truncate">{displayName}</p>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-            {agent?.phone && (
+            {application.phone && (
               <span className="inline-flex items-center gap-1">
                 <Phone className="w-3 h-3" />
-                <span dir="ltr">{agent.phone}</span>
-              </span>
-            )}
-            {agent?.city && (
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                {agent.city}
+                <span dir="ltr">{application.phone}</span>
               </span>
             )}
             <span>{formatDateTime(application.submittedAt)}</span>

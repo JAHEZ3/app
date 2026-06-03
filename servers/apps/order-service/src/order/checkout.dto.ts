@@ -1,5 +1,18 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { OrderKind, PaymentMethod } from '../entities/order-enums';
+
+/**
+ * Customer's chosen fulfilment mode at checkout.
+ *  - `delivery`  — driver brings the order to the saved address.
+ *  - `pickup`    — customer collects from the restaurant. `addressId` is still
+ *                  required (for tax/billing) but no driver is assigned.
+ *  - `scheduled` — same as delivery, but executes at `scheduledFor`.
+ */
+export enum OrderType {
+  DELIVERY = 'delivery',
+  PICKUP = 'pickup',
+  SCHEDULED = 'scheduled',
+}
 
 export class CheckoutDto {
   // Client-generated UUID. The server uses it to detect duplicate submissions
@@ -14,6 +27,19 @@ export class CheckoutDto {
 
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
+
+  // Defaults to `delivery` server-side when omitted, so existing clients
+  // that only know about the original checkout shape keep working.
+  @IsOptional()
+  @IsEnum(OrderType)
+  orderType?: OrderType;
+
+  // ISO timestamp; required when `orderType === 'scheduled'`. The order is
+  // still persisted as `pending` immediately — the restaurant only sees it
+  // appear in their queue close to `scheduledFor`.
+  @IsOptional()
+  @IsDateString()
+  scheduledFor?: string;
 
   @IsOptional()
   @IsString()
@@ -61,6 +87,23 @@ export class CheckoutDto {
 export class UpdateOrderStatusDto {
   @IsString()
   status: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+/**
+ * Restaurant owner / manager toggles `unpaid` ↔ `paid` after verifying the
+ * customer's uploaded bank-transfer / wallet receipt for online payments.
+ * `note` is optional but useful for audit purposes ("Verified IBAN", "Wrong
+ * amount received", etc.).
+ */
+export class UpdatePaymentStatusDto {
+  @IsEnum(['paid', 'unpaid'], {
+    message: 'حالة الدفع يجب أن تكون paid أو unpaid',
+  })
+  paymentStatus: 'paid' | 'unpaid';
 
   @IsOptional()
   @IsString()

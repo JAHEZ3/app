@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useContactInfo } from "@/hooks/useContact";
 
 const NAV_LINKS = [
   { label: "الرئيسية", href: "#home" },
@@ -17,6 +18,8 @@ const NAV_LINKS = [
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { data: contact } = useContactInfo();
+  const appDownloadHref = contact?.appDownloadUrl ?? "#app";
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -44,7 +47,12 @@ export function Navbar() {
               height={52}
               priority
               unoptimized
-              className="object-contain drop-shadow-[0_4px_12px_rgba(255,107,0,0.35)] transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6 group-hover:drop-shadow-[0_10px_24px_rgba(245,89,5,0.6)]"
+              className={cn(
+                "object-contain transition-all duration-700 ease-out group-hover:scale-125 group-hover:-rotate-6",
+                isScrolled
+                  ? "drop-shadow-[0_4px_12px_rgba(255,107,0,0.35)] group-hover:drop-shadow-[0_10px_24px_rgba(245,89,5,0.6)]"
+                  : "brightness-0 invert drop-shadow-[0_4px_12px_rgba(255,255,255,0.45)] group-hover:drop-shadow-[0_10px_24px_rgba(255,255,255,0.7)]",
+              )}
             />
             <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
               <span
@@ -78,10 +86,9 @@ export function Navbar() {
 
           {/* CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant={isScrolled ? "outline" : "secondary"} size="sm">
-              تسجيل الدخول
+            <Button asChild variant={isScrolled ? "default" : "secondary"} size="sm">
+              <a href={appDownloadHref}>حمّل التطبيق</a>
             </Button>
-            <Button size="sm">حمّل التطبيق</Button>
           </div>
 
           {/* Mobile menu toggle */}
@@ -122,8 +129,10 @@ export function Navbar() {
               <Button variant="outline" size="sm" className="flex-1">
                 تسجيل الدخول
               </Button>
-              <Button size="sm" className="flex-1">
-                حمّل التطبيق
+              <Button asChild size="sm" className="flex-1">
+                <a href={appDownloadHref} onClick={() => setIsMenuOpen(false)}>
+                  حمّل التطبيق
+                </a>
               </Button>
             </div>
           </nav>

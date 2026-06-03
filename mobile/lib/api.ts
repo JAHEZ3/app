@@ -100,10 +100,19 @@ customerApi.interceptors.response.use(
     }
 );
 
-// ─── Order interceptors (use customer auth) ─────────────────────────────────
+// ─── Order interceptors (customer + delivery share this client) ─────────────
 
 orderApi.interceptors.request.use((config) => {
-    const token = useAuthStore.getState().accessToken;
+    // Most order endpoints are customer-scoped, but a few (delivery accept /
+    // reject) are delivery-only. We prefer the customer token (the common
+    // case) and fall back to the delivery token so the delivery-agent app's
+    // calls carry a valid Bearer instead of going out anonymous.
+    const customerToken = useAuthStore.getState().accessToken;
+    let token = customerToken;
+    if (!token) {
+        const { useDeliveryStore } = require('@/store/useDeliveryStore');
+        token = useDeliveryStore.getState().accessToken ?? null;
+    }
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -160,6 +169,66 @@ orderApi.interceptors.response.use(
     }
 );
 
+// ─── Restaurant interceptors (use customer auth) ────────────────────────────
+
+restaurantApi.interceptors.request.use((config) => {
+    const token = useAuthStore.getState().accessToken;
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+restaurantApi.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+        const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+        if (error.response?.status !== 401 || original._retry) {
+            return Promise.reject(error);
+        }
+
+        if (useAuthStore.getState().status === 'unauthenticated') {
+            return Promise.reject(error);
+        }
+
+        if (isRefreshing) {
+            return new Promise<string>((resolve, reject) => {
+                pendingQueue.push({ resolve, reject });
+            }).then((token) => {
+                original.headers.Authorization = `Bearer ${token}`;
+                return restaurantApi(original);
+            });
+        }
+
+        original._retry = true;
+        isRefreshing = true;
+
+        try {
+            const storedRefresh = await SecureStore.getItemAsync('refreshToken');
+            if (!storedRefresh) throw new Error('No refresh token');
+
+            const res = await authApi.post('/api/auth/refresh', { refreshToken: storedRefresh });
+            const { accessToken, refreshToken: newRefreshToken } = res.data.data;
+
+            await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+            useAuthStore.getState().setTokens(accessToken);
+
+            drainQueue(null, accessToken);
+
+            original.headers.Authorization = `Bearer ${accessToken}`;
+            return restaurantApi(original);
+        } catch (e) {
+            drainQueue(e, null);
+            useAuthStore.getState().clearTokens();
+            await SecureStore.deleteItemAsync('refreshToken');
+            return Promise.reject(e);
+        } finally {
+            isRefreshing = false;
+        }
+    }
+);
+
 // ─── Delivery interceptors ───────────────────────────────────────────────────
 
 let isDeliveryRefreshing = false;
@@ -178,7 +247,13 @@ const drainDeliveryQueue = (error: unknown, token: string | null) => {
 deliveryApi.interceptors.request.use((config) => {
     // Lazy-import to avoid circular deps at module load time
     const { useDeliveryStore } = require('@/store/useDeliveryStore');
-    const token = useDeliveryStore.getState().accessToken;
+    // A few delivery-service endpoints (e.g. GET /api/delivery/open) are
+    // open to both delivery agents AND customers. We try the delivery
+    // token first (an agent on this device); if there isn't one, fall back
+    // to the customer access token so a logged-in customer's call carries
+    // a valid Bearer instead of going out anonymous and getting 401'd.
+    const deliveryToken = useDeliveryStore.getState().accessToken;
+    const token = deliveryToken ?? useAuthStore.getState().accessToken;
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }

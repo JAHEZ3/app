@@ -29,6 +29,7 @@ export function normalizeTokens(
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 const RESTAURANT_URL = process.env.NEXT_PUBLIC_RESTAURANT_URL || "http://localhost:3003";
 const NOTIFICATION_URL = process.env.NEXT_PUBLIC_NOTIFICATION_URL || "http://localhost:3007";
+const MANAGER_URL = process.env.NEXT_PUBLIC_MANAGER_URL || "http://localhost:3006";
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -45,6 +46,11 @@ export const notificationInstance = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+export const managerInstance = axios.create({
+  baseURL: MANAGER_URL,
+  headers: { "Content-Type": "application/json" },
+});
+
 // Shared request interceptor: attach accessToken from Zustand + strip Content-Type for FormData
 function attachToken(config: import("axios").InternalAxiosRequestConfig) {
   const token = useAuthStore.getState().accessToken;
@@ -56,6 +62,7 @@ function attachToken(config: import("axios").InternalAxiosRequestConfig) {
 api.interceptors.request.use(attachToken);
 restaurantInstance.interceptors.request.use(attachToken);
 notificationInstance.interceptors.request.use(attachToken);
+managerInstance.interceptors.request.use(attachToken);
 
 // Token refresh state
 let isRefreshing = false;
@@ -125,6 +132,7 @@ async function handle401(
 api.interceptors.response.use((res) => res, (err) => handle401(err, api));
 restaurantInstance.interceptors.response.use((res) => res, (err) => handle401(err, restaurantInstance));
 notificationInstance.interceptors.response.use((res) => res, (err) => handle401(err, notificationInstance));
+managerInstance.interceptors.response.use((res) => res, (err) => handle401(err, managerInstance));
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
@@ -245,9 +253,12 @@ export const ordersApi = {
   getAll:       (params?: object)          => orderInstance.get("/api/order/orders", { params }),
   getOne:       (id: string)               => orderInstance.get(`/api/order/orders/${id}`),
   updateStatus: (id: string, data: object) => orderInstance.patch(`/api/order/orders/${id}/status`, data),
+  updatePaymentStatus: (id: string, data: { paymentStatus: "paid" | "unpaid"; note?: string }) =>
+    orderInstance.patch(`/api/order/orders/${id}/payment-status`, data),
   getChat:      (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/chat`),
   sendChat:     (orderId: string, content: string) => orderInstance.post(`/api/order/orders/${orderId}/chat`, { content }),
   getReceipt:   (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/receipt`),
+  getPaymentProof: (orderId: string)       => orderInstance.get(`/api/order/orders/${orderId}/payment-proof`),
   assignDelivery: (orderId: string, deliveryAgentId: string) =>
     orderInstance.patch(`/api/order/orders/${orderId}/delivery`, { deliveryAgentId }),
 };
@@ -445,3 +456,26 @@ export const optionsApi = {
   delete: (optionId: string) =>
     restaurantInstance.delete(`/api/restaurant/options/${optionId}`),
 };
+
+// ── Support tickets (manager-service, port 3006) ─────────────────────────────
+// Restaurant owners can file tickets; the admin panel reads/resolves them.
+import type {
+  CreateSupportTicketPayload,
+  SupportTicket,
+} from "@/types/support.types";
+
+export function unwrapManager<T>(body: unknown): T {
+  if (body && typeof body === "object" && "data" in (body as object)) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
+}
+
+export const supportApi = {
+  create: (payload: CreateSupportTicketPayload) =>
+    managerInstance.post<{ data: SupportTicket } | SupportTicket>(
+      "/api/manager/admin/support/tickets",
+      payload,
+    ),
+};
+

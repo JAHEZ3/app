@@ -17,7 +17,10 @@ const managers = [
 
 async function seed() {
   const client = new Client({
-    host: process.env.DB_HOST ?? "localhost",
+    // Default to 127.0.0.1 (not "localhost"): on Windows + Docker Desktop,
+    // `localhost` can resolve to ::1 (IPv6) whose port-forward is unreliable,
+    // causing ECONNRESET/timeout against the postgres container.
+    host: process.env.DB_HOST ?? "127.0.0.1",
     port: Number(process.env.DB_PORT ?? 5432),
     user: process.env.DB_USER ?? "postgres",
     password: process.env.DB_PASSWORD ?? "postgres",
@@ -47,10 +50,11 @@ async function seed() {
          ($1, $2, $3, 'manager', 'active', true)`,
       [m.fullName, m.email, passwordHash],
     );
+    
 
     console.log(`+  Created manager: ${m.email}  /  password: ${m.password}`);
   }
-
+  
   await client.end();
   console.log("\nDone.");
 }
