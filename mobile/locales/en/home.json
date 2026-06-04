@@ -40,7 +40,33 @@
     "popularMeals": "Popular Meals",
     "nearYou": "Near You",
     "featured": "Featured",
-    "saved": "Saved Restaurants"
+    "saved": "Saved Restaurants",
+    "trending": "Trending Now",
+    "topRated": "Top Rated",
+    "exploreCuisines": "Explore Cuisines",
+    "newOnApp": "New on App",
+    "suggested": "Suggested For You"
+  },
+  "tags": {
+    "mostOrdered": "Most ordered today",
+    "new": "NEW"
+  },
+  "promo": {
+    "freeDelivery": {
+      "title": "Free delivery all week",
+      "subtitle": "On orders over 50 ILS",
+      "badge": "LIMITED TIME"
+    },
+    "firstOrder": {
+      "title": "30% off your first order",
+      "subtitle": "New here? Treat yourself",
+      "badge": "WELCOME"
+    },
+    "weekend": {
+      "title": "Weekend feast deals",
+      "subtitle": "Top picks at lower prices",
+      "badge": "HOT"
+    }
   },
   "favorite": {
     "save": "Save",
