@@ -20,6 +20,7 @@ import { useCartT, useOrdersT } from "@/hooks/useAppTranslation";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import OrderStatusBadge from "../components/OrderStatusBadge";
 import OrderStatusTimeline from "../components/OrderStatusTimeline";
+import DeliveryTracker from "../components/DeliveryTracker";
 import OrderItemRow from "../components/OrderItemRow";
 import OrderDetailsSkeleton from "../components/OrderDetailsSkeleton";
 import OrderStateBanner from "../components/OrderStateBanner";
@@ -471,6 +472,16 @@ function OrderDetailsScreen() {
                     title={t("sections.delivery", { defaultValue: "Delivery info" })}
                     delay={110}
                 >
+                    {/* Headline 4-step tracker — Received → Driver accepted →
+                        On the way → Delivered. Updates live via socket-patched
+                        status + acceptance. */}
+                    <View style={styles.deliveryTrackerWrap}>
+                        <DeliveryTracker
+                            status={order.status}
+                            deliveryAcceptance={order.deliveryAcceptance}
+                        />
+                    </View>
+
                     {/* Driver acceptance flow — three mutually-exclusive states:
                           1. acceptance === "pending"     → "Waiting for driver"
                           2. no courier + assignable stage → "Pick a driver"
@@ -1686,6 +1697,11 @@ const styles = StyleSheet.create({
         lineHeight: 15,
     },
     // Inert (non-tappable) twin of `pickDriverBtn`, used while we wait for
+    deliveryTrackerWrap: {
+        paddingVertical: 6,
+        paddingHorizontal: 2,
+        marginBottom: 14,
+    },
     // the driver to accept. Same look as the picker, but with a spinner and
     // no chevron — there's nothing to do here until the driver replies.
     waitingDriverCard: {

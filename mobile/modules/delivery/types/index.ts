@@ -72,55 +72,95 @@ export interface DeliveryApplicationFormData {
 }
 
 /**
- * Order currently assigned to this delivery agent. The tracking screen
- * reuses the customer Order model (orderId + delivery info) so the existing
- * map / driver-info components keep working.
+ * Canonical delivery order status as surfaced to the driver. Mapped from the
+ * backend OrderStatus + deliveryAcceptance:
+ *   ASSIGNED   = assigned, acceptance pending
+ *   ACCEPTED   = accepted, not yet en route (confirmed/preparing/ready)
+ *   ON_THE_WAY = out_for_delivery
+ *   DELIVERED  = delivered
+ *   CANCELLED  = cancelled
  */
-export interface ActiveAssignment {
-    orderId: string;
-    orderNumber?: string;
-    status: string;
-    dropoff: {
-        lat: number;
-        lng: number;
-        address?: string;
-    } | null;
-    pickup: {
-        lat: number;
-        lng: number;
-        name?: string;
-        address?: string;
-    } | null;
-    customerName?: string;
-    customerPhone?: string;
-    restaurantName?: string;
-    restaurantPhone?: string;
-    total?: number;
-    itemsCount?: number;
-    notes?: string;
+export type DeliveryOrderStatus =
+    | 'ASSIGNED'
+    | 'ACCEPTED'
+    | 'ON_THE_WAY'
+    | 'DELIVERED'
+    | 'CANCELLED';
+
+export type DeliveryPaymentMethod = 'cash_on_delivery' | 'card' | 'online' | string;
+export type DeliveryPaymentStatus = 'unpaid' | 'paid' | 'refunded' | string;
+
+/** A single line item on the order, with chosen options. */
+export interface DeliveryOrderItem {
+    id: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    specialInstructions?: string;
+    options: { name: string; price?: number }[];
 }
 
-/** An unassigned order available for the agent to accept. */
-export interface PendingOrder {
+export interface GeoPoint {
+    lat: number;
+    lng: number;
+    address?: string;
+    name?: string;
+}
+
+/**
+ * Full order as the driver dashboard / order-details screen need it. Carries
+ * every field required to render the premium card + details page without a
+ * second round-trip. Both the pending feed and the active assignment use this
+ * same shape so a single mapper + UI handles both.
+ */
+export interface DeliveryOrder {
     orderId: string;
     orderNumber?: string;
-    status: string;
-    dropoff: {
-        lat: number;
-        lng: number;
-        address?: string;
-    } | null;
-    pickup: {
-        lat: number;
-        lng: number;
-        name?: string;
-        address?: string;
-    } | null;
+    /** Canonical driver-facing status (see DeliveryOrderStatus). */
+    status: DeliveryOrderStatus;
+    /** Raw backend order status, kept for transition logic. */
+    rawStatus: string;
+
+    pickup: GeoPoint | null;
+    dropoff: GeoPoint | null;
+
     customerName?: string;
     customerPhone?: string;
     restaurantName?: string;
     restaurantPhone?: string;
+
+    // Money
+    subtotal?: number;
+    deliveryFee?: number;
+    discountAmount?: number;
     total?: number;
+
+    paymentMethod?: DeliveryPaymentMethod;
+    paymentStatus?: DeliveryPaymentStatus;
+
+    // Items
+    items: DeliveryOrderItem[];
     itemsCount?: number;
+
+    // Notes
+    customerNotes?: string;
+    /** Alias kept for the existing dashboard card. */
     notes?: string;
+
+    // Lifecycle timestamps (ISO strings)
+    createdAt?: string;
+    assignedAt?: string;
+    acceptedAt?: string;
+    estimatedDeliveryAt?: string;
+    deliveredAt?: string;
 }
+
+/**
+ * Order currently assigned to this delivery agent. Alias of DeliveryOrder so
+ * the tracking + details screens share one model.
+ */
+export type ActiveAssignment = DeliveryOrder;
+
+/** An order assigned to the agent awaiting their accept/reject. */
+export type PendingOrder = DeliveryOrder;

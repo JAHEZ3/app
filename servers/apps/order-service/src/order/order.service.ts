@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -411,6 +411,16 @@ export class OrderService {
 
     this.assertAccess(order, userId, role);
 
+    // A delivery agent may only drive the delivery lifecycle on an order they
+    // have actually accepted. `assertAccess` already proved the order is
+    // assigned to this agent; here we additionally require acceptance so a
+    // driver can't push a still-pending invitation straight to out_for_delivery.
+    if (role === 'delivery') {
+      if (order.deliveryAcceptance !== DeliveryAcceptance.ACCEPTED) {
+        throw new ForbiddenException('يجب قبول الطلب قبل تحديث حالة التوصيل');
+      }
+    }
+
     const newStatus = dto.status as OrderStatus;
     this.validateTransition(order.status, newStatus, role);
 
@@ -523,9 +533,14 @@ export class OrderService {
       ? DeliveryAcceptance.PENDING
       : DeliveryAcceptance.ACCEPTED;
 
+    const now = new Date();
     await this.orderRepo.update(orderId, {
       deliveryAgentId: dto.deliveryAgentId,
       deliveryAcceptance: nextAcceptance,
+      assignedAt: now,
+      // Manager/owner dispatch is auto-accepted, so stamp acceptance now too.
+      // Customer self-pick stays pending until the driver taps Accept.
+      acceptedAt: nextAcceptance === DeliveryAcceptance.ACCEPTED ? now : null,
     });
 
     this.emitSafe('order.delivery.assigned', {
@@ -534,6 +549,11 @@ export class OrderService {
       orderNumber: order.orderNumber,
       deliveryAgentId: dto.deliveryAgentId,
       acceptance: nextAcceptance,
+      assignedAt: now.toISOString(),
+      acceptedAt:
+        nextAcceptance === DeliveryAcceptance.ACCEPTED
+          ? now.toISOString()
+          : null,
       restaurantId: order.restaurantId,
       customerId: order.customerId,
       ownerUserId: order.ownerUserId,
@@ -576,8 +596,10 @@ export class OrderService {
       throw new BadRequestException('لا توجد دعوة بانتظار القبول لهذا الطلب');
     }
 
+    const acceptedAt = new Date();
     await this.orderRepo.update(orderId, {
       deliveryAcceptance: DeliveryAcceptance.ACCEPTED,
+      acceptedAt,
     });
 
     this.emitSafe('order.delivery.accepted', {
@@ -588,7 +610,7 @@ export class OrderService {
       restaurantId: order.restaurantId,
       customerId: order.customerId,
       ownerUserId: order.ownerUserId,
-      acceptedAt: new Date().toISOString(),
+      acceptedAt: acceptedAt.toISOString(),
     });
 
     this.logger.log({ msg: 'delivery_accepted', orderId, agentId: userId });
@@ -645,6 +667,53 @@ export class OrderService {
     });
 
     return { orderId, acceptance: DeliveryAcceptance.NONE };
+  }
+
+  // ─── Driver dashboard feeds ────────────────────────────────────────────────
+
+  /**
+   * Orders assigned to this agent that are still awaiting their decision
+   * (deliveryAcceptance === PENDING). This is the "incoming requests" list the
+   * driver dashboard polls — they tap accept/reject on each.
+   *
+   * `userId` is the agent's auth id (JWT `sub`), which is exactly what
+   * `deliveryAgentId` now holds since the picker assigns the agent's user_id.
+   */
+  async getAvailableForAgent(userId: string) {
+    const orders = await this.orderRepo.find({
+      where: {
+        deliveryAgentId: userId,
+        deliveryAcceptance: DeliveryAcceptance.PENDING,
+      },
+      relations: ['items'],
+      order: { createdAt: 'DESC' },
+    });
+    return orders;
+  }
+
+  /**
+   * The agent's current active job: assigned + accepted and not yet in a
+   * terminal state. Includes the early statuses (confirmed/preparing) so the
+   * driver sees the job on their map immediately after accepting — even while
+   * the restaurant is still cooking — not only once it hits ready-for-pickup.
+   * Returns the single most recent match, or null when nothing is in progress.
+   */
+  async getActiveForAgent(userId: string) {
+    const order = await this.orderRepo.findOne({
+      where: {
+        deliveryAgentId: userId,
+        deliveryAcceptance: DeliveryAcceptance.ACCEPTED,
+        status: In([
+          OrderStatus.CONFIRMED,
+          OrderStatus.PREPARING,
+          OrderStatus.READY_FOR_PICKUP,
+          OrderStatus.OUT_FOR_DELIVERY,
+        ]),
+      },
+      relations: ['items'],
+      order: { createdAt: 'DESC' },
+    });
+    return order ?? null;
   }
 
   // ─── Rate order ───────────────────────────────────────────────────────────

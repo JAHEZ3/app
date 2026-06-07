@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     minWidth: 17,
     height: 17,
     borderRadius: radii.pill,
-    backgroundColor: colors.error,
+    backgroundColor: colors.primary,
     borderWidth: 2,
     borderColor: colors.card,
     alignItems: "center",

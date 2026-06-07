@@ -13,11 +13,19 @@ import { Category } from '../entities/Category';
 import { Menu } from '../entities/Menu';
 import { MenuSection } from '../entities/MenuSection';
 import { Meal } from '../entities/Meal';
-import { RestaurantsRepository, RestaurantsPage } from './RestaurantsRepository';
+import {
+    RestaurantsRepository,
+    RestaurantsPage,
+    RateRestaurantPayload,
+    RateRestaurantResult,
+    MyRestaurantRating,
+} from './RestaurantsRepository';
 
 const BASE = '/api/restaurant/mobile/restaurants';
 const MENU_BASE = '/api/restaurant/mobile/menus';
 const CATEGORIES_BASE = '/api/restaurant/categories';
+// Standalone ratings live off the non-mobile path (see controller).
+const RATINGS_BASE = '/api/restaurant/restaurants';
 
 export const restRepository = (): RestaurantsRepository => ({
     getRestaurants: async (params): Promise<RestaurantsPage> => {
@@ -81,5 +89,25 @@ export const restRepository = (): RestaurantsRepository => ({
                 .flatMap((section) => section.meals)
                 .filter((meal) => meal.isAvailable);
         });
+    },
+
+    rateRestaurant: async (
+        restaurantId: string,
+        payload: RateRestaurantPayload,
+    ): Promise<RateRestaurantResult> => {
+        const res = await restaurantApi.post<{ data: RateRestaurantResult }>(
+            `${RATINGS_BASE}/${restaurantId}/rate`,
+            payload,
+        );
+        return res.data.data;
+    },
+
+    getMyRestaurantRating: async (
+        restaurantId: string,
+    ): Promise<MyRestaurantRating | null> => {
+        const res = await restaurantApi.get<{ data: MyRestaurantRating | null }>(
+            `${RATINGS_BASE}/${restaurantId}/my-rating`,
+        );
+        return res.data?.data ?? null;
     },
 });

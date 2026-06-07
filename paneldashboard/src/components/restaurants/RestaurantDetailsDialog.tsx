@@ -51,6 +51,8 @@ export function RestaurantDetailsDialog({
     open ? restaurantId ?? undefined : undefined,
   );
   const hours = full?.hours ?? [];
+  const rating = Number(r?.rating ?? 0);
+  const formattedRating = Number.isFinite(rating) ? rating.toFixed(1) : "0.0";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -144,7 +146,7 @@ export function RestaurantDetailsDialog({
                 />
                 <Field
                   label="التقييم"
-                  value={`${r.rating?.toFixed?.(1) ?? "0.0"} (${r.totalRatings})`}
+                  value={`${formattedRating} (${r.totalRatings})`}
                 />
                 <Field label="تاريخ التسجيل" value={formatDateTime(r.createdAt)} />
                 <Field

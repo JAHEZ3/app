@@ -98,9 +98,15 @@ function OrderCard({
 
     return (
         <View style={styles.orderCard}>
-            {/* Header row */}
+            {/* Header row → opens the full premium order-details screen */}
             <TouchableOpacity
-                onPress={() => setExpanded((v) => !v)}
+                onPress={() =>
+                    router.navigate({
+                        pathname: '/delivery/order/[id]',
+                        params: { id: order.orderId },
+                    } as never)
+                }
+                onLongPress={() => setExpanded((v) => !v)}
                 activeOpacity={0.8}
                 style={[styles.orderCardHeader, isRTL && styles.rowReverse]}
             >
@@ -128,7 +134,7 @@ function OrderCard({
                         </View>
                     ) : null}
                     <Ionicons
-                        name={expanded ? 'chevron-up' : 'chevron-down'}
+                        name={isRTL ? 'chevron-back' : 'chevron-forward'}
                         size={16}
                         color="#aaa"
                     />
@@ -532,7 +538,7 @@ export default function DeliveryDashboardScreen() {
                                 accepting={isAccepting && acceptingId === order.orderId}
                                 rejecting={isRejecting && rejectingVars?.orderId === order.orderId}
                                 isRTL={isRTL}
-                                t={t}
+                                t={t as unknown as (key: string, opts?: object) => string}
                             />
                         ))
                     )}

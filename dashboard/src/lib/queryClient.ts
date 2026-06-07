@@ -45,6 +45,9 @@ export const queryKeys = {
     ratings: ["analytics", "ratings"] as const,
     reviews: (page: number, limit: number) =>
       ["analytics", "reviews", page, limit] as const,
+    restaurantReviews: (page: number, limit: number, sort: string) =>
+      ["analytics", "restaurant-reviews", page, limit, sort] as const,
+    restaurantRatingsSummary: ["analytics", "restaurant-ratings-summary"] as const,
     delivery: ["analytics", "delivery"] as const,
     payments: ["analytics", "payments"] as const,
     report: (period: string) => ["analytics", "report", period] as const,

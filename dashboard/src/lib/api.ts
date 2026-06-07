@@ -219,6 +219,18 @@ export const analyticsApi = {
     restaurantInstance.get("/api/restaurant/analytics/reviews", {
       params: { page, limit },
     }),
+  restaurantReviews: (
+    page = 1,
+    limit = 20,
+    sort: "latest" | "highest" | "lowest" = "latest",
+  ) =>
+    restaurantInstance.get("/api/restaurant/analytics/restaurant-reviews", {
+      params: { page, limit, sort },
+    }),
+  restaurantRatingsSummary: () =>
+    restaurantInstance.get(
+      "/api/restaurant/analytics/restaurant-ratings/summary",
+    ),
   delivery: () => restaurantInstance.get("/api/restaurant/analytics/delivery"),
   payments: () => restaurantInstance.get("/api/restaurant/analytics/payments"),
   report: (period: "daily" | "weekly" | "monthly") =>

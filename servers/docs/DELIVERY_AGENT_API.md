@@ -195,8 +195,18 @@ JWT-protected but role-agnostic (manager, restaurant_owner, or assigned customer
 
 | Endpoint                                                                                | Roles allowed             | Returns                                                                                          |
 |-----------------------------------------------------------------------------------------|---------------------------|--------------------------------------------------------------------------------------------------|
-| `GET /api/delivery/available`                                                           | manager · restaurant_owner | All active agents enriched with last cached location. Used by the dispatcher.                    |
-| `GET /api/delivery/open?lat=…&lng=…&city=…`                                             | customer · manager        | Online drivers right now (cached location <5min). Sorts by distance when lat/lng given. PII-stripped (no phone). |
+| `GET /api/delivery/available`                                                           | manager · restaurant_owner | All active agents enriched with last cached location. Used by the dispatcher. The `id` field is the agent's **auth user_id** (the value written to `order.deliveryAgentId`); the table PK is exposed separately as `agentRecordId`. |
+| `GET /api/delivery/open?lat=…&lng=…&city=…`                                             | customer · manager        | Online drivers right now (cached location <5min). Sorts by distance when lat/lng given. PII-stripped (no phone). Same `id` = user_id convention as `/available`. |
+
+#### Driver dashboard feeds (served by the **order-service**, not delivery-service)
+
+The delivery mobile app polls these for its dashboard. They filter on the JWT `sub`,
+which equals `order.deliveryAgentId` because the picker assigns the agent's user_id.
+
+| Endpoint                                       | Role     | Returns                                                                 |
+|------------------------------------------------|----------|------------------------------------------------------------------------|
+| `GET /api/order/orders/delivery/available`     | delivery | Orders assigned to this agent awaiting their accept/reject (`deliveryAcceptance = pending`). |
+| `GET /api/order/orders/delivery/active`        | delivery | This agent's current accepted, non-terminal job, or `null`.            |
 
 ### 5.7 Manager admin endpoints
 

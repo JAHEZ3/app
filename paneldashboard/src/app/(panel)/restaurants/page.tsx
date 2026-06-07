@@ -54,6 +54,11 @@ const statusBadgeVariant = (status: Restaurant["status"]) => {
   return "error" as const;
 };
 
+function formatRating(rating: Restaurant["rating"]) {
+  const numericRating = Number(rating ?? 0);
+  return Number.isFinite(numericRating) ? numericRating.toFixed(1) : "0.0";
+}
+
 export default function RestaurantsPage() {
   const [activeStatus, setActiveStatus] = useState<RestaurantStatus>("all");
   const [search, setSearch] = useState("");
@@ -238,7 +243,7 @@ export default function RestaurantsPage() {
                   {r.status === "active" && (
                     <div className="flex items-center gap-1.5 text-xs text-warning font-semibold">
                       <Star className="w-3.5 h-3.5 fill-warning" />
-                      {r.rating.toFixed(1)}
+                      {formatRating(r.rating)}
                     </div>
                   )}
                 </div>

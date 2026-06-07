@@ -155,6 +155,32 @@ export class OrderServiceController {
     return { data: result, message: null };
   }
 
+  /**
+   * GET /api/order/orders/delivery/available
+   * Driver dashboard — incoming assignments awaiting this agent's accept/reject
+   * (deliveryAcceptance === pending). Declared BEFORE `orders/:id` so the
+   * literal `delivery` segment isn't captured by the `:id` param.
+   */
+  @Get('orders/delivery/available')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('delivery')
+  async listAvailableForAgent(@Req() req: any) {
+    const data = await this.orderService.getAvailableForAgent(req.user.sub);
+    return { data, message: null };
+  }
+
+  /**
+   * GET /api/order/orders/delivery/active
+   * Driver dashboard — the agent's current accepted, in-progress job (or null).
+   */
+  @Get('orders/delivery/active')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('delivery')
+  async getActiveForAgent(@Req() req: any) {
+    const data = await this.orderService.getActiveForAgent(req.user.sub);
+    return { data, message: null };
+  }
+
   @Get('orders/:id')
   @UseGuards(JwtAuthGuard)
   async getOrder(@Req() req: any, @Param('id') id: string) {

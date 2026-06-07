@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -18,22 +18,27 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import Animated, {
   Easing,
+  Extrapolation,
+  interpolate,
   interpolateColor,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import { ProtectedRoute } from "@/hooks/useProtectedRoute";
 import { useHomeT } from "@/hooks/useAppTranslation";
 import { useGetProfile } from "@/modules/Profile/hooks/useGetProfile";
-import {
-  HomeCategory,
-  useRestaurantHomeFeed,
-} from "@/modules/Restaurants/hooks/useRestaurantHomeFeed";
+import { useRestaurantHomeFeed } from "@/modules/Restaurants/hooks/useRestaurantHomeFeed";
 import { useFavoriteRestaurants } from "@/modules/Restaurants/hooks/useFavoriteRestaurants";
 import { useToggleFavorite } from "@/modules/Restaurants/hooks/useToggleFavorite";
 import { useFavorites } from "@/modules/Restaurants/hooks/useFavorites";
+import { useHomeSections } from "@/modules/Restaurants/hooks/useHomeSections";
+import PromoCarousel from "@/modules/Restaurants/components/home/PromoCarousel";
+import { TopRatedCard, CuisineChip } from "@/modules/Restaurants/components/home/HomeCards";
+import { isNewRestaurant } from "@/modules/Restaurants/utils/mockHomeContent";
 import { Meal } from "@/modules/Restaurants/entities/Meal";
 import { Restaurant } from "@/modules/Restaurants/entities/Restaurant";
 import MealOptionsModal from "@/modules/Restaurants/components/MealOptionsModal";
@@ -45,14 +50,13 @@ import {
   imageSource,
 } from "@/modules/Restaurants/utils/foodImages";
 import {
-  ALL_CATEGORY_META,
   getCategoryLabel,
   getCategoryMeta,
 } from "@/modules/Restaurants/utils/categoryMeta";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import { colors, radii, screen, shadows, typography } from "@/components/ui/theme";
-import { getCartQuantity, useCartStore } from "@/store/useCartStore";
+import { useCartStore } from "@/store/useCartStore";
 import { useLanguageStore } from "@/store/useLanguageStore";
 
 const IMAGE_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
@@ -100,12 +104,10 @@ function FadeInView({
 
 function HomeHero({
   firstName,
-  cartCount,
   search,
   onSearchChange,
 }: {
   firstName: string;
-  cartCount: number;
   search: string;
   onSearchChange: (value: string) => void;
 }) {
@@ -145,19 +147,6 @@ function HomeHero({
             accessibilityLabel={t("accessibility.notifications")}
           >
             <Ionicons name="notifications-outline" size={18} color={colors.onPrimary} />
-          </AnimatedPressable>
-
-          <AnimatedPressable
-            onPress={() => router.navigate("/cart" as never)}
-            style={styles.heroIconButton}
-            accessibilityLabel={t("accessibility.cart")}
-          >
-            <Ionicons name="bag-handle-outline" size={18} color={colors.onPrimary} />
-            {cartCount > 0 ? (
-              <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeText}>{cartCount > 9 ? "9+" : cartCount}</Text>
-              </View>
-            ) : null}
           </AnimatedPressable>
         </View>
       </View>
@@ -248,123 +237,21 @@ function SectionHeader({
   );
 }
 
-function CategoryChip({
-  category,
-  selected,
-  onPress,
-}: {
-  category: HomeCategory;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const { t } = useHomeT();
-  const { isRTL, language } = useLanguageStore();
-  const isArabic = language === "ar";
-
-  const isAll = category.cuisineType === null;
-  const meta = isAll ? ALL_CATEGORY_META : getCategoryMeta(category.cuisineType);
-  // Prefer the catalogue name; fall back to the localized cuisine label.
-  const label = isAll
-    ? t("category.all")
-    : category.name?.trim() || getCategoryLabel(category.cuisineType, isArabic);
-  const hasIcon = !isAll && !!category.iconUrl;
-
-  // Selected pill lifts gently on a spring.
-  const progress = useSharedValue(selected ? 1 : 0);
-  React.useEffect(() => {
-    progress.value = withTiming(selected ? 1 : 0, { duration: 220 });
-  }, [selected, progress]);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -progress.value * 2 }],
-  }));
-
-  const labelColor = selected ? colors.onPrimary : colors.onSurface;
-  const countActiveColor = selected ? "rgba(255,255,255,0.22)" : colors.faintPrimary;
-  const countTextColor = selected ? colors.onPrimary : colors.primary;
-
-  const Inner = (
-    <>
-      {/* Leading icon disc — image, emoji, or a glyph for "All". */}
-      <View
-        style={[
-          styles.catDisc,
-          selected && styles.catDiscSelected,
-          { backgroundColor: selected ? "rgba(255,255,255,0.2)" : `${meta.gradient[1]}1A` },
-        ]}
-      >
-        {hasIcon ? (
-          <Image
-            source={{ uri: category.iconUrl as string }}
-            contentFit="cover"
-            transition={180}
-            style={styles.catDiscIcon}
-          />
-        ) : isAll ? (
-          <Ionicons
-            name="sparkles"
-            size={15}
-            color={selected ? colors.onPrimary : meta.gradient[1]}
-          />
-        ) : (
-          <Text style={styles.catDiscEmoji}>{meta.emoji}</Text>
-        )}
-      </View>
-
-      <Text style={[styles.catLabel, { color: labelColor }]} numberOfLines={1}>
-        {label}
-      </Text>
-
-      {category.count > 0 ? (
-        <View style={[styles.catCount, { backgroundColor: countActiveColor }]}>
-          <Text style={[styles.catCountText, { color: countTextColor }]}>
-            {category.count > 99 ? "99+" : category.count}
-          </Text>
-        </View>
-      ) : null}
-    </>
-  );
-
-  return (
-    <AnimatedPressable
-      onPress={onPress}
-      haptic="impact"
-      scaleTo={0.95}
-      style={styles.catPressable}
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-    >
-      <Animated.View style={pillStyle}>
-        {selected ? (
-          <LinearGradient
-            colors={meta.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.catPill, styles.catPillSelected, isRTL && styles.catPillRtl]}
-          >
-            {Inner}
-          </LinearGradient>
-        ) : (
-          <View style={[styles.catPill, styles.catPillIdle, isRTL && styles.catPillRtl]}>
-            {Inner}
-          </View>
-        )}
-      </Animated.View>
-    </AnimatedPressable>
-  );
-}
-
-function RestaurantPreviewCard({
+const RestaurantPreviewCard = memo(function RestaurantPreviewCard({
   restaurant,
   width,
   isFavorited,
   onToggleFavorite,
+  highlightTag,
+  isNew = false,
 }: {
   restaurant: Restaurant;
   width: number;
   isFavorited: boolean;
   onToggleFavorite: () => void;
+  /** Optional badge like "Most ordered today" shown over the cover. */
+  highlightTag?: string;
+  isNew?: boolean;
 }) {
   const { t } = useHomeT();
   const { isRTL, language } = useLanguageStore();
@@ -398,16 +285,34 @@ function RestaurantPreviewCard({
         />
 
         <View style={[styles.rTopRow, isRTL && styles.rRowRtl]}>
-          <View
-            style={[
-              styles.rStatusBadge,
-              restaurant.isOpen ? styles.openBadge : styles.closedBadge,
-            ]}
-          >
-            <View style={styles.statusDot} />
-            <Text style={styles.statusBadgeText}>
-              {restaurant.isOpen ? t("restaurant.open") : t("restaurant.closed")}
-            </Text>
+          <View style={[styles.rBadgeStack, isRTL && styles.rBadgeStackRtl]}>
+            <View style={[styles.rBadgeRow, isRTL && styles.rRowRtl]}>
+              <View
+                style={[
+                  styles.rStatusBadge,
+                  restaurant.isOpen ? styles.openBadge : styles.closedBadge,
+                ]}
+              >
+                <View style={styles.statusDot} />
+                <Text style={styles.statusBadgeText}>
+                  {restaurant.isOpen ? t("restaurant.open") : t("restaurant.closed")}
+                </Text>
+              </View>
+              {isNew ? (
+                <View style={styles.rNewBadge}>
+                  <Ionicons name="sparkles" size={10} color="#fff" />
+                  <Text style={styles.rNewBadgeText}>{t("tags.new")}</Text>
+                </View>
+              ) : null}
+            </View>
+            {highlightTag ? (
+              <View style={[styles.rHighlightTag, isRTL && styles.rRowRtl]}>
+                <Ionicons name="flame" size={11} color="#fff" />
+                <Text style={styles.rHighlightTagText} numberOfLines={1}>
+                  {highlightTag}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <AnimatedPressable
@@ -462,34 +367,37 @@ function RestaurantPreviewCard({
         </View>
 
         <View style={[styles.rFooter, isRTL && styles.rRowRtl]}>
-          <View style={[styles.rMetaItem, isRTL && styles.rRowRtl]}>
-            <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
-            <Text style={styles.rMetaText} numberOfLines={1}>
-              {t("restaurant.minOrderAmount", {
-                amount: restaurant.minOrderAmount.toFixed(0),
-                currency: t("price.currency"),
-              })}
-            </Text>
-          </View>
+          {restaurant.minOrderAmount > 0 ? (
+            <View style={[styles.rMetaItem, isRTL && styles.rRowRtl]}>
+              <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
+              <Text style={styles.rMetaText} numberOfLines={1}>
+                {t("restaurant.minOrderAmount", {
+                  amount: restaurant.minOrderAmount.toFixed(0),
+                  currency: t("price.currency"),
+                })}
+              </Text>
+            </View>
+          ) : null}
+
+          {restaurant.minOrderAmount > 0 && restaurant.city ? (
+            <View style={styles.rMetaDivider} />
+          ) : null}
 
           {restaurant.city ? (
-            <>
-              <View style={styles.rMetaDivider} />
-              <View style={[styles.rMetaItem, isRTL && styles.rRowRtl]}>
-                <Ionicons name="location-outline" size={14} color={colors.outline} />
-                <Text style={[styles.rMetaText, styles.rCityText]} numberOfLines={1}>
-                  {restaurant.city}
-                </Text>
-              </View>
-            </>
+            <View style={[styles.rMetaItem, isRTL && styles.rRowRtl]}>
+              <Ionicons name="location-outline" size={14} color={colors.outline} />
+              <Text style={[styles.rMetaText, styles.rCityText]} numberOfLines={1}>
+                {restaurant.city}
+              </Text>
+            </View>
           ) : null}
         </View>
       </View>
     </AnimatedPressable>
   );
-}
+});
 
-function MealPreviewCard({
+const MealPreviewCard = memo(function MealPreviewCard({
   meal,
   restaurantName,
   width,
@@ -566,61 +474,7 @@ function MealPreviewCard({
       </View>
     </AnimatedPressable>
   );
-}
-
-function FavoriteCard({
-  restaurant,
-  isFavorited,
-  onToggle,
-  onPress,
-  isRTL,
-}: {
-  restaurant: Restaurant;
-  isFavorited: boolean;
-  onToggle: () => void;
-  onPress: () => void;
-  isRTL: boolean;
-}) {
-  return (
-    <AnimatedPressable onPress={onPress} haptic="impact" style={styles.favCard}>
-      <View style={styles.favImageWrap}>
-        <Image
-          source={imageSource(restaurant.coverUrl || restaurant.logoUrl, restaurant.cuisineType)}
-          placeholder={IMAGE_BLURHASH}
-          contentFit="cover"
-          transition={200}
-          style={styles.favImage}
-        />
-        <View
-          style={[
-            styles.favStatus,
-            isRTL && styles.favStatusRtl,
-            restaurant.isOpen ? styles.openBadge : styles.closedBadge,
-          ]}
-        >
-          <View style={styles.statusDot} />
-        </View>
-        <AnimatedPressable
-          onPress={(e) => { (e as any).stopPropagation?.(); onToggle(); }}
-          haptic="selection"
-          scaleTo={0.84}
-          style={[styles.favHeart, isRTL && styles.favHeartRtl]}
-        >
-          <Ionicons name={isFavorited ? "heart" : "heart-outline"} size={14} color={isFavorited ? "#F55905" : "#fff"} />
-        </AnimatedPressable>
-      </View>
-      <View style={[styles.favBody, isRTL && styles.favBodyRtl]}>
-        <Text style={[styles.favName, { textAlign: isRTL ? "right" : "left" }]} numberOfLines={1}>
-          {restaurant.name}
-        </Text>
-        <View style={styles.ratingPill}>
-          <Ionicons name="star" size={11} color="#D68A00" />
-          <Text style={styles.ratingText}>{restaurant.rating.toFixed(1)}</Text>
-        </View>
-      </View>
-    </AnimatedPressable>
-  );
-}
+});
 
 function RailSkeleton({
   count = 3,
@@ -673,6 +527,55 @@ function EmptySection({
   );
 }
 
+// Compact header that fades/slides in once the hero has scrolled away — keeps
+// the greeting + cart reachable without the big hero taking up the viewport.
+function StickyHeader({
+  scrollY,
+  firstName,
+}: {
+  scrollY: SharedValue<number>;
+  firstName: string;
+}) {
+  const { t } = useHomeT();
+  const isRTL = useLanguageStore((s) => s.isRTL);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [120, 180], [0, 1], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(scrollY.value, [120, 180], [-12, 0], Extrapolation.CLAMP) },
+    ],
+    pointerEvents: scrollY.value > 150 ? ("auto" as const) : ("none" as const),
+  }));
+
+  return (
+    <Animated.View style={[styles.stickyHeader, animatedStyle]} pointerEvents="box-none">
+      <SafeAreaView edges={["top"]} style={[styles.stickyInner, isRTL && styles.rowReverse]}>
+        <Ionicons name="restaurant" size={18} color={colors.primary} />
+        <Text
+          style={[styles.stickyAddressText, { writingDirection: isRTL ? "rtl" : "ltr" }]}
+          numberOfLines={1}
+        >
+          {t(`greeting.${getGreetingKey()}`)}, {firstName}
+        </Text>
+      </SafeAreaView>
+    </Animated.View>
+  );
+}
+
+// Generic horizontal rail wrapper — keeps every section's scroll feel identical.
+function Rail({ children }: { children: React.ReactNode }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.rail}
+      decelerationRate="fast"
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
 function HomeScreen() {
   const { t } = useHomeT();
   const { language } = useLanguageStore();
@@ -680,7 +583,6 @@ function HomeScreen() {
   const { width } = useWindowDimensions();
   const { data: profile } = useGetProfile();
   const feed = useRestaurantHomeFeed();
-  const cartItems = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
   const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
   const [search, setSearch] = useState("");
@@ -689,13 +591,25 @@ function HomeScreen() {
   const { isFavorite } = useFavorites();
   const { mutate: toggleFavorite } = useToggleFavorite();
 
-  const cartCount = getCartQuantity(cartItems);
+  // Sticky-header collapse driver.
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+
+  // Derived rails (Trending / Top Rated / New / Suggested) from already-loaded data.
+  const sections = useHomeSections(feed.restaurants, favoriteRestaurants);
+
   const firstName = profile?.firstName?.trim() || t("user.guest");
   const mealCardWidth = Math.min(width * 0.42, 172);
+  const topRatedCardWidth = Math.min(width * 0.44, 190);
   // Restaurants rail: a roomy card with the next one peeking, so users learn
   // the rail scrolls. Capped so it never gets oversized on tablets.
   const restaurantCardWidth = Math.min(width * 0.74, 300);
   const normalizedSearch = search.trim().toLowerCase();
+  // When the user is searching, collapse the marketing rails and show only
+  // matched restaurants + meals — keeps results focused (original UX intent).
+  const isSearching = normalizedSearch.length > 0;
 
   const restaurantPreview = useMemo(
     () =>
@@ -748,11 +662,21 @@ function HomeScreen() {
     [addItem],
   );
 
+  const openRestaurant = useCallback(
+    (id: string) => router.push(`/restaurants/${id}` as never),
+    [],
+  );
+
   return (
     <SafeAreaView key={language} style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      <ScrollView
+      {/* Compact header fades in once the hero scrolls away */}
+      <StickyHeader scrollY={scrollY} firstName={firstName} />
+
+      <Animated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
         refreshControl={
@@ -764,116 +688,90 @@ function HomeScreen() {
           />
         }
       >
+        {/* Hero + Search */}
         <FadeInView>
           <HomeHero
             firstName={firstName}
-            cartCount={cartCount}
             search={search}
             onSearchChange={setSearch}
           />
         </FadeInView>
 
-        {favoriteRestaurants.length > 0 ? (
-          <FadeInView delay={80}>
-            <SectionHeader
-              title={t("sections.saved")}
-              action={t("actions.seeAll")}
-              onAction={() => router.push("/restaurants" as never)}
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
-              decelerationRate="fast"
-            >
-              {favoriteRestaurants.map((restaurant, index) => (
-                <FadeInView key={restaurant.id} delay={110 + index * 50}>
-                  <FavoriteCard
-                    restaurant={restaurant}
-                    isFavorited={isFavorite(restaurant.id)}
-                    onToggle={() => toggleFavorite(restaurant)}
-                    onPress={() =>
-                      router.push({ pathname: "/restaurants/[id]", params: { id: restaurant.id } } as never)
-                    }
-                    isRTL={isRTL}
-                  />
-                </FadeInView>
-              ))}
-            </ScrollView>
+        {/* Explore Cuisines 🌍 (primary cuisine picker + filter) */}
+        {!isSearching ? (
+          <FadeInView delay={120}>
+            <SectionHeader title={t("sections.exploreCuisines")} />
+            {feed.isCategoriesLoading ? (
+              <Rail>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <View key={i} style={styles.cuisineSkeleton} />
+                ))}
+              </Rail>
+            ) : (
+              <Rail>
+                {/* "All" reset tile — clears the active cuisine filter. */}
+                <CuisineChip
+                  label={t("category.all")}
+                  variant="all"
+                  isRTL={isRTL}
+                  selected={feed.selectedCuisineType === null}
+                  onPress={() => feed.setSelectedCuisineType(null)}
+                />
+                {feed.categories
+                  .filter((c) => c.cuisineType)
+                  .map((category) => (
+                    <CuisineChip
+                      key={category.id ?? category.cuisineType}
+                      label={
+                        category.name?.trim() ||
+                        getCategoryLabel(category.cuisineType as string, isArabic)
+                      }
+                      cuisineType={category.cuisineType as string}
+                      imageUri={category.iconUrl}
+                      isRTL={isRTL}
+                      selected={category.cuisineType === feed.selectedCuisineType}
+                      onPress={() => handleCategoryPress(category.cuisineType)}
+                    />
+                  ))}
+              </Rail>
+            )}
           </FadeInView>
         ) : null}
 
-        <FadeInView delay={130}>
-          <SectionHeader title={t("sections.categories")} />
-          {feed.isCategoriesLoading ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryRail}
-            >
-              {[96, 124, 108, 132, 100, 120].map((w, index) => (
-                <View key={index} style={[styles.catPillSkeleton, { width: w }]} />
-              ))}
-            </ScrollView>
-          ) : feed.categories.length ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryRail}
-            >
-              {feed.categories.map((category, index) => (
-                <FadeInView key={category.id ?? "all"} delay={170 + index * 40}>
-                  <CategoryChip
-                    category={category}
-                    selected={category.cuisineType === feed.selectedCuisineType}
-                    onPress={() => handleCategoryPress(category.cuisineType)}
-                  />
-                </FadeInView>
-              ))}
-            </ScrollView>
-          ) : (
-            <EmptySection text={t("empty.noCategories")} />
-          )}
-        </FadeInView>
-
-        <FadeInView delay={230}>
+        {/* 5 — Trending 🔥 (search results / category-filtered list / trending) */}
+        <FadeInView delay={180}>
           <SectionHeader
             title={
-              activeCategoryLabel
-                ? `${t("sections.restaurants")} · ${activeCategoryLabel}`
-                : t("sections.restaurants")
+              isSearching
+                ? t("sections.restaurants")
+                : activeCategoryLabel
+                  ? `${t("sections.restaurants")} · ${activeCategoryLabel}`
+                  : t("sections.trending")
             }
             action={t("actions.seeAll")}
             onAction={() => router.push("/restaurants" as never)}
           />
           {feed.isRestaurantsLoading && !restaurantPreview.length ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
-            >
+            <Rail>
               {Array.from({ length: 3 }).map((_, index) => (
                 <View key={index} style={[styles.rCardSkeleton, { width: restaurantCardWidth }]} />
               ))}
-            </ScrollView>
-          ) : restaurantPreview.length ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
-              decelerationRate="fast"
-            >
-              {restaurantPreview.map((restaurant, index) => (
-                <FadeInView key={restaurant.id} delay={260 + index * 60}>
+            </Rail>
+          ) : (isSearching || activeCategoryLabel ? restaurantPreview : sections.trending).length ? (
+            <Rail>
+              {(isSearching || activeCategoryLabel ? restaurantPreview : sections.trending).map((restaurant, index) => (
+                <FadeInView key={restaurant.id} delay={200 + index * 55}>
                   <RestaurantPreviewCard
                     restaurant={restaurant}
                     width={restaurantCardWidth}
                     isFavorited={isFavorite(restaurant.id)}
                     onToggleFavorite={() => toggleFavorite(restaurant)}
+                    highlightTag={!isSearching && !activeCategoryLabel && index === 0 ? t("tags.mostOrdered") : undefined}
+                    isNew={isNewRestaurant(restaurant.id)}
                   />
                 </FadeInView>
               ))}
-            </ScrollView>
+            </Rail>
           ) : activeCategoryLabel ? (
             <EmptySection
               text={t("empty.restaurantsInCategory")}
@@ -885,7 +783,8 @@ function HomeScreen() {
           )}
         </FadeInView>
 
-        <FadeInView delay={320}>
+        {/* 6 — Popular Meals */}
+        <FadeInView delay={230}>
           <SectionHeader
             title={
               activeCategoryLabel
@@ -896,14 +795,9 @@ function HomeScreen() {
           {feed.isMealsLoading && !popularMeals.length ? (
             <RailSkeleton count={3} width={mealCardWidth} height={234} />
           ) : popularMeals.length ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
-              decelerationRate="fast"
-            >
+            <Rail>
               {popularMeals.map(({ meal, restaurant }, index) => (
-                <FadeInView key={`${restaurant.id}:${meal.id}`} delay={350 + index * 50}>
+                <FadeInView key={`${restaurant.id}:${meal.id}`} delay={250 + index * 45}>
                   <MealPreviewCard
                     meal={meal}
                     restaurantName={restaurant.name}
@@ -912,12 +806,81 @@ function HomeScreen() {
                   />
                 </FadeInView>
               ))}
-            </ScrollView>
+            </Rail>
           ) : (
             <EmptySection text={t("empty.mealsForRestaurant")} />
           )}
         </FadeInView>
-      </ScrollView>
+
+        {/* Promo banners — placed mid-feed so it breaks up the rails nicely */}
+        {!isSearching ? (
+          <FadeInView delay={250} style={styles.sectionGap}>
+            <PromoCarousel onPressBanner={() => router.push("/restaurants" as never)} />
+          </FadeInView>
+        ) : null}
+
+        {/* Top Rated ⭐ */}
+        {!isSearching && !activeCategoryLabel && sections.topRated.length > 0 ? (
+          <FadeInView delay={270}>
+            <SectionHeader
+              title={t("sections.topRated")}
+              action={t("actions.seeAll")}
+              onAction={() => router.push("/restaurants" as never)}
+            />
+            <Rail>
+              {sections.topRated.map((restaurant, index) => (
+                <FadeInView key={restaurant.id} delay={290 + index * 45}>
+                  <TopRatedCard
+                    restaurant={restaurant}
+                    width={topRatedCardWidth}
+                    isRTL={isRTL}
+                    onPress={() => openRestaurant(restaurant.id)}
+                  />
+                </FadeInView>
+              ))}
+            </Rail>
+          </FadeInView>
+        ) : null}
+
+        {/* New on App ✨ */}
+        {!isSearching && !activeCategoryLabel && sections.newOnApp.length > 0 ? (
+          <FadeInView delay={330}>
+            <SectionHeader title={t("sections.newOnApp")} />
+            <Rail>
+              {sections.newOnApp.map((restaurant, index) => (
+                <FadeInView key={restaurant.id} delay={350 + index * 45}>
+                  <RestaurantPreviewCard
+                    restaurant={restaurant}
+                    width={restaurantCardWidth}
+                    isFavorited={isFavorite(restaurant.id)}
+                    onToggleFavorite={() => toggleFavorite(restaurant)}
+                    isNew
+                  />
+                </FadeInView>
+              ))}
+            </Rail>
+          </FadeInView>
+        ) : null}
+
+        {/* 10 — Suggested For You 🤖 */}
+        {!isSearching && !activeCategoryLabel && sections.suggested.length > 0 ? (
+          <FadeInView delay={360}>
+            <SectionHeader title={t("sections.suggested")} />
+            <Rail>
+              {sections.suggested.map((restaurant, index) => (
+                <FadeInView key={restaurant.id} delay={380 + index * 45}>
+                  <RestaurantPreviewCard
+                    restaurant={restaurant}
+                    width={restaurantCardWidth}
+                    isFavorited={isFavorite(restaurant.id)}
+                    onToggleFavorite={() => toggleFavorite(restaurant)}
+                  />
+                </FadeInView>
+              ))}
+            </Rail>
+          </FadeInView>
+        ) : null}
+      </Animated.ScrollView>
 
       <FloatingTabBar />
 
@@ -940,6 +903,73 @@ const styles = StyleSheet.create({
   scroll: {
     paddingBottom: screen.bottomTabSpace + 18,
   },
+  rowReverse: { flexDirection: "row-reverse" },
+  sectionGap: { marginBottom: 24 },
+
+  // Sticky header
+  stickyHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    backgroundColor: colors.softSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceContainer,
+    ...shadows.soft,
+  },
+  stickyInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: screen.horizontal,
+    paddingBottom: 10,
+  },
+  stickyAddressText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onSurface,
+    fontSize: 14,
+    flex: 1,
+  },
+  // New badge + highlight tag on restaurant cards.
+  // Column so badges stack at the top-left (status/new on top, the "most
+  // ordered" ribbon below) — never overlapping the bottom cuisine chip.
+  rBadgeStack: { alignItems: "flex-start", gap: 6 },
+  rBadgeStackRtl: { alignItems: "flex-end" },
+  rBadgeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  rNewBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#7C3AED",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+  },
+  rNewBadgeText: {
+    fontFamily: typography.bodyBold,
+    color: "#fff",
+    fontSize: 9.5,
+    letterSpacing: 0.2,
+  },
+  rHighlightTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+    ...shadows.primary,
+  },
+  rHighlightTagText: {
+    fontFamily: typography.bodyBold,
+    color: "#fff",
+    fontSize: 10.5,
+  },
+
   heroCard: {
     marginHorizontal: screen.horizontal,
     marginTop: 8,
@@ -1006,25 +1036,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  heroBadge: {
-    position: "absolute",
-    top: 7,
-    right: 7,
-    minWidth: 15,
-    height: 15,
-    borderRadius: radii.pill,
-    backgroundColor: colors.onPrimary,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroBadgeText: {
-    fontFamily: typography.bodyBold,
-    fontSize: 8,
-    color: colors.primary,
-    lineHeight: 9,
   },
   heroMainRow: {
     marginTop: 24,
@@ -1170,85 +1181,16 @@ const styles = StyleSheet.create({
     color: colors.outline,
     fontSize: 12,
   },
-  categoryRail: {
-    paddingHorizontal: screen.horizontal,
-    gap: 10,
-    paddingTop: 2,
-    paddingBottom: 24,
-  },
-  catPressable: {
-    borderRadius: radii.pill,
-  },
-  catPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    height: 48,
-    paddingLeft: 7,
-    paddingRight: 14,
-    borderRadius: radii.pill,
-  },
-  catPillRtl: {
-    flexDirection: "row-reverse",
-    paddingLeft: 14,
-    paddingRight: 7,
-  },
-  catPillIdle: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: "#ECECEC",
-    ...shadows.soft,
-  },
-  catPillSelected: {
-    ...shadows.primary,
-  },
-  catDisc: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  catDiscSelected: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-  },
-  catDiscIcon: {
-    width: "100%",
-    height: "100%",
-  },
-  catDiscEmoji: {
-    fontSize: 17,
-    lineHeight: 21,
-  },
-  catLabel: {
-    fontFamily: typography.headlineSemi,
-    fontSize: 13.5,
-  },
-  catCount: {
-    minWidth: 22,
-    height: 20,
-    paddingHorizontal: 6,
-    borderRadius: radii.pill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  catCountText: {
-    fontFamily: typography.bodyBold,
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  catPillSkeleton: {
-    width: 104,
-    height: 48,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceContainerHighest,
-  },
   rail: {
     paddingHorizontal: screen.horizontal,
     gap: 14,
     paddingBottom: 26,
+  },
+  cuisineSkeleton: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceContainerHighest,
   },
   rCard: {
     borderRadius: radii.xxl,
@@ -1534,62 +1476,6 @@ const styles = StyleSheet.create({
   skeletonCard: {
     borderRadius: radii.xl,
     backgroundColor: colors.surfaceContainerHighest,
-  },
-  favCard: {
-    width: 130,
-    borderRadius: radii.xl,
-    backgroundColor: colors.card,
-    overflow: 'hidden',
-    ...shadows.soft,
-  },
-  favImageWrap: {
-    width: '100%',
-    height: 88,
-    position: 'relative',
-    backgroundColor: colors.surfaceContainerHighest,
-  },
-  favImage: { width: '100%', height: '100%' },
-  favStatus: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
-  favStatusRtl: {
-    left: undefined,
-    right: 8,
-  },
-  favHeart: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(30,30,30,0.38)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  favHeartRtl: {
-    right: undefined,
-    left: 6,
-  },
-  favBody: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  favBodyRtl: {
-    alignItems: 'flex-end',
-  },
-  favName: {
-    fontFamily: typography.bodyBold,
-    color: colors.onSurface,
-    fontSize: 12,
   },
   emptySection: {
     marginHorizontal: screen.horizontal,

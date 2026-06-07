@@ -159,7 +159,7 @@ function DeliveryTrackingScreen() {
         // `destination` is guaranteed non-null here by the early-return above;
         // prefer the driver's live position when available so the camera lands
         // on the action rather than the doorstep.
-        const center = driverCoords ?? destination;
+        const center = driverCoords ?? destination ?? { lat: 31.5017, lng: 34.4668 };
         return {
             latitude: center.lat,
             longitude: center.lng,
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        ...shadows.medium,
+        ...shadows.soft,
     },
     errorBannerText: {
         flex: 1,
