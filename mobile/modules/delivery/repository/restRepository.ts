@@ -1,6 +1,14 @@
 import { authApi, deliveryApi, orderApi } from '@/lib/api';
 import { DeliveryAgent } from '../entities/DeliveryAgent';
-import { ActiveAssignment, ApplicationQuestion, DeliveryApplicationFormData, PendingOrder } from '../types';
+import {
+    ActiveAssignment,
+    ApplicationQuestion,
+    DeliveryApplicationFormData,
+    DeliveryOrder,
+    DeliveryOrderItem,
+    DeliveryOrderStatus,
+    PendingOrder,
+} from '../types';
 import { DeliveryTokensDTO } from '../dto/DeliveryAgent';
 import { toDeliveryAdapter } from '../adapter/toDeliveryAdapter';
 import { DeliveryRepository } from './DeliveryRepository';
@@ -11,11 +19,85 @@ const num = (v: unknown): number | undefined => {
     return Number.isFinite(n) ? n : undefined;
 };
 
-const toOrderShape = (raw: unknown): Omit<ActiveAssignment, 'status'> & { status: string } | null => {
+const str = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.length > 0 ? v : undefined;
+
+const iso = (v: unknown): string | undefined => {
+    if (typeof v === 'string' && v.length > 0) return v;
+    if (v instanceof Date) return v.toISOString();
+    return undefined;
+};
+
+/**
+ * Map the backend OrderStatus + deliveryAcceptance into the driver-facing
+ * canonical status. The backend is the source of truth; this is purely a view
+ * label so the UI can render the 5-step lifecycle the spec asks for.
+ */
+const toDeliveryStatus = (
+    rawStatus: string | undefined,
+    acceptance: string | undefined,
+): DeliveryOrderStatus => {
+    const s = (rawStatus ?? '').toLowerCase();
+    if (s === 'cancelled' || s === 'refunded') return 'CANCELLED';
+    if (s === 'delivered') return 'DELIVERED';
+    if (s === 'out_for_delivery') return 'ON_THE_WAY';
+    // confirmed / preparing / ready_for_pickup with an accepted driver
+    if ((acceptance ?? '').toLowerCase() === 'accepted') return 'ACCEPTED';
+    return 'ASSIGNED';
+};
+
+const toOrderItems = (raw: unknown): DeliveryOrderItem[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((it): DeliveryOrderItem | null => {
+            if (!it || typeof it !== 'object') return null;
+            const r = it as Record<string, any>;
+            const id = str(r.id) ?? str(r.mealId) ?? str(r.meal_id);
+            const name =
+                str(r.name) ??
+                str(r.mealNameSnapshot) ??
+                str(r.meal_name_snapshot) ??
+                str(r.mealName);
+            if (!id && !name) return null;
+            const quantity = num(r.quantity) ?? 1;
+            const unitPrice =
+                num(r.unitPrice) ??
+                num(r.unitPriceSnapshot) ??
+                num(r.unit_price_snapshot) ??
+                0;
+            const totalPrice =
+                num(r.totalPrice) ?? num(r.total_price) ?? unitPrice * quantity;
+            const optionsRaw = Array.isArray(r.options) ? r.options : [];
+            const options: { name: string; price?: number }[] = [];
+            for (const o of optionsRaw) {
+                if (!o || typeof o !== 'object') continue;
+                const oName =
+                    str(o.name) ??
+                    str(o.optionNameSnapshot) ??
+                    str(o.option_name_snapshot);
+                if (!oName) continue;
+                const price = num(o.price) ?? num(o.priceSnapshot) ?? num(o.price_snapshot);
+                options.push(price === undefined ? { name: oName } : { name: oName, price });
+            }
+            return {
+                id: id ?? name ?? Math.random().toString(36).slice(2),
+                name: name ?? '',
+                quantity,
+                unitPrice,
+                totalPrice,
+                specialInstructions:
+                    str(r.specialInstructions) ?? str(r.special_instructions),
+                options,
+            };
+        })
+        .filter((it): it is DeliveryOrderItem => it !== null);
+};
+
+const toDeliveryOrder = (raw: unknown): DeliveryOrder | null => {
     if (!raw || typeof raw !== 'object') return null;
     const r = raw as Record<string, any>;
-    const orderId = r.orderId ?? r.id;
-    if (typeof orderId !== 'string') return null;
+    const orderId = str(r.orderId) ?? str(r.id);
+    if (!orderId) return null;
 
     // The customer's pinned location is stored on the backend as
     // `deliveryAddressSnapshot` / `delivery_address_snapshot` (same JSONB column
@@ -28,74 +110,73 @@ const toOrderShape = (raw: unknown): Omit<ActiveAssignment, 'status'> & { status
         r.address_snapshot ??
         null;
 
-    const dropLat = num(
-        r.dropoff?.lat ??
-        addrSnap?.lat ??
-        r.delivery?.latitude ??
-        r.dropoffLat,
-    );
-    const dropLng = num(
-        r.dropoff?.lng ??
-        addrSnap?.lng ??
-        r.delivery?.longitude ??
-        r.dropoffLng,
-    );
+    const dropLat = num(r.dropoff?.lat ?? addrSnap?.lat ?? r.delivery?.latitude ?? r.dropoffLat);
+    const dropLng = num(r.dropoff?.lng ?? addrSnap?.lng ?? r.delivery?.longitude ?? r.dropoffLng);
 
-    // Build a human-readable address from the snapshot fields when present.
-    const dropAddress: string | undefined =
-        r.dropoff?.address ??
-        (addrSnap
-            ? [addrSnap.street, addrSnap.city].filter(Boolean).join(', ')
-            : undefined) ??
-        r.delivery?.addressLine ??
-        r.delivery?.address;
+    const dropAddress =
+        str(r.dropoff?.address) ??
+        (addrSnap ? [addrSnap.street, addrSnap.city].filter(Boolean).join(', ') || undefined : undefined) ??
+        str(r.delivery?.addressLine) ??
+        str(r.delivery?.address);
 
     const pickLat = num(r.pickup?.lat ?? r.restaurant?.latitude ?? r.pickupLat);
     const pickLng = num(r.pickup?.lng ?? r.restaurant?.longitude ?? r.pickupLng);
 
+    const items = toOrderItems(r.items);
+    const rawStatus = str(r.status) ?? 'pending';
+    const acceptance = str(r.deliveryAcceptance) ?? str(r.delivery_acceptance);
+
+    const customerNotes =
+        str(r.customerNotes) ?? str(r.customer_notes) ?? str(r.notes) ?? addrSnap?.notes;
+
     return {
         orderId,
-        orderNumber: r.orderNumber ?? undefined,
-        status: typeof r.status === 'string' ? r.status : 'ASSIGNED',
-        dropoff: dropLat !== undefined && dropLng !== undefined ? {
-            lat: dropLat,
-            lng: dropLng,
-            address: dropAddress,
-        } : null,
-        pickup: pickLat !== undefined && pickLng !== undefined ? {
-            lat: pickLat,
-            lng: pickLng,
-            name: r.pickup?.name ?? r.restaurant?.name ?? r.restaurantName,
-            address: r.pickup?.address ?? r.restaurant?.address,
-        } : null,
+        orderNumber: str(r.orderNumber) ?? str(r.order_number),
+        status: toDeliveryStatus(rawStatus, acceptance),
+        rawStatus,
+        dropoff:
+            dropLat !== undefined && dropLng !== undefined
+                ? { lat: dropLat, lng: dropLng, address: dropAddress }
+                : null,
+        pickup:
+            pickLat !== undefined && pickLng !== undefined
+                ? {
+                      lat: pickLat,
+                      lng: pickLng,
+                      name: str(r.pickup?.name) ?? str(r.restaurant?.name) ?? str(r.restaurantName) ?? str(r.restaurantNameSnapshot) ?? str(r.restaurant_name_snapshot),
+                      address: str(r.pickup?.address) ?? str(r.restaurant?.address),
+                  }
+                : null,
         customerName:
-            r.customerName ??
-            r.customerNameSnapshot ??
-            r.customer_name_snapshot ??
-            r.customer?.name ??
-            r.delivery?.contactName,
+            str(r.customerName) ?? str(r.customerNameSnapshot) ?? str(r.customer_name_snapshot) ?? str(r.customer?.name) ?? str(r.delivery?.contactName),
         customerPhone:
-            r.customerPhone ??
-            r.customerPhoneSnapshot ??
-            r.customer_phone_snapshot ??
-            r.customer?.phone ??
-            r.delivery?.contactPhone,
-        restaurantName: r.restaurantName ?? r.restaurant?.name,
-        restaurantPhone: r.restaurantPhone ?? r.restaurant?.phone,
+            str(r.customerPhone) ?? str(r.customerPhoneSnapshot) ?? str(r.customer_phone_snapshot) ?? str(r.customer?.phone) ?? str(r.delivery?.contactPhone),
+        restaurantName:
+            str(r.restaurantName) ?? str(r.restaurantNameSnapshot) ?? str(r.restaurant_name_snapshot) ?? str(r.restaurant?.name),
+        restaurantPhone: str(r.restaurantPhone) ?? str(r.restaurant?.phone),
+        subtotal: num(r.subtotal),
+        deliveryFee: num(r.deliveryFee) ?? num(r.delivery_fee),
+        discountAmount: num(r.discountAmount) ?? num(r.discount_amount),
         total: num(r.total ?? r.totalAmount ?? r.total_amount),
-        itemsCount: num(r.itemsCount ?? r.items?.length),
-        notes:
-            typeof r.notes === 'string' ? r.notes :
-            typeof r.customerNotes === 'string' ? r.customerNotes :
-            addrSnap?.notes ?? undefined,
+        paymentMethod: str(r.paymentMethod) ?? str(r.payment_method),
+        paymentStatus: str(r.paymentStatus) ?? str(r.payment_status),
+        items,
+        itemsCount: num(r.itemsCount) ?? (items.length || undefined),
+        customerNotes,
+        notes: customerNotes,
+        createdAt: iso(r.createdAt ?? r.created_at),
+        assignedAt: iso(r.assignedAt ?? r.assigned_at),
+        acceptedAt: iso(r.acceptedAt ?? r.accepted_at),
+        estimatedDeliveryAt: iso(r.estimatedDeliveryAt ?? r.estimated_delivery_at),
+        deliveredAt: iso(r.deliveredAt ?? r.delivered_at),
     };
 };
 
 const toActiveAssignment = (raw: unknown): ActiveAssignment | null =>
-    toOrderShape(raw) as ActiveAssignment | null;
+    toDeliveryOrder(raw);
 
 const toPendingOrder = (raw: unknown): PendingOrder | null =>
-    toOrderShape(raw) as PendingOrder | null;
+    toDeliveryOrder(raw);
 
 export const restRepository = (): DeliveryRepository => ({
     register: async (phone) => {
@@ -231,5 +312,23 @@ export const restRepository = (): DeliveryRepository => ({
             `/api/order/orders/${orderId}/delivery/reject`,
             reason ? { reason } : {},
         );
+    },
+
+    updateOrderStatus: async (orderId, status): Promise<ActiveAssignment | null> => {
+        // Drive the lifecycle via the shared status endpoint. The backend only
+        // lets the assigned + accepted driver perform delivery transitions.
+        await orderApi.patch(`/api/order/orders/${orderId}/status`, { status });
+        // Re-read the canonical state so the UI never drifts from the server.
+        try {
+            const res = await orderApi.get('/api/order/orders/delivery/active');
+            return toActiveAssignment(res.data?.data ?? res.data);
+        } catch {
+            return null;
+        }
+    },
+
+    getOrderDetails: async (orderId): Promise<DeliveryOrder | null> => {
+        const res = await orderApi.get(`/api/order/orders/${orderId}`);
+        return toDeliveryOrder(res.data?.data ?? res.data);
     },
 });

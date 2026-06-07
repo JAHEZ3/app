@@ -300,6 +300,8 @@ GET /api/order/orders/:id/receipt
 GET    /api/order/orders                       → list (paginated, filtered by role)
 GET    /api/order/orders/:id                   → details
 PATCH  /api/order/orders/:id/status            → restaurant_owner / manager / delivery only
+                                                 (delivery: only the assigned + ACCEPTED agent;
+                                                  ready_for_pickup → out_for_delivery → delivered)
 PATCH  /api/order/orders/:id/delivery          → assign agent (manager / restaurant_owner / customer self-pick)
 POST   /api/order/orders/:id/delivery/accept   → driver accepts a pending assignment
 POST   /api/order/orders/:id/delivery/reject   → driver declines (clears the assignment)

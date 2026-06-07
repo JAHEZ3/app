@@ -411,6 +411,16 @@ export class OrderService {
 
     this.assertAccess(order, userId, role);
 
+    // A delivery agent may only drive the delivery lifecycle on an order they
+    // have actually accepted. `assertAccess` already proved the order is
+    // assigned to this agent; here we additionally require acceptance so a
+    // driver can't push a still-pending invitation straight to out_for_delivery.
+    if (role === 'delivery') {
+      if (order.deliveryAcceptance !== DeliveryAcceptance.ACCEPTED) {
+        throw new ForbiddenException('يجب قبول الطلب قبل تحديث حالة التوصيل');
+      }
+    }
+
     const newStatus = dto.status as OrderStatus;
     this.validateTransition(order.status, newStatus, role);
 
@@ -523,9 +533,14 @@ export class OrderService {
       ? DeliveryAcceptance.PENDING
       : DeliveryAcceptance.ACCEPTED;
 
+    const now = new Date();
     await this.orderRepo.update(orderId, {
       deliveryAgentId: dto.deliveryAgentId,
       deliveryAcceptance: nextAcceptance,
+      assignedAt: now,
+      // Manager/owner dispatch is auto-accepted, so stamp acceptance now too.
+      // Customer self-pick stays pending until the driver taps Accept.
+      acceptedAt: nextAcceptance === DeliveryAcceptance.ACCEPTED ? now : null,
     });
 
     this.emitSafe('order.delivery.assigned', {
@@ -534,6 +549,11 @@ export class OrderService {
       orderNumber: order.orderNumber,
       deliveryAgentId: dto.deliveryAgentId,
       acceptance: nextAcceptance,
+      assignedAt: now.toISOString(),
+      acceptedAt:
+        nextAcceptance === DeliveryAcceptance.ACCEPTED
+          ? now.toISOString()
+          : null,
       restaurantId: order.restaurantId,
       customerId: order.customerId,
       ownerUserId: order.ownerUserId,
@@ -576,8 +596,10 @@ export class OrderService {
       throw new BadRequestException('لا توجد دعوة بانتظار القبول لهذا الطلب');
     }
 
+    const acceptedAt = new Date();
     await this.orderRepo.update(orderId, {
       deliveryAcceptance: DeliveryAcceptance.ACCEPTED,
+      acceptedAt,
     });
 
     this.emitSafe('order.delivery.accepted', {
@@ -588,7 +610,7 @@ export class OrderService {
       restaurantId: order.restaurantId,
       customerId: order.customerId,
       ownerUserId: order.ownerUserId,
-      acceptedAt: new Date().toISOString(),
+      acceptedAt: acceptedAt.toISOString(),
     });
 
     this.logger.log({ msg: 'delivery_accepted', orderId, agentId: userId });

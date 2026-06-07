@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Appearance,
     Linking,
     Platform,
@@ -29,7 +30,9 @@ import {
 import { useDeliveryT } from '@/hooks/useAppTranslation';
 import { useRTL } from '@/hooks/useRTL';
 import { radii, shadows, typography } from '@/components/ui/theme';
+import { router } from 'expo-router';
 import { useActiveAssignment } from '../hooks/useActiveAssignment';
+import { useUpdateDeliveryStatus } from '../hooks/useUpdateDeliveryStatus';
 import { deliverySocketService } from '@/socket/socket.service';
 
 const BROADCAST_THROTTLE_MS = 5_000;
@@ -43,6 +46,42 @@ function DeliveryAgentTrackingScreen() {
     const theme = systemScheme === 'dark' ? DARK_THEME : LIGHT_THEME;
 
     const { data: assignment, isLoading, refetch, isRefetching, isError } = useActiveAssignment();
+    const updateStatus = useUpdateDeliveryStatus();
+
+    const advanceStatus = useCallback(
+        (next: 'out_for_delivery' | 'delivered') => {
+            if (!assignment?.orderId || updateStatus.isPending) return; // duplicate guard
+            const isDeliver = next === 'delivered';
+            Alert.alert(
+                isDeliver
+                    ? t('actions.confirmDeliveredTitle', { defaultValue: 'Mark as delivered?' })
+                    : t('actions.confirmStartTitle', { defaultValue: 'Start delivery?' }),
+                isDeliver
+                    ? t('actions.confirmDeliveredBody', { defaultValue: 'This finalizes the order. It cannot be undone.' })
+                    : t('actions.confirmStartBody', { defaultValue: 'The customer will see that you are on the way.' }),
+                [
+                    { text: t('actions.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+                    {
+                        text: isDeliver
+                            ? t('actions.delivered', { defaultValue: 'Delivered' })
+                            : t('actions.startDelivery', { defaultValue: 'Start Delivery' }),
+                        onPress: () =>
+                            updateStatus.mutate(
+                                { orderId: assignment.orderId, status: next },
+                                {
+                                    onError: () =>
+                                        Alert.alert(
+                                            t('actions.errorTitle', { defaultValue: 'Could not update' }),
+                                            t('actions.errorBody', { defaultValue: 'Please try again.' }),
+                                        ),
+                                },
+                            ),
+                    },
+                ],
+            );
+        },
+        [assignment?.orderId, updateStatus, t],
+    );
 
     const [agentCoords, setAgentCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [permissionDenied, setPermissionDenied] = useState(false);
@@ -404,6 +443,62 @@ function DeliveryAgentTrackingScreen() {
                             </Text>
                         </TouchableOpacity>
                     </View>
+
+                    {/* Lifecycle action — Start Delivery (ready for pickup) /
+                        Delivered (on the way). Start is gated on the restaurant
+                        having marked the food ready so the backend transition
+                        (ready_for_pickup → out_for_delivery) succeeds. */}
+                    {assignment.status === 'ACCEPTED' && assignment.rawStatus === 'ready_for_pickup' ? (
+                        <TouchableOpacity
+                            onPress={() => advanceStatus('out_for_delivery')}
+                            disabled={updateStatus.isPending}
+                            style={[styles.lifecycleBtn, { backgroundColor: '#F55905' }, updateStatus.isPending && { opacity: 0.7 }]}
+                        >
+                            {updateStatus.isPending ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="bicycle" size={18} color="#fff" />
+                                    <Text style={styles.lifecycleBtnText}>
+                                        {t('actions.startDelivery', { defaultValue: 'Start Delivery' })}
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    ) : null}
+                    {assignment.status === 'ON_THE_WAY' ? (
+                        <TouchableOpacity
+                            onPress={() => advanceStatus('delivered')}
+                            disabled={updateStatus.isPending}
+                            style={[styles.lifecycleBtn, { backgroundColor: '#1a7a4a' }, updateStatus.isPending && { opacity: 0.7 }]}
+                        >
+                            {updateStatus.isPending ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark-done" size={18} color="#fff" />
+                                    <Text style={styles.lifecycleBtnText}>
+                                        {t('actions.delivered', { defaultValue: 'Delivered' })}
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    ) : null}
+
+                    <TouchableOpacity
+                        onPress={() =>
+                            router.navigate({
+                                pathname: '/delivery/order/[id]',
+                                params: { id: assignment.orderId },
+                            } as never)
+                        }
+                        style={styles.detailsLink}
+                    >
+                        <Ionicons name="receipt-outline" size={15} color={theme.outline} />
+                        <Text style={[styles.detailsLinkText, { color: theme.outline }]}>
+                            {t('actions.viewDetails', { defaultValue: 'View order details' })}
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             </Animated.View>
         </View>
@@ -476,6 +571,22 @@ const styles = StyleSheet.create({
     actionPrimaryText: { color: '#fff', fontFamily: typography.headlineSemi, fontSize: 13 },
     actionSecondary: { backgroundColor: 'transparent', borderWidth: 1 },
     actionSecondaryText: { fontFamily: typography.headlineSemi, fontSize: 13 },
+    lifecycleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        height: 50,
+        borderRadius: radii.pill,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    lifecycleBtnText: { color: '#fff', fontFamily: typography.headlineSemi, fontSize: 15 },
+    detailsLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
+    detailsLinkText: { fontFamily: typography.bodyMedium, fontSize: 12 },
     pinWrap: { alignItems: 'center' },
     pin: {
         width: 38,

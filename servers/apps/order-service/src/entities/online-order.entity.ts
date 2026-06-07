@@ -34,6 +34,16 @@ export class OnlineOrder extends Order {
   @Column({ name: 'estimated_delivery_at', type: 'timestamp', nullable: true })
   estimatedDeliveryAt: Date;
 
+  // When a driver was attached to the order (manager/owner dispatch or customer
+  // self-pick). Surfaced on the driver dashboard as "assignment time".
+  @Column({ name: 'assigned_at', type: 'timestamp', nullable: true })
+  assignedAt: Date | null;
+
+  // When the assigned driver tapped Accept. For manager/owner dispatch (which is
+  // auto-accepted) this is stamped at assignment time too.
+  @Column({ name: 'accepted_at', type: 'timestamp', nullable: true })
+  acceptedAt: Date | null;
+
   @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
   deliveredAt: Date;
 

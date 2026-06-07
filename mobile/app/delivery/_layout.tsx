@@ -22,6 +22,7 @@ export default function DeliveryLayout() {
                 <Stack.Screen name="rejected" />
                 <Stack.Screen name="dashboard" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="tabs" options={{ gestureEnabled: false, animation: 'fade' }} />
+                <Stack.Screen name="order/[id]" options={{ animation: 'slide_from_right' }} />
             </Stack>
         </>
     );
