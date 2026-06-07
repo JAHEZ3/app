@@ -501,7 +501,17 @@ export class DeliveryServiceService {
         const location = await this.cache.get<{
           lat: number; lng: number; timestamp: number;
         }>(`loc:${agent.userId}`);
-        return { ...agent, location: location ?? null };
+        // `id` MUST be the agent's auth user_id, not the delivery_agents PK.
+        // That value is what gets written to order.deliveryAgentId on
+        // assignment and is compared against the JWT `sub` everywhere on the
+        // driver side (accept/reject, dashboard filters, socket rooms). The
+        // table PK is exposed separately as `agentRecordId` for admin use.
+        return {
+          ...agent,
+          id: agent.userId,
+          agentRecordId: agent.id,
+          location: location ?? null,
+        };
       }),
     );
 
@@ -569,7 +579,12 @@ export class DeliveryServiceService {
             : null;
 
         return {
-          id: agent.id,
+          // `id` MUST be the auth user_id (see listAvailableAgents) — this is
+          // the value the picker assigns to order.deliveryAgentId and that the
+          // driver side compares against the JWT `sub`. The table PK is kept
+          // around as `agentRecordId` for any admin-facing lookups.
+          id: agent.userId,
+          agentRecordId: agent.id,
           name: agent.firstName ?? agent.fullName?.split(" ")[0] ?? "",
           vehicleType: agent.vehicleType,
           city: agent.city,

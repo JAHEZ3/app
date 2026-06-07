@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -645,6 +645,53 @@ export class OrderService {
     });
 
     return { orderId, acceptance: DeliveryAcceptance.NONE };
+  }
+
+  // ─── Driver dashboard feeds ────────────────────────────────────────────────
+
+  /**
+   * Orders assigned to this agent that are still awaiting their decision
+   * (deliveryAcceptance === PENDING). This is the "incoming requests" list the
+   * driver dashboard polls — they tap accept/reject on each.
+   *
+   * `userId` is the agent's auth id (JWT `sub`), which is exactly what
+   * `deliveryAgentId` now holds since the picker assigns the agent's user_id.
+   */
+  async getAvailableForAgent(userId: string) {
+    const orders = await this.orderRepo.find({
+      where: {
+        deliveryAgentId: userId,
+        deliveryAcceptance: DeliveryAcceptance.PENDING,
+      },
+      relations: ['items'],
+      order: { createdAt: 'DESC' },
+    });
+    return orders;
+  }
+
+  /**
+   * The agent's current active job: assigned + accepted and not yet in a
+   * terminal state. Includes the early statuses (confirmed/preparing) so the
+   * driver sees the job on their map immediately after accepting — even while
+   * the restaurant is still cooking — not only once it hits ready-for-pickup.
+   * Returns the single most recent match, or null when nothing is in progress.
+   */
+  async getActiveForAgent(userId: string) {
+    const order = await this.orderRepo.findOne({
+      where: {
+        deliveryAgentId: userId,
+        deliveryAcceptance: DeliveryAcceptance.ACCEPTED,
+        status: In([
+          OrderStatus.CONFIRMED,
+          OrderStatus.PREPARING,
+          OrderStatus.READY_FOR_PICKUP,
+          OrderStatus.OUT_FOR_DELIVERY,
+        ]),
+      },
+      relations: ['items'],
+      order: { createdAt: 'DESC' },
+    });
+    return order ?? null;
   }
 
   // ─── Rate order ───────────────────────────────────────────────────────────

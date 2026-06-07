@@ -187,7 +187,10 @@ export const restRepository = (): DeliveryRepository => ({
 
     getActiveAssignment: async (): Promise<ActiveAssignment | null> => {
         try {
-            const res = await deliveryApi.get('/api/delivery/assignments/active');
+            // Active job lives in the order-service. `orderApi` falls back to
+            // the delivery token when no customer token is present, so the
+            // agent's Bearer is attached.
+            const res = await orderApi.get('/api/order/orders/delivery/active');
             const raw = res.data?.data ?? res.data;
             return toActiveAssignment(raw);
         } catch (err: any) {
@@ -198,7 +201,7 @@ export const restRepository = (): DeliveryRepository => ({
 
     getPendingOrders: async (): Promise<PendingOrder[]> => {
         try {
-            const res = await deliveryApi.get('/api/delivery/orders/available');
+            const res = await orderApi.get('/api/order/orders/delivery/available');
             const raw: unknown[] = res.data?.data ?? res.data ?? [];
             return (Array.isArray(raw) ? raw : [])
                 .map(toPendingOrder)
@@ -217,7 +220,7 @@ export const restRepository = (): DeliveryRepository => ({
         // The endpoint returns just `{ orderId, acceptance: 'accepted' }`;
         // refresh the active assignment so the UI gets the full pickup +
         // dropoff coords for the map.
-        const res = await deliveryApi.get('/api/delivery/assignments/active');
+        const res = await orderApi.get('/api/order/orders/delivery/active');
         const assignment = toActiveAssignment(res.data?.data ?? res.data);
         if (!assignment) throw new Error('Invalid assignment response');
         return assignment;

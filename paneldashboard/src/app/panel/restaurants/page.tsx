@@ -312,6 +312,9 @@ function RestaurantCard({
   onChangeStatus,
   statusChanging,
 }: RestaurantCardProps) {
+  const rating = Number(r.rating ?? 0);
+  const hasRating = Number.isFinite(rating) && rating > 0;
+
   return (
     <div className="bg-white rounded-xl border border-border p-5 hover:shadow-md transition-shadow relative">
       {/* Header */}
@@ -414,10 +417,10 @@ function RestaurantCard({
           <MapPin className="w-3.5 h-3.5" />
           {r.city ?? "—"}
         </div>
-        {r.rating > 0 && (
+        {hasRating && (
           <div className="flex items-center gap-1.5 text-xs text-warning font-semibold">
             <Star className="w-3.5 h-3.5 fill-warning" />
-            {r.rating.toFixed(1)}
+            {rating.toFixed(1)}
             <span className="text-muted-foreground font-normal">
               ({r.totalRatings})
             </span>

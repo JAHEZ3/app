@@ -300,11 +300,19 @@ GET /api/order/orders/:id/receipt
 GET    /api/order/orders                       → list (paginated, filtered by role)
 GET    /api/order/orders/:id                   → details
 PATCH  /api/order/orders/:id/status            → restaurant_owner / manager / delivery only
-PATCH  /api/order/orders/:id/delivery          → assign agent (manager / restaurant_owner)
+PATCH  /api/order/orders/:id/delivery          → assign agent (manager / restaurant_owner / customer self-pick)
+POST   /api/order/orders/:id/delivery/accept   → driver accepts a pending assignment
+POST   /api/order/orders/:id/delivery/reject   → driver declines (clears the assignment)
+GET    /api/order/orders/delivery/available    → driver: my pending assignments (accept/reject queue)
+GET    /api/order/orders/delivery/active       → driver: my current accepted job (or null)
 POST   /api/order/orders/:id/rate              → after delivery (customer)
 GET    /api/order/orders/:id/chat              → message history
 POST   /api/order/orders/:id/chat              → { content }
 ```
+
+> The driver-facing list/feed routes filter on the JWT `sub`. That matches
+> `order.deliveryAgentId` because the "pick a driver" list returns the agent's
+> **user_id** as its `id`, and that's what gets written on assignment.
 
 ### Order status flow (`OrderStatus`)
 
