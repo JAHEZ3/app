@@ -5,6 +5,7 @@ import AnimatedPressable from '@/components/ui/AnimatedPressable';
 import { colors, radii, screen, shadows, typography } from '@/components/ui/theme';
 import { Toast, useToast } from '@/modules/delivery/components/Toast';
 import { useAddToCart, getAddToCartErrorMessage } from '@/modules/Cart/hooks/useAddToCart';
+import { useLanguageStore } from '@/store/useLanguageStore';
 import { Meal } from '../entities/Meal';
 import { MenuSection } from '../entities/MenuSection';
 import { MealSelectionResult } from '../hooks/useMealOptionsSelection';
@@ -40,13 +41,14 @@ const MealsList = ({
     onAddToCart,
     restaurantId,
     restaurantName,
-    currency = 'SAR',
+    currency = 'ILS',
     showSectionHeaders = true,
 }: MealsListProps) => {
     const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
     const [pendingMealId, setPendingMealId] = useState<string | null>(null);
     const { toast, show, hide } = useToast();
     const addToCart = useAddToCart();
+    const isRTL = useLanguageStore((s) => s.isRTL);
 
     const handleMealPress = useCallback((meal: Meal) => {
         if (meal.isAvailable) setActiveMeal(meal);
@@ -101,7 +103,7 @@ const MealsList = ({
         return (
             <View style={styles.errorWrap}>
                 <Ionicons name="alert-circle-outline" size={20} color={colors.primary} />
-                <Text style={styles.errorText}>Couldn't load meals.</Text>
+                <Text style={styles.errorText}>Couldn&apos;t load meals.</Text>
                 {onRetry && (
                     <AnimatedPressable onPress={onRetry} style={styles.retryBtn}>
                         <Ionicons name="refresh" size={14} color={colors.primary} />
@@ -136,13 +138,15 @@ const MealsList = ({
                         </View>
                     ) : null}
                     <View style={styles.mealsList}>
-                        {section.meals.map((meal) => (
+                        {section.meals.map((meal, index) => (
                             <MealCard
                                 key={meal.id}
                                 meal={meal}
                                 onPress={handleMealPress}
                                 currency={currency}
                                 isAdding={pendingMealId === meal.id}
+                                isRTL={isRTL}
+                                index={index}
                             />
                         ))}
                     </View>

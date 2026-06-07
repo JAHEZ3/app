@@ -89,6 +89,36 @@ export class RestaurantServiceService {
     this.logger.log(`Restaurant stub created for userId: ${data.userId}`);
   }
 
+  // ─── NATS: order.rated → fold into the cached restaurant rating ───────────────
+  //
+  // The authoritative per-order ratings live in `order_ratings` (order-service).
+  // We keep a denormalised running average + count on `restaurants` so listings
+  // and cards don't need a join. Atomic SQL keeps it correct under concurrency.
+
+  async applyRating(data: {
+    orderId: string;
+    restaurantId: string;
+    foodRating: number;
+  }) {
+    const score = Number(data.foodRating);
+    if (!Number.isFinite(score) || score < 1 || score > 5) {
+      this.logger.warn(
+        `Ignoring rating ${data.foodRating} for restaurant ${data.restaurantId} (out of range)`,
+      );
+      return;
+    }
+    await this.restaurantRepo
+      .createQueryBuilder()
+      .update(Restaurant)
+      .set({
+        rating: () =>
+          `ROUND(((COALESCE(rating, 0) * COALESCE(total_ratings, 0)) + ${score}) / (COALESCE(total_ratings, 0) + 1)::numeric, 2)`,
+        totalRatings: () => `COALESCE(total_ratings, 0) + 1`,
+      })
+      .where("id = :id", { id: data.restaurantId })
+      .execute();
+  }
+
   // ─── HTTP: first-time profile completion ──────────────────────────────────────
 
   async completeProfile(
@@ -188,6 +218,19 @@ export class RestaurantServiceService {
       this.logger.error("NATS emit restaurant.profile.completed failed", err);
     }
 
+    // Notify managers that a new restaurant application is awaiting review.
+    try {
+      this.natsClient.emit("restaurant.application.submitted", {
+        requestId: request.id,
+        restaurantId: restaurant.id,
+        restaurantName: dto.restaurantName ?? null,
+        ownerName: dto.ownerName ?? null,
+        city: dto.city ?? null,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit restaurant.application.submitted failed", err);
+    }
+
     this.logger.log(
       `Profile completed for restaurant ownerId: ${userId} — pending approval`,
     );
@@ -265,6 +308,8 @@ export class RestaurantServiceService {
       this.natsClient.emit("restaurant.owner.approved", {
         userId: restaurant.ownerUserId,
         requestId: request.id,
+        restaurantId: restaurant.id,
+        restaurantName: restaurant.name ?? null,
       });
     } catch (err) {
       this.logger.error("NATS emit restaurant.owner.approved failed", err);
@@ -398,6 +443,29 @@ export class RestaurantServiceService {
     if (!paymentInfo.qrImageUrl) return paymentInfo;
     const qrImageUrl = await this.s3.resolveImageUrl(paymentInfo.qrImageUrl);
     return { ...paymentInfo, qrImageUrl: qrImageUrl ?? undefined };
+  }
+
+  /**
+   * Customer-facing read of the restaurant's payment instructions. Used by the
+   * mobile checkout screen so the customer knows where to send the bank
+   * transfer / wallet payment for orders paid online. The endpoint is JWT-
+   * protected (no anonymous scraping of bank details). The QR-image S3 key is
+   * resolved to a presigned URL before returning.
+   */
+  async getPaymentInfoForCheckout(restaurantId: string) {
+    const restaurant = await this.restaurantRepo.findOne({
+      where: { id: restaurantId },
+      select: ["id", "paymentInfo", "name"],
+    });
+    if (!restaurant) {
+      throw new NotFoundException("المطعم غير موجود.");
+    }
+    const paymentInfo = await this.resolvePaymentQr(restaurant.paymentInfo);
+    return {
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.name,
+      paymentInfo: paymentInfo ?? null,
+    };
   }
 
   async uploadPaymentQr(userId: string, file: Express.Multer.File) {
@@ -1279,6 +1347,102 @@ export class RestaurantServiceService {
     return {
       data: await this.withPresignedUrls(restaurant),
       message: "تم استرجاع بيانات المطعم.",
+    };
+  }
+
+  /**
+   * GET /api/restaurant/manager/restaurants/:id/full
+   * Manager-only: returns the restaurant profile, hours, and the entire
+   * menu tree (menus → sections → meals → option groups → options) in a
+   * single response. Loaded in batched queries (no N+1).
+   */
+  async adminGetRestaurantFull(id: string) {
+    const restaurant = await this.restaurantRepo.findOne({ where: { id } });
+    if (!restaurant) throw new NotFoundException("المطعم غير موجود.");
+
+    const [hours, menus] = await Promise.all([
+      this.hoursRepo.find({
+        where: { restaurantId: id },
+        order: { dayOfWeek: "ASC" },
+      }),
+      this.menuRepo.find({
+        where: { restaurantId: id },
+        order: { displayOrder: "ASC", id: "ASC" },
+      }),
+    ]);
+
+    const menuIds = menus.map((m) => m.id);
+    const sections = menuIds.length
+      ? await this.sectionRepo.find({
+          where: { menuId: In(menuIds) },
+          order: { displayOrder: "ASC", id: "ASC" },
+        })
+      : [];
+
+    const meals = await this.mealRepo.find({
+      where: { restaurantId: id },
+      order: { displayOrder: "ASC", id: "ASC" },
+    });
+
+    const mealIds = meals.map((m) => m.id);
+    const optionGroups = mealIds.length
+      ? await this.optionGroupRepo.find({ where: { mealId: In(mealIds) } })
+      : [];
+
+    const groupIds = optionGroups.map((g) => g.id);
+    const options = groupIds.length
+      ? await this.optionRepo.find({ where: { groupId: In(groupIds) } })
+      : [];
+
+    // Resolve meal images in parallel.
+    const mealsWithImages = await Promise.all(
+      meals.map((m) => this.withMealImage(m)),
+    );
+
+    // Build lookup indices.
+    const optionsByGroup = new Map<string, MealOption[]>();
+    for (const o of options) {
+      const list = optionsByGroup.get(o.groupId) ?? [];
+      list.push(o);
+      optionsByGroup.set(o.groupId, list);
+    }
+
+    const groupsByMeal = new Map<
+      string,
+      Array<MealOptionGroup & { options: MealOption[] }>
+    >();
+    for (const g of optionGroups) {
+      const list = groupsByMeal.get(g.mealId) ?? [];
+      list.push({ ...g, options: optionsByGroup.get(g.id) ?? [] });
+      groupsByMeal.set(g.mealId, list);
+    }
+
+    const mealsBySection = new Map<string, any[]>();
+    for (const m of mealsWithImages) {
+      const list = mealsBySection.get(m.sectionId) ?? [];
+      list.push({ ...m, optionGroups: groupsByMeal.get(m.id) ?? [] });
+      mealsBySection.set(m.sectionId, list);
+    }
+
+    const sectionsByMenu = new Map<string, any[]>();
+    for (const s of sections) {
+      const list = sectionsByMenu.get(s.menuId) ?? [];
+      list.push({ ...s, meals: mealsBySection.get(s.id) ?? [] });
+      sectionsByMenu.set(s.menuId, list);
+    }
+
+    const menusTree = menus.map((m) => ({
+      ...m,
+      sections: sectionsByMenu.get(m.id) ?? [],
+    }));
+
+    return {
+      data: {
+        restaurant: await this.withPresignedUrls(restaurant),
+        hours,
+        menus: menusTree,
+      },
+      message: "تم استرجاع بيانات المطعم الكاملة.",
     };
   }
 

@@ -18,6 +18,11 @@ export interface UpdateSettingsDto {
   minOrderAmount?: number;
   avgDeliveryMinutes?: number;
   paymentInfo?: PaymentInfo;
+  // ESC/POS thermal printers (LAN). Pass null to clear, omit to leave alone.
+  kitchenPrinterIp?: string | null;
+  kitchenPrinterPort?: number;
+  cashierPrinterIp?: string | null;
+  cashierPrinterPort?: number;
 }
 
 export interface UpdateStoreStatusDto {

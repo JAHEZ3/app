@@ -29,6 +29,7 @@ export function normalizeTokens(
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 const RESTAURANT_URL = process.env.NEXT_PUBLIC_RESTAURANT_URL || "http://localhost:3003";
 const NOTIFICATION_URL = process.env.NEXT_PUBLIC_NOTIFICATION_URL || "http://localhost:3007";
+const MANAGER_URL = process.env.NEXT_PUBLIC_MANAGER_URL || "http://localhost:3006";
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -45,6 +46,11 @@ export const notificationInstance = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+export const managerInstance = axios.create({
+  baseURL: MANAGER_URL,
+  headers: { "Content-Type": "application/json" },
+});
+
 // Shared request interceptor: attach accessToken from Zustand + strip Content-Type for FormData
 function attachToken(config: import("axios").InternalAxiosRequestConfig) {
   const token = useAuthStore.getState().accessToken;
@@ -56,6 +62,7 @@ function attachToken(config: import("axios").InternalAxiosRequestConfig) {
 api.interceptors.request.use(attachToken);
 restaurantInstance.interceptors.request.use(attachToken);
 notificationInstance.interceptors.request.use(attachToken);
+managerInstance.interceptors.request.use(attachToken);
 
 // Token refresh state
 let isRefreshing = false;
@@ -125,6 +132,7 @@ async function handle401(
 api.interceptors.response.use((res) => res, (err) => handle401(err, api));
 restaurantInstance.interceptors.response.use((res) => res, (err) => handle401(err, restaurantInstance));
 notificationInstance.interceptors.response.use((res) => res, (err) => handle401(err, notificationInstance));
+managerInstance.interceptors.response.use((res) => res, (err) => handle401(err, managerInstance));
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
@@ -207,6 +215,22 @@ export const analyticsApi = {
   topMeals: () => restaurantInstance.get("/api/restaurant/analytics/top-meals"),
   customers: () => restaurantInstance.get("/api/restaurant/analytics/customers"),
   ratings: () => restaurantInstance.get("/api/restaurant/analytics/ratings"),
+  reviews: (page = 1, limit = 20) =>
+    restaurantInstance.get("/api/restaurant/analytics/reviews", {
+      params: { page, limit },
+    }),
+  restaurantReviews: (
+    page = 1,
+    limit = 20,
+    sort: "latest" | "highest" | "lowest" = "latest",
+  ) =>
+    restaurantInstance.get("/api/restaurant/analytics/restaurant-reviews", {
+      params: { page, limit, sort },
+    }),
+  restaurantRatingsSummary: () =>
+    restaurantInstance.get(
+      "/api/restaurant/analytics/restaurant-ratings/summary",
+    ),
   delivery: () => restaurantInstance.get("/api/restaurant/analytics/delivery"),
   payments: () => restaurantInstance.get("/api/restaurant/analytics/payments"),
   report: (period: "daily" | "weekly" | "monthly") =>
@@ -227,6 +251,11 @@ export const notificationApi = {
     notificationInstance.patch("/api/notification/notifications/read-all"),
 };
 
+// ── Restaurant categories (public, restaurant-service) ───────────────────────
+export const categoriesApi = {
+  list: () => restaurantInstance.get("/api/restaurant/categories"),
+};
+
 // ── Orders (port 3001) ────────────────────────────────────────────────────────
 const ORDER_URL = process.env.NEXT_PUBLIC_ORDER_URL || "http://localhost:3001";
 export const orderInstance = axios.create({ baseURL: ORDER_URL, headers: { "Content-Type": "application/json" } });
@@ -236,11 +265,104 @@ export const ordersApi = {
   getAll:       (params?: object)          => orderInstance.get("/api/order/orders", { params }),
   getOne:       (id: string)               => orderInstance.get(`/api/order/orders/${id}`),
   updateStatus: (id: string, data: object) => orderInstance.patch(`/api/order/orders/${id}/status`, data),
+  updatePaymentStatus: (id: string, data: { paymentStatus: "paid" | "unpaid"; note?: string }) =>
+    orderInstance.patch(`/api/order/orders/${id}/payment-status`, data),
   getChat:      (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/chat`),
   sendChat:     (orderId: string, content: string) => orderInstance.post(`/api/order/orders/${orderId}/chat`, { content }),
   getReceipt:   (orderId: string)          => orderInstance.get(`/api/order/orders/${orderId}/receipt`),
+  getPaymentProof: (orderId: string)       => orderInstance.get(`/api/order/orders/${orderId}/payment-proof`),
   assignDelivery: (orderId: string, deliveryAgentId: string) =>
     orderInstance.patch(`/api/order/orders/${orderId}/delivery`, { deliveryAgentId }),
+};
+
+// ── POS (port 3001) ───────────────────────────────────────────────────────────
+export const posApi = {
+  listOpen: (restaurantId: string) =>
+    orderInstance.get("/api/order/pos/orders", { params: { restaurantId } }),
+  create: (data: object) => orderInstance.post("/api/order/pos/orders", data),
+  addItem: (id: string, data: object) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/items`, data),
+  updateItem: (id: string, itemId: string, data: object) =>
+    orderInstance.patch(`/api/order/pos/orders/${id}/items/${itemId}`, data),
+  removeItem: (id: string, itemId: string) =>
+    orderInstance.delete(`/api/order/pos/orders/${id}/items/${itemId}`),
+  setDiscount: (id: string, discountAmount: number) =>
+    orderInstance.patch(`/api/order/pos/orders/${id}/discount`, { discountAmount }),
+  addPayment: (id: string, data: object) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/payments`, data),
+  close: (id: string, data: object) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/close`, data),
+  reopen: (id: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/reopen`),
+  accept: (id: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/accept`),
+  reject: (id: string, reason?: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/reject`, { reason }),
+  finish: (id: string) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/finish`),
+  void: (id: string, data: { reason?: string } = {}) =>
+    orderInstance.post(`/api/order/pos/orders/${id}/void`, data),
+  updatePayment: (
+    id: string,
+    splitId: string,
+    data: { reference?: string; payerName?: string; paidAt?: string },
+  ) => orderInstance.patch(`/api/order/pos/orders/${id}/payments/${splitId}`, data),
+  print: (id: string, target: "kitchen" | "cashier" | "both" = "both") =>
+    orderInstance.post(`/api/order/pos/orders/${id}/print`, undefined, {
+      params: { target },
+    }),
+};
+
+// ── Accounting (Tier 1: expenses + revenue + net profit) ─────────────────────
+export const accountingApi = {
+  summary: (params: { period?: "today" | "week" | "month" | "custom"; from?: string; to?: string } = {}) =>
+    restaurantInstance.get("/api/restaurant/accounting/summary", { params }),
+  listExpenses: (params: { category?: string; from?: string; to?: string } = {}) =>
+    restaurantInstance.get("/api/restaurant/expenses", { params }),
+  createExpense: (data: { amount: number; category: string; description?: string; occurredAt?: string }) =>
+    restaurantInstance.post("/api/restaurant/expenses", data),
+  updateExpense: (id: string, data: object) =>
+    restaurantInstance.patch(`/api/restaurant/expenses/${id}`, data),
+  deleteExpense: (id: string) =>
+    restaurantInstance.delete(`/api/restaurant/expenses/${id}`),
+};
+
+// ── Inventory (Tier 1: items + movements + low-stock alerts) ─────────────────
+export const inventoryApi = {
+  summary: () => restaurantInstance.get("/api/restaurant/inventory/summary"),
+  listItems: () => restaurantInstance.get("/api/restaurant/inventory/items"),
+  createItem: (data: {
+    name: string;
+    sku?: string;
+    unit: string;
+    currentQuantity?: number;
+    reorderThreshold?: number;
+    unitCost?: number;
+    isActive?: boolean;
+  }) => restaurantInstance.post("/api/restaurant/inventory/items", data),
+  updateItem: (id: string, data: object) =>
+    restaurantInstance.patch(`/api/restaurant/inventory/items/${id}`, data),
+  deleteItem: (id: string) =>
+    restaurantInstance.delete(`/api/restaurant/inventory/items/${id}`),
+  recordMovement: (
+    itemId: string,
+    data: { type: "in" | "out" | "adjustment"; quantity: number; unitCost?: number; note?: string },
+  ) => restaurantInstance.post(`/api/restaurant/inventory/items/${itemId}/movements`, data),
+  listMovements: (params: { itemId?: string; limit?: number } = {}) =>
+    restaurantInstance.get("/api/restaurant/inventory/movements", { params }),
+};
+
+// ── Restaurant tables (POS QR-ordering) ───────────────────────────────────────
+export const tablesApi = {
+  list: () => restaurantInstance.get("/api/restaurant/tables"),
+  create: (data: { number: string; capacity?: number; section?: string; isActive?: boolean }) =>
+    restaurantInstance.post("/api/restaurant/tables", data),
+  update: (id: string, data: object) =>
+    restaurantInstance.patch(`/api/restaurant/tables/${id}`, data),
+  remove: (id: string) =>
+    restaurantInstance.delete(`/api/restaurant/tables/${id}`),
+  regenerateQr: (id: string) =>
+    restaurantInstance.post(`/api/restaurant/tables/${id}/regenerate-qr`),
 };
 
 // ── Menus / Sections / Meals / Option groups / Options (restaurant-service) ───
@@ -293,6 +415,8 @@ export const mealsApi = {
       `/api/restaurant/sections/${sectionId}/meals/reorder`,
       { orderedIds },
     ),
+  generateAiImage: (mealId: string) =>
+    restaurantInstance.post(`/api/restaurant/meals/${mealId}/ai-image`),
 };
 
 export const optionGroupsApi = {
@@ -344,3 +468,26 @@ export const optionsApi = {
   delete: (optionId: string) =>
     restaurantInstance.delete(`/api/restaurant/options/${optionId}`),
 };
+
+// ── Support tickets (manager-service, port 3006) ─────────────────────────────
+// Restaurant owners can file tickets; the admin panel reads/resolves them.
+import type {
+  CreateSupportTicketPayload,
+  SupportTicket,
+} from "@/types/support.types";
+
+export function unwrapManager<T>(body: unknown): T {
+  if (body && typeof body === "object" && "data" in (body as object)) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
+}
+
+export const supportApi = {
+  create: (payload: CreateSupportTicketPayload) =>
+    managerInstance.post<{ data: SupportTicket } | SupportTicket>(
+      "/api/manager/admin/support/tickets",
+      payload,
+    ),
+};
+

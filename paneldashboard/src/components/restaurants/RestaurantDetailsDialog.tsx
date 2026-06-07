@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Clock, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,13 +14,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useRestaurant } from "@/hooks/useRestaurants";
+import { useRestaurant, useRestaurantFull } from "@/hooks/useRestaurants";
 import { formatDateTime } from "@/lib/utils";
+import type { RestaurantHour } from "@/types/restaurant-full.types";
 import {
   cuisineLabel,
   restaurantStatusBadgeVariant,
   restaurantStatusLabel,
 } from "./restaurant-labels";
+
+const DAY_LABELS = [
+  "الأحد",
+  "الإثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+  "السبت",
+];
 
 interface RestaurantDetailsDialogProps {
   restaurantId: string | null;
@@ -35,6 +47,12 @@ export function RestaurantDetailsDialog({
   const { data: r, isLoading, isError } = useRestaurant(
     open ? restaurantId ?? undefined : undefined,
   );
+  const { data: full } = useRestaurantFull(
+    open ? restaurantId ?? undefined : undefined,
+  );
+  const hours = full?.hours ?? [];
+  const rating = Number(r?.rating ?? 0);
+  const formattedRating = Number.isFinite(rating) ? rating.toFixed(1) : "0.0";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,11 +142,11 @@ export function RestaurantDetailsDialog({
                 <Field label="الشارع" value={r.street} />
                 <Field
                   label="الحد الأدنى للطلب"
-                  value={`${r.minOrderAmount} ر.س`}
+                  value={`${r.minOrderAmount} شيكل`}
                 />
                 <Field
                   label="التقييم"
-                  value={`${r.rating?.toFixed?.(1) ?? "0.0"} (${r.totalRatings})`}
+                  value={`${formattedRating} (${r.totalRatings})`}
                 />
                 <Field label="تاريخ التسجيل" value={formatDateTime(r.createdAt)} />
                 <Field
@@ -141,7 +159,59 @@ export function RestaurantDetailsDialog({
                   value={r.ownerNationalIdNumber}
                   dir="ltr"
                 />
+                <Field
+                  label="معرّف حساب المالك"
+                  value={r.ownerUserId}
+                  dir="ltr"
+                />
+                {(r.lat != null || r.lng != null) && (
+                  <Field
+                    label="الموقع"
+                    value={
+                      r.lat != null && r.lng != null
+                        ? `${Number(r.lat).toFixed(5)}, ${Number(r.lng).toFixed(5)}`
+                        : null
+                    }
+                    dir="ltr"
+                  />
+                )}
               </dl>
+
+              {r.lat != null && r.lng != null && (
+                <a
+                  href={`https://maps.google.com/?q=${r.lat},${r.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  فتح في خرائط جوجل
+                </a>
+              )}
+
+              {hours.length > 0 && (
+                <div className="pt-3 border-t border-border/60">
+                  <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" />
+                    ساعات العمل
+                  </p>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                    {sortHours(hours).map((h) => (
+                      <li
+                        key={h.id}
+                        className="flex items-center justify-between"
+                      >
+                        <span className="text-muted-foreground">
+                          {DAY_LABELS[h.dayOfWeek] ?? `يوم ${h.dayOfWeek}`}
+                        </span>
+                        <span className="font-medium text-foreground tabular-nums" dir="ltr">
+                          {formatTime(h.openTime)} – {formatTime(h.closeTime)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {r.description && (
                 <div className="pt-3 border-t border-border/60">
@@ -192,11 +262,20 @@ function Field({ label, value, dir }: FieldProps) {
     <div>
       <dt className="text-[11px] text-muted-foreground mb-0.5">{label}</dt>
       <dd
-        className="font-medium text-foreground"
+        className="font-medium text-foreground truncate"
         style={dir ? { direction: dir, textAlign: dir === "ltr" ? "left" : "right" } : undefined}
       >
         {value ?? "—"}
       </dd>
     </div>
   );
+}
+
+function sortHours(hours: RestaurantHour[]): RestaurantHour[] {
+  return [...hours].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+}
+
+function formatTime(t: string): string {
+  if (!t) return "—";
+  return t.length >= 5 ? t.slice(0, 5) : t;
 }

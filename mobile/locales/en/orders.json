@@ -1,23 +1,214 @@
 {
   "title": "My Orders",
+  "header": {
+    "eyebrow": "Your activity"
+  },
+  "accessibility": {
+    "goBack": "Go back"
+  },
+  "subtitle": {
+    "withCount_one": "{{count}} order",
+    "withCount_other": "{{count}} orders",
+    "empty": ""
+  },
   "empty": {
     "title": "No orders yet",
-    "subtitle": "Your orders will appear here"
+    "subtitle": "Your orders will appear here once you start ordering.",
+    "action": "Browse restaurants"
+  },
+  "loading": {
+    "title": "Loading your orders",
+    "body": "Just a moment…",
+    "more": "Loading more…"
+  },
+  "endOfList": "You're all caught up",
+  "relativeTime": {
+    "justNow": "Just now",
+    "minutes_one": "{{count}}m ago",
+    "minutes_other": "{{count}}m ago",
+    "hours_one": "{{count}}h ago",
+    "hours_other": "{{count}}h ago",
+    "yesterday": "Yesterday"
+  },
+  "error": {
+    "title": "Could not load orders",
+    "body": "Please try again.",
+    "action": "Retry",
+    "missingId": "We couldn't find this order.",
+    "back": "Go back"
+  },
+  "signedOut": {
+    "title": "Sign in to view orders",
+    "body": "Your past orders will appear here after you sign in.",
+    "action": "Sign in"
   },
   "status": {
     "pending": "Pending",
     "confirmed": "Confirmed",
     "preparing": "Preparing",
-    "onTheWay": "On the Way",
+    "readyForPickup": "Ready for pickup",
+    "outForDelivery": "Out for delivery",
+    "onTheWay": "Out for delivery",
     "delivered": "Delivered",
     "cancelled": "Cancelled"
   },
   "details": {
-    "title": "Order Details",
+    "title": "Order details",
     "total": "Total",
-    "deliveryFee": "Delivery Fee",
+    "deliveryFee": "Delivery fee",
     "subtotal": "Subtotal",
-    "placedAt": "Placed at"
+    "discount": "Discount",
+    "placedAt": "Placed at",
+    "copyId": "Show full order ID"
+  },
+  "sections": {
+    "items": "Items",
+    "itemsEmpty": "No items in this order.",
+    "history": "Order status",
+    "delivery": "Delivery info",
+    "payment": "Payment method",
+    "notes": "Your notes"
+  },
+  "history": {
+    "empty": "No status updates yet.",
+    "inProgress": "In progress…",
+    "upcoming": "Upcoming"
+  },
+  "delivery": {
+    "address": "Address",
+    "notes": "Notes",
+    "contact": "Contact",
+    "courier": "Courier",
+    "eta": "Estimated arrival",
+    "deliveredAt": "Delivered at",
+    "empty": "No delivery details available yet."
+  },
+  "payment": {
+    "cash_on_delivery": "Cash on delivery",
+    "card": "Credit / Debit card",
+    "online": "Online wallet",
+    "info": {
+      "title": "Transfer payment to",
+      "subtitle": "Send the order total to one of the accounts below, then upload the receipt.",
+      "contactTitle": "Contact the restaurant for payment details",
+      "contactBody": "Reach out via order chat to request the bank or wallet number, then upload the receipt below.",
+      "bank": "Bank account",
+      "wallet": "Wallet",
+      "accountName": "Account name",
+      "accountNumber": "Account number",
+      "iban": "IBAN",
+      "bankPhone": "Bank phone",
+      "walletNumber": "Wallet number",
+      "walletPhone": "Wallet phone",
+      "copied": "Copied"
+    }
+  },
+  "paymentStatus": {
+    "unpaid": "Unpaid",
+    "paid": "Paid",
+    "refunded": "Refunded"
+  },
+  "receipt": {
+    "viewReceipt": "View receipt",
+    "notReadyTitle": "Receipt not ready",
+    "notReadyBody": "The receipt will be available once the order is processed.",
+    "errorTitle": "Could not open receipt",
+    "errorBody": "Please try again later."
+  },
+  "paymentProof": {
+    "title": "Upload payment receipt",
+    "subtitle": "Send us a photo of your transfer receipt to confirm payment (max 5 MB).",
+    "cta": "Tap to upload receipt",
+    "hint": "JPG or PNG, max 5 MB",
+    "change": "Tap to change",
+    "uploaded": "Receipt uploaded — tap to view",
+    "successPill": "Awaiting verification",
+    "retry": "Retry upload",
+    "errorTitle": "Upload failed",
+    "errorBody": "Please try again.",
+    "tooLargeTitle": "File too large",
+    "tooLargeBody": "Please choose an image under 5 MB.",
+    "permissionRequiredTitle": "Permission required",
+    "permissionRequiredBody": "Allow photo access to upload your receipt."
+  },
+  "realtime": {
+    "live": "Live",
+    "offline": "Offline"
+  },
+  "driver": {
+    "cta": "Pick your driver",
+    "ctaBody": "Choose from nearby online drivers",
+    "pickerTitle": "Pick your driver",
+    "pickerSubtitle": "Drivers shown are online near your address, sorted by distance.",
+    "unnamed": "Driver",
+    "emptyTitle": "No drivers online",
+    "emptyBody": "No drivers are available right now. We'll assign one as soon as someone is online.",
+    "loadError": "Could not load drivers.",
+    "assignErrorTitle": "Could not assign driver",
+    "assignErrorBody": "Please try again."
+  },
+  "state": {
+    "waiting": {
+      "title": "Waiting for the restaurant",
+      "body": "We'll notify you as soon as the restaurant confirms."
+    },
+    "accepted": {
+      "title": "Order accepted",
+      "body": "The restaurant is preparing your order."
+    },
+    "ready": {
+      "title": "Ready for pickup",
+      "body": "Pick up your order from the restaurant."
+    },
+    "rejected": {
+      "title": "Order rejected",
+      "body": "Unfortunately the restaurant could not accept this order."
+    }
+  },
+  "rate": {
+    "cta": "Rate this order",
+    "ctaBody": "Tell us how it went",
+    "title": "How was your order?",
+    "subtitle": "Rate the food and the delivery separately.",
+    "food": "Food quality",
+    "delivery": "Delivery",
+    "needBoth": "Rate food & delivery",
+    "successTitle": "Thanks for your feedback!",
+    "successBody": "Your rating helps the restaurant improve.",
+    "commentPlaceholder": "Add a comment (optional)",
+    "submit": "Submit rating",
+    "cancel": "Maybe later",
+    "errorTitle": "Could not submit rating",
+    "errorBody": "Please try again.",
+    "yourRating": "Your rating",
+    "star": "{{n}} star"
+  },
+  "chat": {
+    "title": "Order chat",
+    "openTitle": "Chat about this order",
+    "openBody": "Talk to the restaurant or driver",
+    "placeholder": "Type a message…",
+    "send": "Send",
+    "emptyTitle": "Start the conversation",
+    "emptyBody": "Ask the restaurant or driver anything about this order.",
+    "loadError": "Could not load the conversation.",
+    "errorBody": "Could not send. Try again."
+  },
+  "tracking": {
+    "title": "Live tracking",
+    "openTracking": "Track delivery live",
+    "openTrackingBody": "See the driver on the map",
+    "waiting": "Waiting for the driver to start sharing location…",
+    "recenter": "Recenter map",
+    "call": "Call driver",
+    "message": "Message driver",
+    "etaMinutes": "~ {{count}} min",
+    "etaUnknown": "ETA pending…",
+    "distance": "{{km}} away",
+    "noLocation": {
+      "title": "Delivery location not available",
+      "body": "This order doesn't have a pinned delivery location, so live tracking can't be shown."
+    }
   },
   "reorder": "Reorder"
 }

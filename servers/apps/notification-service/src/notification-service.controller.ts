@@ -102,4 +102,31 @@ export class NotificationServiceController {
       { jobId: `notif:delivery.assigned:${data.orderId}` },
     );
   }
+
+  @EventPattern('restaurant.application.submitted')
+  async onRestaurantApplicationSubmitted(@Payload() data: any) {
+    await this.notificationQueue.add(
+      JOBS.SEND_NOTIFICATION,
+      { type: 'restaurant.application.submitted', payload: data },
+      { jobId: `notif:restaurant.application:${data.requestId}` },
+    );
+  }
+
+  @EventPattern('delivery.application.submitted')
+  async onDeliveryApplicationSubmitted(@Payload() data: any) {
+    await this.notificationQueue.add(
+      JOBS.SEND_NOTIFICATION,
+      { type: 'delivery.application.submitted', payload: data },
+      { jobId: `notif:delivery.application:${data.agentId}` },
+    );
+  }
+
+  @EventPattern('restaurant.owner.approved')
+  async onRestaurantOwnerApproved(@Payload() data: any) {
+    await this.notificationQueue.add(
+      JOBS.SEND_NOTIFICATION,
+      { type: 'restaurant.owner.approved', payload: data },
+      { jobId: `notif:restaurant.welcome:${data.requestId ?? data.userId}` },
+    );
+  }
 }

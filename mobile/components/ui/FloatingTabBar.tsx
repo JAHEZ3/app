@@ -1,5 +1,5 @@
 import React, { memo, useEffect } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,12 +8,15 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import AnimatedPressable from "./AnimatedPressable";
 import { colors, radii, shadows, typography } from "./theme";
+import { useCommonT } from "@/hooks/useAppTranslation";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import { getCartQuantity, useCartStore } from "@/store/useCartStore";
 
-type TabKey = "categories" | "home" | "cart" | "profile";
+type TabKey = "orders" | "favorites" | "home" | "cart" | "profile";
 
 interface TabConfig {
   key: TabKey;
@@ -25,18 +28,25 @@ interface TabConfig {
 
 const tabs: TabConfig[] = [
   {
-    key: "categories",
-    route: "/restaurants",
-    icon: "grid-outline",
-    activeIcon: "grid",
-    activePath: (path) => path.startsWith("/restaurants"),
-  },
-  {
     key: "home",
     route: "/home/Home",
     icon: "home-outline",
     activeIcon: "home",
     activePath: (path) => path === "/home/Home" || path === "/home",
+  },
+  {
+    key: "orders",
+    route: "/orders",
+    icon: "receipt-outline",
+    activeIcon: "receipt",
+    activePath: (path) => path.startsWith("/orders"),
+  },
+  {
+    key: "favorites",
+    route: "/favorites",
+    icon: "heart-outline",
+    activeIcon: "heart",
+    activePath: (path) => path.startsWith("/favorites"),
   },
   {
     key: "cart",
@@ -57,70 +67,68 @@ const tabs: TabConfig[] = [
 interface TabButtonProps {
   tab: TabConfig;
   active: boolean;
-  isHome?: boolean;
+  label: string;
   badgeCount?: number;
 }
 
-const TabButton = memo(({ tab, active, isHome, badgeCount = 0 }: TabButtonProps) => {
+const TabButton = memo(({ tab, active, label, badgeCount = 0 }: TabButtonProps) => {
   const progress = useSharedValue(active ? 1 : 0);
 
   useEffect(() => {
     progress.value = withSpring(active ? 1 : 0, {
-      damping: 16,
-      stiffness: 210,
+      damping: 15,
+      stiffness: 220,
       mass: 0.7,
     });
   }, [active, progress]);
 
+  // The tinted bubble behind the icon fades/scales in when active.
   const bubbleStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [{ scale: interpolate(progress.value, [0, 1], [0.7, 1]) }],
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.5, 1]) }],
   }));
 
-  const shellStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateY: interpolate(progress.value, [0, 1], [0, isHome ? -2 : -1]),
-      },
-      {
-        scale: interpolate(progress.value, [0, 1], [1, isHome ? 1.08 : 1.03]),
-      },
-    ],
+  // The whole icon lifts slightly when active.
+  const iconLiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -2]) }],
   }));
 
-  const handlePress = () => {
-    router.navigate(tab.route as never);
-  };
+  const labelStyle = useAnimatedStyle(() => ({
+    color: active ? colors.primary : colors.outline,
+    opacity: withTiming(active ? 1 : 0.85, { duration: 150 }),
+  }));
 
-  const iconColor = active ? colors.onPrimary : colors.outline;
+  const handlePress = () => router.navigate(tab.route as never);
 
   return (
     <AnimatedPressable
       onPress={handlePress}
       haptic="impact"
-      scaleTo={0.92}
+      scaleTo={0.9}
       accessibilityRole="button"
-      accessibilityLabel={tab.key}
-      style={[styles.tabButton, isHome && styles.homeButton]}
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      style={styles.tabButton}
     >
-      <Animated.View style={[styles.iconShell, isHome && styles.homeIconShell, shellStyle]}>
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.activeBubble, isHome && styles.homeActiveBubble, bubbleStyle]}
-        />
+      <Animated.View style={[styles.iconShell, iconLiftStyle]}>
+        <Animated.View pointerEvents="none" style={[styles.activeBubble, bubbleStyle]} />
+
         <Ionicons
           name={active ? tab.activeIcon : tab.icon}
-          size={isHome ? 25 : 22}
-          color={iconColor}
+          size={22}
+          color={active ? colors.onPrimary : colors.outline}
         />
+
         {tab.key === "cart" && badgeCount > 0 ? (
           <View style={styles.badge}>
-            <Animated.Text style={styles.badgeText}>
-              {badgeCount > 9 ? "9+" : badgeCount}
-            </Animated.Text>
+            <Text style={styles.badgeText}>{badgeCount > 9 ? "9+" : badgeCount}</Text>
           </View>
         ) : null}
       </Animated.View>
+
+      <Animated.Text style={[styles.label, labelStyle]} numberOfLines={1}>
+        {label}
+      </Animated.Text>
     </AnimatedPressable>
   );
 });
@@ -130,39 +138,28 @@ function FloatingTabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { t } = useCommonT();
+  const isRTL = useLanguageStore((s) => s.isRTL);
   const items = useCartStore((state) => state.items);
-  const badgeCount = getCartQuantity(items);
+  const cartCount = getCartQuantity(items);
 
-  const barWidth = Math.min(width - 32, 380);
-  const homeLeft = barWidth / 2 - 32;
-
-  const categories = tabs[0];
-  const home = tabs[1];
-  const cart = tabs[2];
-  const profile = tabs[3];
+  const barWidth = Math.min(width - 24, 440);
 
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.wrap, { bottom: Math.max(insets.bottom, 10) + 8 }]}
+      style={[styles.wrap, { bottom: Math.max(insets.bottom, 8) + 6 }]}
     >
-      <View style={[styles.bar, { width: barWidth }]}>
-        <View style={styles.leftSlot}>
-          <TabButton tab={categories} active={categories.activePath(pathname)} />
-        </View>
-
-        <View style={styles.rightSlot}>
+      <View style={[styles.bar, { width: barWidth }, isRTL && styles.barRtl]}>
+        {tabs.map((tab) => (
           <TabButton
-            tab={cart}
-            active={cart.activePath(pathname)}
-            badgeCount={badgeCount}
+            key={tab.key}
+            tab={tab}
+            active={tab.activePath(pathname)}
+            label={t(`tabs.${tab.key}`)}
+            badgeCount={tab.key === "cart" ? cartCount : 0}
           />
-          <TabButton tab={profile} active={profile.activePath(pathname)} />
-        </View>
-
-        <View style={[styles.homeSlot, { left: homeLeft }]}>
-          <TabButton tab={home} active={home.activePath(pathname)} isHome />
-        </View>
+        ))}
       </View>
     </View>
   );
@@ -177,68 +174,51 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   bar: {
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.softSurface,
+    borderRadius: 28,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.78)",
+    borderColor: "rgba(0,0,0,0.05)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 22,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     ...shadows.card,
   },
-  leftSlot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  rightSlot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  homeSlot: {
-    position: "absolute",
-    top: 7,
+  barRtl: {
+    flexDirection: "row-reverse",
   },
   tabButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  homeButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 2,
   },
   iconShell: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 32,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
-  homeIconShell: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.card,
-    ...shadows.primary,
-  },
   activeBubble: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
+    ...shadows.primary,
   },
-  homeActiveBubble: {
-    borderRadius: 32,
+  label: {
+    fontFamily: typography.bodyBold,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.1,
+    textAlign: "center",
   },
   badge: {
     position: "absolute",
-    top: 6,
-    right: 5,
+    top: -2,
+    right: 4,
     minWidth: 17,
     height: 17,
     borderRadius: radii.pill,

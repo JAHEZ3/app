@@ -10,6 +10,9 @@ import type {
   TopMeal,
   CustomersAnalytics,
   RatingsAnalytics,
+  ReviewsList,
+  RestaurantReviewsList,
+  RestaurantReviewSort,
   DeliveryAnalytics,
   PaymentsAnalytics,
   PerformanceReport,
@@ -64,6 +67,35 @@ export function useAnalyticsRatings() {
   return useQuery<RatingsAnalytics>({
     queryKey: queryKeys.analytics.ratings,
     queryFn: async () => unwrap<RatingsAnalytics>((await analyticsApi.ratings()).data),
+  });
+}
+
+export function useAnalyticsReviews(page = 1, limit = 20) {
+  return useQuery<ReviewsList>({
+    queryKey: queryKeys.analytics.reviews(page, limit),
+    queryFn: async () =>
+      unwrap<ReviewsList>((await analyticsApi.reviews(page, limit)).data),
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * Standalone restaurant reviews (customer-app ratings) — paginated + sortable.
+ * `placeholderData` keeps the previous page on screen while the next page/sort
+ * loads, so the list never flashes empty.
+ */
+export function useRestaurantReviews(
+  page = 1,
+  limit = 10,
+  sort: RestaurantReviewSort = "latest",
+) {
+  return useQuery<RestaurantReviewsList>({
+    queryKey: queryKeys.analytics.restaurantReviews(page, limit, sort),
+    queryFn: async () =>
+      unwrap<RestaurantReviewsList>(
+        (await analyticsApi.restaurantReviews(page, limit, sort)).data,
+      ),
+    placeholderData: (prev) => prev,
   });
 }
 

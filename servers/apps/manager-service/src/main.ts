@@ -15,8 +15,21 @@ process.on('unhandledRejection', (reason) => {
 async function bootstrap() {
   const app = await NestFactory.create(ManagerServiceModule);
 
+  // Browsers reject `Access-Control-Allow-Origin: *` together with credentials,
+  // so we reflect the request origin when allowed. `CORS_ORIGINS=*` (or unset)
+  // lets every origin through; a comma-separated list restricts to those.
+  const allowList = (process.env.CORS_ORIGINS || '*')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allowAny = allowList.includes('*');
+
   app.enableCors({
-    origin: (process.env.CORS_ORIGINS || '*').split(','),
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // curl, server-to-server
+      if (allowAny || allowList.includes(origin)) return cb(null, true);
+      return cb(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type,Authorization',

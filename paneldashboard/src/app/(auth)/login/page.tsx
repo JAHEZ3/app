@@ -55,18 +55,24 @@ export default function LoginPage() {
         style={{ background: "linear-gradient(135deg,#1e1e1e 0%,#2d2d2d 60%,#3a2a1a 100%)" }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-xl"
-            style={{ background: "linear-gradient(135deg,#F55905,#FF8C38)" }}
-          >
-            ج
+        <div className="flex items-center p-1 group cursor-pointer">
+          <div className="bg-white/95 rounded-2xl p-1.5 transition-all duration-700 ease-out group-hover:bg-white group-hover:shadow-[0_10px_30px_rgba(245,89,5,0.4)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/jahez-mark.png"
+              alt="جاهز"
+              width={56}
+              height={56}
+              className="object-contain transition-transform duration-700 ease-out group-hover:scale-110 group-hover:-rotate-6"
+            />
           </div>
-          <div>
-            <span className="text-2xl font-black block leading-none">جاهز</span>
-            <span className="text-xs text-white/50 flex items-center gap-1 mt-0.5">
-              <Shield className="w-3 h-3" /> لوحة الإدارة
-            </span>
+          <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+            <div className="whitespace-nowrap ps-3 opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200">
+              <span className="text-3xl font-black block leading-none text-[#F55905]">جاهز</span>
+              <span className="text-xs text-white/50 flex items-center gap-1 mt-1">
+                <Shield className="w-3 h-3" /> لوحة الإدارة
+              </span>
+            </div>
           </div>
         </div>
 
@@ -154,14 +160,18 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md animate-fade-in-up">
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg"
-              style={{ background: "linear-gradient(135deg,#F55905,#FF8C38)" }}
-            >
-              ج
+          <div className="flex items-center mb-8 lg:hidden p-1 group cursor-pointer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/jahez-mark.png"
+              alt="جاهز"
+              width={44}
+              height={44}
+              className="object-contain transition-all duration-700 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:drop-shadow-[0_6px_16px_rgba(245,89,5,0.4)]"
+            />
+            <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-[max-width] duration-700 ease-out">
+              <span className="block whitespace-nowrap ps-2.5 text-xl font-black text-[#F55905] opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out delay-200">جاهز – لوحة الإدارة</span>
             </div>
-            <span className="text-xl font-black">جاهز – لوحة الإدارة</span>
           </div>
 
           <div className="bg-white rounded-2xl border border-border shadow-md p-8">

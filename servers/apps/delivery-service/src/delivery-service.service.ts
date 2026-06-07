@@ -192,6 +192,19 @@ export class DeliveryServiceService {
       this.logger.error("NATS emit delivery.profile.completed failed", err);
     }
 
+    // Notify managers that a new delivery application is awaiting review.
+    try {
+      this.natsClient.emit("delivery.application.submitted", {
+        agentId: agent.id,
+        userId,
+        fullName: `${profileData.firstName} ${profileData.lastName}`,
+        city: profileData.city ?? null,
+        vehicleType: profileData.vehicleType ?? null,
+      });
+    } catch (err) {
+      this.logger.error("NATS emit delivery.application.submitted failed", err);
+    }
+
     this.logger.log(`Agent ${userId} submitted application for review`);
     return {
       data: { agentId: agent.id },
@@ -488,10 +501,131 @@ export class DeliveryServiceService {
         const location = await this.cache.get<{
           lat: number; lng: number; timestamp: number;
         }>(`loc:${agent.userId}`);
-        return { ...agent, location: location ?? null };
+        // `id` MUST be the agent's auth user_id, not the delivery_agents PK.
+        // That value is what gets written to order.deliveryAgentId on
+        // assignment and is compared against the JWT `sub` everywhere on the
+        // driver side (accept/reject, dashboard filters, socket rooms). The
+        // table PK is exposed separately as `agentRecordId` for admin use.
+        return {
+          ...agent,
+          id: agent.userId,
+          agentRecordId: agent.id,
+          location: location ?? null,
+        };
       }),
     );
 
     return { data, total: agents.length };
   }
+
+  /**
+   * Customer-facing list of every ACTIVE + isDelivery agent. We enrich each
+   * row with a cached GPS ping when one exists (within the last 5 minutes,
+   * set by the WebSocket gateway when the agent pushes
+   * `delivery:location:update`), and surface a boolean `isOnline` so the UI
+   * can render a green dot for fresh ones.
+   *
+   * The original design required a fresh ping to even include the agent, but
+   * that means agents who haven't opened the app today disappear and the
+   * customer sees an empty list — even though plenty of drivers are available
+   * and reachable by phone. We now return everyone; the UI ranks them as:
+   *   1. Online + distance ASC (when customer coords are passed)
+   *   2. Online without coords (no distance, but still visible)
+   *   3. Offline (sorted by rating DESC as a soft signal)
+   *
+   * PII (phone, full name) is stripped — the customer only sees first name,
+   * vehicle type, rating, and `distanceKm` when available.
+   */
+  async listOpenAgents(opts?: {
+    customerLat?: number;
+    customerLng?: number;
+    city?: string;
+  }) {
+    const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+    const now = Date.now();
+
+    const where: any = { status: AgentStatus.ACTIVE, isDelivery: true };
+    if (opts?.city) where.city = opts.city;
+
+    const agents = await this.agentRepo.find({
+      where,
+      select: [
+        "id",
+        "userId",
+        "firstName",
+        "fullName",
+        "vehicleType",
+        "city",
+        "rating",
+        "totalDeliveries",
+      ],
+    });
+
+    const enriched = await Promise.all(
+      agents.map(async (agent) => {
+        const loc = await this.cache.get<{
+          lat: number;
+          lng: number;
+          timestamp: number;
+        }>(`loc:${agent.userId}`);
+
+        const hasFreshPing = !!loc && now - loc.timestamp <= ONLINE_WINDOW_MS;
+        const distanceKm =
+          hasFreshPing &&
+          loc &&
+          opts?.customerLat != null &&
+          opts?.customerLng != null
+            ? haversineKm(opts.customerLat, opts.customerLng, loc.lat, loc.lng)
+            : null;
+
+        return {
+          // `id` MUST be the auth user_id (see listAvailableAgents) — this is
+          // the value the picker assigns to order.deliveryAgentId and that the
+          // driver side compares against the JWT `sub`. The table PK is kept
+          // around as `agentRecordId` for any admin-facing lookups.
+          id: agent.userId,
+          agentRecordId: agent.id,
+          name: agent.firstName ?? agent.fullName?.split(" ")[0] ?? "",
+          vehicleType: agent.vehicleType,
+          city: agent.city,
+          rating: Number(agent.rating ?? 0),
+          totalDeliveries: agent.totalDeliveries ?? 0,
+          isOnline: hasFreshPing,
+          location: hasFreshPing && loc
+            ? {
+                lat: loc.lat,
+                lng: loc.lng,
+                recordedAt: new Date(loc.timestamp).toISOString(),
+              }
+            : null,
+          distanceKm,
+        };
+      }),
+    );
+
+    // Sort: online-with-distance first (nearest), then online-without-distance,
+    // then offline by rating. This way the customer always sees *some* drivers
+    // even on a fresh database with zero GPS pings.
+    enriched.sort((a, b) => {
+      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+      const da = a.distanceKm ?? Infinity;
+      const db = b.distanceKm ?? Infinity;
+      if (da !== db) return da - db;
+      return (b.rating ?? 0) - (a.rating ?? 0);
+    });
+
+    return { data: enriched, total: enriched.length };
+  }
+}
+
+/** Haversine distance in kilometres. */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }

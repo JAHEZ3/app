@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -5,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +16,7 @@ import {
   CheckCircle, Wrench, RefreshCw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { settingsApi } from "@/lib/api";
+import { settingsApi, unwrapManager } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
 import { useToast } from "@/providers/ToastProvider";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,9 @@ interface SystemSettings {
     platformName: string;
     supportEmail: string;
     supportPhone: string;
+    supportWhatsapp: string | null;
+    supportAddress: string | null;
+    supportHours: string | null;
     defaultLanguage: string;
     currency: string;
   };
@@ -71,8 +76,11 @@ const defaultSettings: SystemSettings = {
     platformName: "جاهز",
     supportEmail: "support@jahaz.app",
     supportPhone: "920012345",
+    supportWhatsapp: null,
+    supportAddress: null,
+    supportHours: null,
     defaultLanguage: "ar",
-    currency: "SAR",
+    currency: "ILS",
   },
   fees: {
     restaurantCommission: 15,
@@ -130,19 +138,28 @@ export default function SettingsPage() {
   const { success, error } = useToast();
   const qc = useQueryClient();
 
-  const { isLoading, data: remoteSettings } = useQuery<SystemSettings>({
+  const { isLoading, data: remoteSettings } = useQuery<Partial<SystemSettings>>({
     queryKey: queryKeys.settings,
     queryFn: async () => {
       const res = await settingsApi.get();
-      return res.data as SystemSettings;
+      return unwrapManager<Partial<SystemSettings>>(res.data);
     },
     placeholderData: defaultSettings,
     retry: false,
   });
 
-  // Sync remote data into local state once when it arrives
+  // Sync remote data into local state once when it arrives. Merge per-section
+  // against defaults so a missing/partial response never produces undefined.
   useEffect(() => {
-    if (remoteSettings) setLocal(remoteSettings);
+    if (!remoteSettings) return;
+    setLocal({
+      general:       { ...defaultSettings.general,       ...(remoteSettings.general       ?? {}) },
+      fees:          { ...defaultSettings.fees,          ...(remoteSettings.fees          ?? {}) },
+      delivery:      { ...defaultSettings.delivery,      ...(remoteSettings.delivery      ?? {}) },
+      notifications: { ...defaultSettings.notifications, ...(remoteSettings.notifications ?? {}) },
+      system:        { ...defaultSettings.system,        ...(remoteSettings.system        ?? {}) },
+      payment:       { ...defaultSettings.payment,       ...(remoteSettings.payment       ?? {}) },
+    });
   }, [remoteSettings]);
 
   const save = useMutation({
@@ -207,14 +224,52 @@ export default function SettingsPage() {
                 <CardContent>
                   {isLoading ? <SettingsSkeleton /> : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      <Input label="اسم المنصة" value={local.general.platformName}
+                      <Input label="اسم المنصة" value={local.general.platformName ?? ""}
                         onChange={(e) => set("general", "platformName", e.target.value)} />
-                      <Input label="البريد الإلكتروني للدعم" value={local.general.supportEmail}
+                      <Input label="البريد الإلكتروني للدعم" value={local.general.supportEmail ?? ""}
                         onChange={(e) => set("general", "supportEmail", e.target.value)} />
-                      <Input label="هاتف الدعم" value={local.general.supportPhone}
+                      <Input label="هاتف الدعم" value={local.general.supportPhone ?? ""}
                         onChange={(e) => set("general", "supportPhone", e.target.value)} />
-                      <Input label="العملة الافتراضية" value={local.general.currency}
+                      <Input label="العملة الافتراضية" value={local.general.currency ?? ""}
                         onChange={(e) => set("general", "currency", e.target.value)} />
+
+                      {/* ── Public contact info (shown on the website's "Contact us" page) ── */}
+                      <div className="sm:col-span-2 mt-2 pt-5 border-t border-border">
+                        <h3 className="text-sm font-bold text-foreground mb-1">
+                          بيانات التواصل (تظهر على صفحة «اتصل بنا» في الموقع)
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          سيتم عرض هذه المعلومات للعملاء على الموقع العام. اتركها فارغة لإخفائها.
+                        </p>
+                      </div>
+                      <Input
+                        label="رقم واتساب"
+                        placeholder="+970 59 000 0000"
+                        dir="ltr"
+                        value={local.general.supportWhatsapp ?? ""}
+                        onChange={(e) =>
+                          set("general", "supportWhatsapp", e.target.value || null)
+                        }
+                      />
+                      <Input
+                        label="ساعات العمل"
+                        placeholder="السبت – الخميس، 8:00 ص – 11:00 م"
+                        value={local.general.supportHours ?? ""}
+                        onChange={(e) =>
+                          set("general", "supportHours", e.target.value || null)
+                        }
+                      />
+                      <div className="sm:col-span-2">
+                        <Textarea
+                          label="العنوان (يدعم أسطراً متعدّدة)"
+                          rows={3}
+                          placeholder={"غزة، فلسطين\nشارع الرشيد، المنطقة الغربية"}
+                          value={local.general.supportAddress ?? ""}
+                          onChange={(e) =>
+                            set("general", "supportAddress", e.target.value || null)
+                          }
+                        />
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -239,19 +294,19 @@ export default function SettingsPage() {
                         min={0} max={50}
                       />
                       <NumberInput
-                        label="رسوم التوصيل الأساسية (ريال)"
+                        label="رسوم التوصيل الأساسية (شيكل)"
                         value={local.fees.deliveryFeeBase}
                         onChange={(v) => set("fees", "deliveryFeeBase", v)}
                         min={0}
                       />
                       <NumberInput
-                        label="رسوم التوصيل لكل كيلومتر (ريال)"
+                        label="رسوم التوصيل لكل كيلومتر (شيكل)"
                         value={local.fees.deliveryFeePerKm}
                         onChange={(v) => set("fees", "deliveryFeePerKm", v)}
                         min={0}
                       />
                       <NumberInput
-                        label="الحد الأدنى للطلب (ريال)"
+                        label="الحد الأدنى للطلب (شيكل)"
                         value={local.fees.minOrderAmount}
                         onChange={(v) => set("fees", "minOrderAmount", v)}
                         min={0}
@@ -370,7 +425,7 @@ export default function SettingsPage() {
                       ))}
                       <div className="pt-2">
                         <NumberInput
-                          label="الحد الأقصى لرصيد المحفظة (ريال)"
+                          label="الحد الأقصى لرصيد المحفظة (شيكل)"
                           value={local.payment.maxWalletBalance}
                           onChange={(v) => set("payment", "maxWalletBalance", v)}
                           min={50}
@@ -541,7 +596,7 @@ function NumberInput({
     <Input
       label={label}
       type="number"
-      value={value}
+      value={Number.isFinite(value) ? value : ""}
       min={min}
       max={max}
       onChange={(e) => onChange(Number(e.target.value))}

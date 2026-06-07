@@ -2,77 +2,156 @@
 
 import { useState, useRef } from "react";
 import {
-  User, Phone, Lock, MapPin, Building2, FileText,
-  Upload, CheckSquare, Eye, EyeOff, ImagePlus,
-  Landmark, Wallet,
+  User,
+  Phone,
+  Lock,
+  MapPin,
+  Building2,
+  FileText,
+  Upload,
+  CheckSquare,
+  Eye,
+  EyeOff,
+  ImagePlus,
 } from "lucide-react";
 import { useCompleteProfile } from "@/hooks/useAuth";
+import { useCategories } from "@/hooks/useCategories";
 import { getApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
+import { LocationPicker, type PickedLocation } from "@/components/ui/location-picker";
 import { useToast } from "@/providers/ToastProvider";
 
 const ACCOUNT_TYPE_OPTIONS = [
-  { value: "bank_account", label: "حساب بنكي"        },
-  { value: "wallet",       label: "محفظة إلكترونية" },
+  { value: "bank_account", label: "حساب بنكي" },
+  { value: "wallet", label: "محفظة إلكترونية" },
 ];
 
-const BANK_OPTIONS = [
-  { value: "Bank of Palestine",      label: "بنك فلسطين",           tint: "bg-emerald-100 text-emerald-700" },
-  { value: "Palestine Islamic Bank", label: "بنك فلسطين الإسلامي", tint: "bg-teal-100 text-teal-700"       },
-  { value: "Arab Islamic Bank",      label: "البنك الإسلامي العربي", tint: "bg-amber-100 text-amber-700"     },
+interface PaymentBrand {
+  value: string;
+  label: string;
+  /** Single Arabic letter shown when no logoUrl is provided. */
+  mark: string;
+  /** Solid brand background (e.g. "bg-emerald-600"). */
+  bg: string;
+  /** Optional path to a real logo asset, e.g. "/payments/bop.svg". */
+  logoUrl?: string;
+}
+
+const BANK_OPTIONS: PaymentBrand[] = [
+  {
+    value: "Bank of Palestine",
+    label: "بنك فلسطين",
+    mark: "ف",
+    bg: "bg-emerald-600",
+    logoUrl: "/payments/bank-of-palestine.svg",
+  },
+  {
+    value: "Palestine Islamic Bank",
+    label: "بنك فلسطين الإسلامي",
+    mark: "إ",
+    bg: "bg-teal-600",
+    logoUrl: "/payments/palestine-islamic-bank.svg",
+  },
+  {
+    value: "Arab Islamic Bank",
+    label: "البنك الإسلامي العربي",
+    mark: "ع",
+    bg: "bg-amber-600",
+    logoUrl: "/payments/arab-islamic-bank.svg",
+  },
 ];
 
-const WALLET_OPTIONS = [
-  { value: "PalPay",     label: "PalPay",     tint: "bg-sky-100 text-sky-700"       },
-  { value: "Jawwal Pay", label: "Jawwal Pay", tint: "bg-fuchsia-100 text-fuchsia-700" },
+const WALLET_OPTIONS: PaymentBrand[] = [
+  {
+    value: "PalPay",
+    label: "PalPay",
+    mark: "P",
+    bg: "bg-sky-600",
+    logoUrl: "/payments/palpay.svg",
+  },
+  {
+    value: "Jawwal Pay",
+    label: "Jawwal Pay",
+    mark: "J",
+    bg: "bg-fuchsia-600",
+    logoUrl: "/payments/jawwal-pay.svg",
+  },
 ];
 
-function OptionWithLogo({ icon: Icon, tint, label }: {
-  icon: React.ElementType; tint: string; label: string;
+function PaymentLogo({
+  brand,
+  size = "md",
+}: {
+  brand: PaymentBrand;
+  size?: "sm" | "md";
 }) {
-  return (
-    <span className="flex items-center gap-2">
-      <span className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${tint}`}>
-        <Icon className="w-3 h-3" />
+  const [failed, setFailed] = useState(false);
+  const dim = size === "sm" ? "w-5 h-5 text-[10px]" : "w-7 h-7 text-xs";
+
+  if (brand.logoUrl && !failed) {
+    return (
+      <span
+        className={`${dim} rounded-md bg-white border border-border flex items-center justify-center overflow-hidden shrink-0`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={brand.logoUrl}
+          alt={brand.label}
+          className="w-full h-full object-contain"
+          onError={() => setFailed(true)}
+        />
       </span>
-      <span>{label}</span>
+    );
+  }
+  return (
+    <span
+      className={`${dim} rounded-md ${brand.bg} text-white font-black flex items-center justify-center shrink-0`}
+    >
+      {brand.mark}
     </span>
   );
 }
 
-const CUISINE_OPTIONS = [
-  { value: "fast_food",  label: "وجبات سريعة"  },
-  { value: "sweets",     label: "حلويات"        },
-  { value: "drinks",     label: "مشروبات"       },
-  { value: "kitchen",    label: "مطبخ"          },
-  { value: "pizza",      label: "بيتزا"         },
-  { value: "shawarma",   label: "شاورما"        },
-  { value: "grills",     label: "مشويات"        },
-  { value: "seafood",    label: "مأكولات بحرية" },
-  { value: "sandwiches", label: "سندويشات"      },
-  { value: "breakfast",  label: "فطور"          },
-  { value: "healthy",    label: "صحي"           },
-  { value: "asian",      label: "آسيوي"         },
-  { value: "other",      label: "أخرى"          },
-];
+function PaymentOption({ brand }: { brand: PaymentBrand }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <PaymentLogo brand={brand} size="sm" />
+      <span>{brand.label}</span>
+    </span>
+  );
+}
 
 const SECTIONS = [
-  { id: "password",   icon: Lock,      label: "كلمة المرور"    },
-  { id: "restaurant", icon: Building2, label: "بيانات المطعم"  },
-  { id: "owner",      icon: User,      label: "بيانات المالك"  },
-  { id: "files",      icon: ImagePlus, label: "المستندات"      },
-  { id: "payment",    icon: FileText,  label: "معلومات الدفع"  },
+  { id: "password", icon: Lock, label: "كلمة المرور" },
+  { id: "restaurant", icon: Building2, label: "بيانات المطعم" },
+  { id: "owner", icon: User, label: "بيانات المالك" },
+  { id: "files", icon: ImagePlus, label: "المستندات" },
+  { id: "payment", icon: FileText, label: "معلومات الدفع" },
 ];
 
-interface FilePreview { file: File; url: string }
+interface FilePreview {
+  file: File;
+  url: string;
+}
 
-function SectionCard({ id, icon: Icon, label, children }: {
-  id: string; icon: React.ElementType; label: string; children: React.ReactNode;
+function SectionCard({
+  id,
+  icon: Icon,
+  label,
+  children,
+}: {
+  id: string;
+  icon: React.ElementType;
+  label: string;
+  children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+    <section
+      id={id}
+      className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden"
+    >
       <div className="flex items-center gap-2.5 px-6 py-4 border-b border-border bg-muted/30">
         <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <Icon className="w-3.5 h-3.5 text-primary" />
@@ -84,7 +163,12 @@ function SectionCard({ id, icon: Icon, label, children }: {
   );
 }
 
-function FileUploadButton({ label, preview, onFile, inputRef }: {
+function FileUploadButton({
+  label,
+  preview,
+  onFile,
+  inputRef,
+}: {
   label: string;
   preview: FilePreview | null;
   onFile: (f: FilePreview | null) => void;
@@ -109,7 +193,11 @@ function FileUploadButton({ label, preview, onFile, inputRef }: {
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview.url} alt={label} className="h-full w-full object-cover" />
+          <img
+            src={preview.url}
+            alt={label}
+            className="h-full w-full object-cover"
+          />
         ) : (
           <>
             <Upload className="w-5 h-5" />
@@ -117,30 +205,51 @@ function FileUploadButton({ label, preview, onFile, inputRef }: {
           </>
         )}
       </button>
-      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleChange} />
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleChange}
+      />
     </div>
   );
 }
 
 export default function CompleteProfilePage() {
   const [form, setForm] = useState({
-    password: "", confirmPassword: "",
-    restaurantName: "", ownerName: "",
-    ownerNationalIdNumber: "", commercialRegNumber: "",
-    restaurantPhone: "", street: "", city: "",
+    password: "",
+    confirmPassword: "",
+    restaurantName: "",
+    ownerName: "",
+    ownerNationalIdNumber: "",
+    commercialRegNumber: "",
+    restaurantPhone: "",
+    street: "",
+    city: "",
+    lat: "",
+    lng: "",
     cuisineType: "",
     accountType: "bank_account",
-    bankName: "", iban: "", accountNumber: "",
-    walletType: "", walletPhone: "",
+    accountHolderName: "",
+    bankName: "",
+    iban: "",
+    accountNumber: "",
+    walletType: "",
+    walletPhone: "",
     termsAccepted: false,
   });
-  const [showPwd, setShowPwd]               = useState(false);
-  const [showConfirm, setShowConfirm]       = useState(false);
-  const [logo, setLogo]                     = useState<FilePreview | null>(null);
-  const [ownerIdPicture, setOwnerIdPicture] = useState<FilePreview | null>(null);
-  const logoRef  = useRef<HTMLInputElement>(null);
+  const [showPwd, setShowPwd] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [logo, setLogo] = useState<FilePreview | null>(null);
+  const [ownerIdPicture, setOwnerIdPicture] = useState<FilePreview | null>(
+    null,
+  );
+  const logoRef = useRef<HTMLInputElement>(null);
   const idPicRef = useRef<HTMLInputElement>(null);
   const completeProfile = useCompleteProfile();
+  const { data: categories = [], isLoading: categoriesLoading } =
+    useCategories();
   const { error } = useToast();
 
   const set = (key: keyof typeof form, val: string | boolean) =>
@@ -149,41 +258,75 @@ export default function CompleteProfilePage() {
   const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (form.password !== form.confirmPassword) {
-      error("خطأ", "كلمة المرور وتأكيدها غير متطابقتين"); return;
+      error("خطأ", "كلمة المرور وتأكيدها غير متطابقتين");
+      return;
     }
     if (!form.cuisineType) {
-      error("خطأ", "يرجى اختيار نوع المطبخ"); return;
+      error("خطأ", "يرجى اختيار نوع المطبخ");
+      return;
+    }
+    if (!form.accountHolderName.trim()) {
+      error("خطأ", "يرجى إدخال اسم صاحب الحساب");
+      return;
     }
     if (form.accountType === "bank_account") {
-      if (!form.bankName)              { error("خطأ", "يرجى اختيار البنك"); return; }
-      if (!form.iban.trim())           { error("خطأ", "يرجى إدخال رقم الآيبان"); return; }
-      if (!form.accountNumber.trim())  { error("خطأ", "يرجى إدخال رقم الحساب"); return; }
+      if (!form.bankName) {
+        error("خطأ", "يرجى اختيار البنك");
+        return;
+      }
+      if (!form.iban.trim()) {
+        error("خطأ", "يرجى إدخال رقم الآيبان");
+        return;
+      }
+      if (!form.accountNumber.trim()) {
+        error("خطأ", "يرجى إدخال رقم الحساب");
+        return;
+      }
     } else {
-      if (!form.walletType)            { error("خطأ", "يرجى اختيار نوع المحفظة"); return; }
-      if (!form.accountNumber.trim())  { error("خطأ", "يرجى إدخال رقم الحساب"); return; }
-      if (!form.walletPhone.trim())    { error("خطأ", "يرجى إدخال رقم الجوال للمحفظة"); return; }
+      if (!form.walletType) {
+        error("خطأ", "يرجى اختيار نوع المحفظة");
+        return;
+      }
+      if (!form.accountNumber.trim()) {
+        error("خطأ", "يرجى إدخال رقم الحساب");
+        return;
+      }
+      if (!form.walletPhone.trim()) {
+        error("خطأ", "يرجى إدخال رقم الجوال للمحفظة");
+        return;
+      }
     }
     if (!form.termsAccepted) {
-      error("خطأ", "يجب الموافقة على الشروط والأحكام"); return;
+      error("خطأ", "يجب الموافقة على الشروط والأحكام");
+      return;
     }
 
-    const paymentInfo = form.accountType === "bank_account"
-      ? {
-          type: "bank_account",
-          bankName: form.bankName,
-          accountNumber: form.accountNumber.trim(),
-          iban: form.iban.trim(),
-        }
-      : {
-          type: "wallet",
-          walletType: form.walletType,
-          accountNumber: form.accountNumber.trim(),
-          phone: form.walletPhone.trim(),
-        };
+    const paymentInfo =
+      form.accountType === "bank_account"
+        ? {
+            type: "bank_account",
+            accountHolderName: form.accountHolderName.trim(),
+            bankName: form.bankName,
+            accountNumber: form.accountNumber.trim(),
+            iban: form.iban.trim(),
+          }
+        : {
+            type: "wallet",
+            accountHolderName: form.accountHolderName.trim(),
+            walletType: form.walletType,
+            accountNumber: form.accountNumber.trim(),
+            phone: form.walletPhone.trim(),
+          };
 
     const SKIP = new Set([
-      "confirmPassword", "accountType", "bankName", "iban",
-      "accountNumber", "walletType", "walletPhone",
+      "confirmPassword",
+      "accountType",
+      "accountHolderName",
+      "bankName",
+      "iban",
+      "accountNumber",
+      "walletType",
+      "walletPhone",
     ]);
     const fd = new FormData();
     (Object.entries(form) as [string, string | boolean][]).forEach(([k, v]) => {
@@ -191,7 +334,7 @@ export default function CompleteProfilePage() {
       fd.append(k, String(v));
     });
     fd.append("paymentInfo", JSON.stringify(paymentInfo));
-    if (logo?.file)           fd.append("logo", logo.file);
+    if (logo?.file) fd.append("logo", logo.file);
     if (ownerIdPicture?.file) fd.append("ownerIdPicture", ownerIdPicture.file);
 
     completeProfile.mutate(fd, {
@@ -201,17 +344,23 @@ export default function CompleteProfilePage() {
 
   const progress = (() => {
     const fields = [
-      form.password, form.restaurantName, form.ownerName,
-      form.ownerNationalIdNumber, form.commercialRegNumber,
-      form.restaurantPhone, form.street, form.city,
-      form.cuisineType, form.accountNumber,
+      form.password,
+      form.restaurantName,
+      form.ownerName,
+      form.ownerNationalIdNumber,
+      form.commercialRegNumber,
+      form.restaurantPhone,
+      form.street,
+      form.city,
+      form.cuisineType,
+      form.accountHolderName,
+      form.accountNumber,
     ];
     return Math.round((fields.filter(Boolean).length / fields.length) * 100);
   })();
 
   return (
     <div className="min-h-screen bg-[#f8fafc]" dir="rtl">
-
       {/* ── Sticky top bar ── */}
       <div className="bg-white border-b border-border sticky top-0 z-20 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -220,12 +369,18 @@ export default function CompleteProfilePage() {
               ج
             </div>
             <div>
-              <p className="text-sm font-black text-foreground leading-none">إكمال بيانات المطعم</p>
-              <p className="text-xs text-muted-foreground mt-0.5">أكمل بياناتك للبدء في استقبال الطلبات</p>
+              <p className="text-sm font-black text-foreground leading-none">
+                إكمال بيانات المطعم
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                أكمل بياناتك للبدء في استقبال الطلبات
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-muted-foreground">{progress}%</span>
+            <span className="text-xs font-bold text-muted-foreground">
+              {progress}%
+            </span>
             <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full transition-all duration-500"
@@ -251,8 +406,10 @@ export default function CompleteProfilePage() {
       </div>
 
       {/* ── Form ── */}
-      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-4 py-4 pb-12 space-y-4">
-
+      <form
+        onSubmit={handleSubmit}
+        className="max-w-2xl mx-auto px-4 py-4 pb-12 space-y-4"
+      >
         <SectionCard id="password" icon={Lock} label="كلمة المرور">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
@@ -262,8 +419,16 @@ export default function CompleteProfilePage() {
               onChange={(e) => set("password", e.target.value)}
               placeholder="••••••••"
               endIcon={
-                <button type="button" onClick={() => setShowPwd(!showPwd)} className="text-muted-foreground hover:text-foreground transition-colors">
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPwd ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               }
               autoComplete="new-password"
@@ -276,11 +441,23 @@ export default function CompleteProfilePage() {
               onChange={(e) => set("confirmPassword", e.target.value)}
               placeholder="••••••••"
               endIcon={
-                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="text-muted-foreground hover:text-foreground transition-colors">
-                  {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showConfirm ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               }
-              error={form.confirmPassword && form.password !== form.confirmPassword ? "كلمة المرور غير متطابقة" : undefined}
+              error={
+                form.confirmPassword && form.password !== form.confirmPassword
+                  ? "كلمة المرور غير متطابقة"
+                  : undefined
+              }
               autoComplete="new-password"
               required
             />
@@ -311,10 +488,24 @@ export default function CompleteProfilePage() {
             label="نوع المطبخ"
             value={form.cuisineType}
             onValueChange={(v) => set("cuisineType", v)}
-            placeholder="اختر نوع المطبخ"
+            placeholder={
+              categoriesLoading ? "جارٍ تحميل التصنيفات..." : "اختر نوع المطبخ"
+            }
           >
-            {CUISINE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.name}>
+                <span className="flex items-center gap-2">
+                  {c.iconUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.iconUrl}
+                      alt=""
+                      className="w-4 h-4 object-contain shrink-0"
+                    />
+                  )}
+                  <span>{c.name}</span>
+                </span>
+              </SelectItem>
             ))}
           </Select>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -333,6 +524,33 @@ export default function CompleteProfilePage() {
               placeholder="شارع الملك فهد"
               startIcon={<MapPin className="w-4 h-4" />}
               required
+            />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary" />
+              موقع المطعم على الخريطة
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              اضغط «استخدم موقعي الحالي» إذا كنت داخل المطعم الآن، أو اسحب الدبوس
+              لتحديد المكان بدقة. سيتم تعبئة المدينة والشارع تلقائياً.
+            </p>
+            <LocationPicker
+              value={
+                form.lat && form.lng
+                  ? { lat: parseFloat(form.lat), lng: parseFloat(form.lng) }
+                  : null
+              }
+              onChange={(loc: PickedLocation) => {
+                setForm((prev) => ({
+                  ...prev,
+                  lat: String(loc.lat),
+                  lng: String(loc.lng),
+                  // Only auto-fill when the user hasn't typed something themselves.
+                  city: prev.city || loc.city || prev.city,
+                  street: prev.street || loc.street || prev.street,
+                }));
+              }}
             />
           </div>
         </SectionCard>
@@ -366,10 +584,24 @@ export default function CompleteProfilePage() {
           />
         </SectionCard>
 
-        <SectionCard id="files" icon={ImagePlus} label="المستندات والصور (اختيارية)">
+        <SectionCard
+          id="files"
+          icon={ImagePlus}
+          label="المستندات والصور (اختيارية)"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FileUploadButton label="شعار المطعم"  preview={logo}           onFile={setLogo}           inputRef={logoRef}   />
-            <FileUploadButton label="صورة الهوية"  preview={ownerIdPicture} onFile={setOwnerIdPicture} inputRef={idPicRef}  />
+            <FileUploadButton
+              label="شعار المطعم"
+              preview={logo}
+              onFile={setLogo}
+              inputRef={logoRef}
+            />
+            <FileUploadButton
+              label="صورة الهوية"
+              preview={ownerIdPicture}
+              onFile={setOwnerIdPicture}
+              inputRef={idPicRef}
+            />
           </div>
         </SectionCard>
 
@@ -381,9 +613,20 @@ export default function CompleteProfilePage() {
             placeholder="اختر نوع الحساب"
           >
             {ACCOUNT_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </Select>
+
+          <Input
+            label="اسم صاحب الحساب"
+            value={form.accountHolderName}
+            onChange={(e) => set("accountHolderName", e.target.value)}
+            placeholder="الاسم كما هو مسجّل في الحساب"
+            startIcon={<User className="w-4 h-4" />}
+            required
+          />
 
           {form.accountType === "bank_account" ? (
             <>
@@ -395,10 +638,28 @@ export default function CompleteProfilePage() {
               >
                 {BANK_OPTIONS.map((b) => (
                   <SelectItem key={b.value} value={b.value}>
-                    <OptionWithLogo icon={Landmark} tint={b.tint} label={b.label} />
+                    <PaymentOption brand={b} />
                   </SelectItem>
                 ))}
               </Select>
+              {(() => {
+                const picked = BANK_OPTIONS.find(
+                  (b) => b.value === form.bankName,
+                );
+                return picked ? (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-border">
+                    <PaymentLogo brand={picked} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-foreground">
+                        {picked.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {picked.value}
+                      </span>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="رقم الآيبان (IBAN)"
@@ -428,10 +689,28 @@ export default function CompleteProfilePage() {
               >
                 {WALLET_OPTIONS.map((w) => (
                   <SelectItem key={w.value} value={w.value}>
-                    <OptionWithLogo icon={Wallet} tint={w.tint} label={w.label} />
+                    <PaymentOption brand={w} />
                   </SelectItem>
                 ))}
               </Select>
+              {(() => {
+                const picked = WALLET_OPTIONS.find(
+                  (w) => w.value === form.walletType,
+                );
+                return picked ? (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-border">
+                    <PaymentLogo brand={picked} />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-foreground">
+                        {picked.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {picked.value}
+                      </span>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="رقم الحساب"
@@ -465,18 +744,26 @@ export default function CompleteProfilePage() {
                 checked={form.termsAccepted}
                 onChange={(e) => set("termsAccepted", e.target.checked)}
               />
-              <div className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-colors ${form.termsAccepted ? "bg-primary border-primary" : "bg-white border-border"}`}>
-                {form.termsAccepted && <CheckSquare className="w-3 h-3 text-white" />}
+              <div
+                className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-colors ${form.termsAccepted ? "bg-primary border-primary" : "bg-white border-border"}`}
+              >
+                {form.termsAccepted && (
+                  <CheckSquare className="w-3 h-3 text-white" />
+                )}
               </div>
             </div>
             <span className="text-sm text-muted-foreground leading-relaxed">
               أوافق على{" "}
-              <span className="text-primary font-bold">الشروط والأحكام</span>
-              {" "}وسياسة الخصوصية لمنصة جاهز
+              <span className="text-primary font-bold">الشروط والأحكام</span>{" "}
+              وسياسة الخصوصية لمنصة جاهز
             </span>
           </label>
 
-          <Button type="submit" className="w-full h-12 text-[15px]" loading={completeProfile.isPending}>
+          <Button
+            type="submit"
+            className="w-full h-12 text-[15px]"
+            loading={completeProfile.isPending}
+          >
             إكمال التسجيل والمتابعة
           </Button>
         </div>

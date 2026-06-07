@@ -1,7 +1,8 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { ManagerServiceService } from './manager-service.service';
 import { AnalyticsService } from './analytics/analytics.service';
+import { OrderStatus } from './analytics/read-models/order.read';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
@@ -48,6 +49,35 @@ export class ManagerServiceController {
     return this.analytics.getOrdersAnalytics();
   }
 
+  /** GET /api/manager/orders — paginated list of every order on the platform. */
+  @Get('orders')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('manager')
+  listOrders(
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const allowed = Object.values(OrderStatus) as string[];
+    const safeStatus =
+      status && allowed.includes(status) ? (status as OrderStatus) : undefined;
+    return this.analytics.listOrders({
+      status: safeStatus,
+      search,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /** GET /api/manager/orders/:id — full order detail bundle. */
+  @Get('orders/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('manager')
+  getOrderDetails(@Param('id') id: string) {
+    return this.analytics.getOrderDetails(id);
+  }
+
   /** GET /api/manager/analytics/revenue */
   @Get('analytics/revenue')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -86,5 +116,13 @@ export class ManagerServiceController {
   @Roles('manager')
   getPayments() {
     return this.analytics.getPaymentsAnalytics();
+  }
+
+  /** GET /api/manager/map/users — geo points for the platform-wide map page. */
+  @Get('map/users')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('manager')
+  getUserMap() {
+    return this.analytics.getUserMap();
   }
 }

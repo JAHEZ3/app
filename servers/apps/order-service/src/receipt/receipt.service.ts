@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { CartItem } from '../cart/cart.service';
-import { Order } from '../entities/order.entity';
+import { OnlineOrder as Order } from '../entities/online-order.entity';
 
 @Injectable()
 export class ReceiptService {
@@ -58,8 +58,8 @@ export class ReceiptService {
         <tr>
           <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">${i.mealName}</td>
           <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${i.quantity}</td>
-          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${Number(i.unitPrice).toFixed(2)} ر.س</td>
-          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${Number(i.totalPrice).toFixed(2)} ر.س</td>
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${Number(i.unitPrice).toFixed(2)} شيكل</td>
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${Number(i.totalPrice).toFixed(2)} شيكل</td>
         </tr>
         ${
           i.options?.length
@@ -126,10 +126,10 @@ export class ReceiptService {
 
   <div class="section">
     <table class="totals">
-      <tr><td style="color:#666">المجموع الجزئي</td><td style="text-align:left">${Number(order.subtotal).toFixed(2)} ر.س</td></tr>
-      ${Number(order.deliveryFee) > 0 ? `<tr><td style="color:#666">رسوم التوصيل</td><td style="text-align:left">${Number(order.deliveryFee).toFixed(2)} ر.س</td></tr>` : ''}
-      ${Number(order.discountAmount) > 0 ? `<tr><td style="color:#e53">خصم الكوبون</td><td style="text-align:left;color:#e53">- ${Number(order.discountAmount).toFixed(2)} ر.س</td></tr>` : ''}
-      <tr class="total-row"><td>الإجمالي</td><td style="text-align:left">${Number(order.totalAmount).toFixed(2)} ر.س</td></tr>
+      <tr><td style="color:#666">المجموع الجزئي</td><td style="text-align:left">${Number(order.subtotal).toFixed(2)} شيكل</td></tr>
+      ${Number(order.deliveryFee) > 0 ? `<tr><td style="color:#666">رسوم التوصيل</td><td style="text-align:left">${Number(order.deliveryFee).toFixed(2)} شيكل</td></tr>` : ''}
+      ${Number(order.discountAmount) > 0 ? `<tr><td style="color:#e53">خصم الكوبون</td><td style="text-align:left;color:#e53">- ${Number(order.discountAmount).toFixed(2)} شيكل</td></tr>` : ''}
+      <tr class="total-row"><td>الإجمالي</td><td style="text-align:left">${Number(order.totalAmount).toFixed(2)} شيكل</td></tr>
     </table>
   </div>
 

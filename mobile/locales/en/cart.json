@@ -27,7 +27,11 @@
     "clearTitle": "Clear cart",
     "clearMessage": "Remove every item from your cart?",
     "checkoutTitle": "Checkout",
-    "checkoutMessage": "Your cart is ready for the next checkout step."
+    "checkoutMessage": "Your cart is ready for the next checkout step.",
+    "checkoutProcessingTitle": "Already processing",
+    "checkoutProcessingMessage": "Your order is still being processed. Please wait a moment.",
+    "checkoutErrorTitle": "Checkout failed",
+    "checkoutErrorMessage": "Something went wrong placing your order. Please try again."
   },
   "banner": {
     "deliveringFrom": "Delivering from",

@@ -7,3 +7,4 @@ export const useProfileT = () => useTranslation('profile');
 export const useOrdersT = () => useTranslation('orders');
 export const useDeliveryT = () => useTranslation('delivery');
 export const useCartT = () => useTranslation('cart');
+export const useCheckoutT = () => useTranslation('checkout');

@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { Job } from 'bullmq';
 import { RECEIPT_QUEUE, JOBS } from './queue.constants';
 import { ReceiptService } from '../receipt/receipt.service';
-import { Order } from '../entities/order.entity';
+import { OnlineOrder as Order } from '../entities/online-order.entity';
 import { CartItem } from '../cart/cart.service';
 
 export interface GenerateReceiptJobData {

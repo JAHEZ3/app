@@ -154,3 +154,56 @@ export interface CityDTO {
   nameAr: string;
   isActive: boolean;
 }
+
+// ─── Contact DTOs ─────────────────────────────────────────────────────────────
+
+export type ContactSubject =
+  | "general"
+  | "order_issue"
+  | "restaurant_join"
+  | "driver_join"
+  | "complaint"
+  | "other";
+
+export interface ContactInfoDTO {
+  platformName: string;
+  supportEmail: string;
+  supportPhone: string;
+  supportWhatsapp: string | null;
+  supportAddress: string | null;
+  supportHours: string | null;
+  logoUrl: string | null;
+  // Social media (added 2026-05)
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  xUrl?: string | null;
+  youtubeUrl?: string | null;
+  tiktokUrl?: string | null;
+  snapchatUrl?: string | null;
+  // App stores
+  appStoreUrl?: string | null;
+  googlePlayUrl?: string | null;
+  // Public website CTA button URLs (route targets for "register restaurant",
+  // "register driver", "download app" buttons in Navbar + JoinUsSection)
+  restaurantSignupUrl?: string | null;
+  driverSignupUrl?: string | null;
+  appDownloadUrl?: string | null;
+  // SEO
+  seoTitleTemplate?: string | null;
+  seoDescription?: string | null;
+  seoOgImageUrl?: string | null;
+}
+
+export interface ContactSubmitDTO {
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: ContactSubject;
+  title: string;
+  message: string;
+}
+
+export interface ContactSubmitResponseDTO {
+  id: string;
+  createdAt: string;
+}

@@ -127,7 +127,10 @@ export class DeliveryServiceController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("manager")
   approveApplication(
-    @Param("id") requestId: string,
+    // ParseUUIDPipe rejects malformed ids (e.g. the literal "undefined" the
+    // dashboard would send when interpolating a missing param) with a clean
+    // 400 instead of crashing TypeORM with `invalid input syntax for type uuid`.
+    @Param("id", ParseUUIDPipe) requestId: string,
     @CurrentUser("sub") managerId: string,
   ) {
     return this.service.approveApplication(requestId, managerId);
@@ -143,7 +146,7 @@ export class DeliveryServiceController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("manager")
   rejectApplication(
-    @Param("id") requestId: string,
+    @Param("id", ParseUUIDPipe) requestId: string,
     @CurrentUser("sub") managerId: string,
     @Body() dto: RejectApplicationDto,
   ) {
@@ -239,6 +242,47 @@ export class DeliveryServiceController {
   @Roles("manager", "restaurant_owner")
   listAvailableAgents() {
     return this.service.listAvailableAgents();
+  }
+
+  /**
+   * GET /api/delivery/open?lat=…&lng=…&city=…
+   *
+   * Customer-facing list of agents who are truly "online right now". Filters
+   * to active + isDelivery + a Redis location ping in the last 5 minutes —
+   * agents who simply have the app installed but aren't on duty are excluded.
+   *
+   * Optional query params:
+   *   • `lat`+`lng`  — customer's location. When both are present the results
+   *                    are sorted by haversine distance and each row carries
+   *                    `distanceKm`. Validated to be inside (-90,90)/(-180,180).
+   *   • `city`       — case-sensitive city filter.
+   *
+   * Returns sanitized fields only (no phone / no full name) — phone is exposed
+   * only after the agent is assigned to a specific order.
+   */
+  @Get("open")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("customer", "manager")
+  listOpenAgents(
+    @Query("lat") latRaw?: string,
+    @Query("lng") lngRaw?: string,
+    @Query("city") city?: string,
+  ) {
+    const lat = latRaw !== undefined ? Number(latRaw) : undefined;
+    const lng = lngRaw !== undefined ? Number(lngRaw) : undefined;
+    const valid =
+      lat !== undefined &&
+      lng !== undefined &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      Math.abs(lat) <= 90 &&
+      Math.abs(lng) <= 180;
+
+    return this.service.listOpenAgents({
+      customerLat: valid ? lat : undefined,
+      customerLng: valid ? lng : undefined,
+      city,
+    });
   }
 
   // ─── NATS event: persist location log ────────────────────────────────────

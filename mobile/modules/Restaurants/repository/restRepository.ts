@@ -3,16 +3,29 @@ import { RestaurantDetailsDTO, RestaurantsResponseDTO } from '../dto/Restaurant'
 import { MenuDTO } from '../dto/Menu';
 import { MenuSectionDTO } from '../dto/MenuSection';
 import { toRestaurantAdapter } from '../adapter/toRestaurantAdapter';
+import { toCategoryAdapter } from '../adapter/toCategoryAdapter';
+import { CategoryDTO } from '../dto/Category';
 import { toRestaurantDetailsAdapter } from '../adapter/toRestaurantDetailsAdapter';
 import { toMenuAdapter } from '../adapter/toMenuAdapter';
 import { toMenuSectionAdapter } from '../adapter/toMenuSectionAdapter';
 import { RestaurantDetails } from '../entities/RestaurantDetails';
+import { Category } from '../entities/Category';
 import { Menu } from '../entities/Menu';
 import { MenuSection } from '../entities/MenuSection';
-import { RestaurantsRepository, RestaurantsPage } from './RestaurantsRepository';
+import { Meal } from '../entities/Meal';
+import {
+    RestaurantsRepository,
+    RestaurantsPage,
+    RateRestaurantPayload,
+    RateRestaurantResult,
+    MyRestaurantRating,
+} from './RestaurantsRepository';
 
 const BASE = '/api/restaurant/mobile/restaurants';
 const MENU_BASE = '/api/restaurant/mobile/menus';
+const CATEGORIES_BASE = '/api/restaurant/categories';
+// Standalone ratings live off the non-mobile path (see controller).
+const RATINGS_BASE = '/api/restaurant/restaurants';
 
 export const restRepository = (): RestaurantsRepository => ({
     getRestaurants: async (params): Promise<RestaurantsPage> => {
@@ -21,6 +34,13 @@ export const restRepository = (): RestaurantsRepository => ({
             data: (res.data.data ?? []).map(toRestaurantAdapter),
             meta: res.data.meta,
         };
+    },
+
+    getCategories: async (): Promise<Category[]> => {
+        // The endpoint returns a bare array; tolerate a `{ data }` wrapper too.
+        const res = await restaurantApi.get<CategoryDTO[] | { data: CategoryDTO[] }>(CATEGORIES_BASE);
+        const raw = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
+        return raw.map(toCategoryAdapter);
     },
 
     getRestaurantById: async (id): Promise<RestaurantDetails> => {
@@ -40,5 +60,54 @@ export const restRepository = (): RestaurantsRepository => ({
         const payload = res.data.data;
         const sections = Array.isArray(payload) ? payload : payload.sections ?? [];
         return sections.map(toMenuSectionAdapter);
+    },
+
+    getRestaurantMeals: async (restaurantId): Promise<Meal[]> => {
+        // Two-step: list the restaurant's menus, then fetch each menu's sections
+        // (which carry the meals) in parallel and flatten. Available meals only.
+        const menusRes = await restaurantApi.get<{ data: MenuDTO[] }>(
+            `${BASE}/${restaurantId}/menus`,
+        );
+        const menus = (menusRes.data.data ?? []).map(toMenuAdapter);
+        if (!menus.length) return [];
+
+        const menuPayloads = await Promise.all(
+            menus.map((menu) =>
+                restaurantApi
+                    .get<{ data: { sections?: MenuSectionDTO[] } | MenuSectionDTO[] }>(
+                        `${MENU_BASE}/${menu.id}`,
+                    )
+                    .then((res) => res.data.data)
+                    .catch(() => [] as MenuSectionDTO[]),
+            ),
+        );
+
+        return menuPayloads.flatMap((payload) => {
+            const sections = Array.isArray(payload) ? payload : payload?.sections ?? [];
+            return sections
+                .map(toMenuSectionAdapter)
+                .flatMap((section) => section.meals)
+                .filter((meal) => meal.isAvailable);
+        });
+    },
+
+    rateRestaurant: async (
+        restaurantId: string,
+        payload: RateRestaurantPayload,
+    ): Promise<RateRestaurantResult> => {
+        const res = await restaurantApi.post<{ data: RateRestaurantResult }>(
+            `${RATINGS_BASE}/${restaurantId}/rate`,
+            payload,
+        );
+        return res.data.data;
+    },
+
+    getMyRestaurantRating: async (
+        restaurantId: string,
+    ): Promise<MyRestaurantRating | null> => {
+        const res = await restaurantApi.get<{ data: MyRestaurantRating | null }>(
+            `${RATINGS_BASE}/${restaurantId}/my-rating`,
+        );
+        return res.data?.data ?? null;
     },
 });

@@ -1,0 +1,153 @@
+{
+  "header": {
+    "eyebrow": "Review & confirm",
+    "title": "Checkout"
+  },
+  "accessibility": {
+    "goBack": "Go back",
+    "placeOrder": "Place order"
+  },
+  "actions": {
+    "signIn": "Sign in"
+  },
+  "sections": {
+    "orderType": {
+      "title": "Order type",
+      "subtitle": "Choose how you'd like to receive your order"
+    },
+    "address": {
+      "title": "Delivery address",
+      "subtitle": "Where should we bring your order?"
+    },
+    "payment": {
+      "title": "Payment method",
+      "subtitle": "Choose how you'd like to pay"
+    },
+    "promo": {
+      "title": "Promo code",
+      "subtitle": "Have a coupon? Apply it for a discount"
+    },
+    "notes": {
+      "title": "Notes for the courier",
+      "subtitle": "Anything we should know? (optional)"
+    },
+    "summary": {
+      "title": "Order summary",
+      "subtitle_one": "{{count}} item · review your total",
+      "subtitle_other": "{{count}} items · review your total"
+    }
+  },
+  "address": {
+    "placeholderLine": "Street, building, apartment…",
+    "placeholderCity": "City",
+    "placeholderStreet": "Neighborhood / Area",
+    "placeholderBuilding": "Building name or number",
+    "placeholderFloor": "Floor / apartment",
+    "placeholderNotes": "Notes for the courier (bell, landmark, …)",
+    "gps": {
+      "cta": "Use current location",
+      "errorTitle": "Could not get location",
+      "errorBody": "Make sure location services are on and try again."
+    },
+    "saved": {
+      "cta": "Saved",
+      "title": "Saved addresses",
+      "emptyTitle": "No saved addresses",
+      "emptyBody": "Use the form below to enter an address, then save it from your profile.",
+      "error": "Could not load addresses."
+    },
+    "map": {
+      "cta": "Map"
+    }
+  },
+  "error": {
+    "action": "Retry",
+    "back": "Close"
+  },
+  "orderType": {
+    "delivery": {
+      "label": "Delivery",
+      "description": "We'll bring your order to the address you choose"
+    },
+    "pickup": {
+      "label": "Pickup",
+      "description": "Collect your order from the restaurant yourself",
+      "badge": "No delivery fee"
+    },
+    "scheduled": {
+      "label": "Schedule for later",
+      "description": "Pick a later time to receive your order",
+      "pickButton": "Pick a time",
+      "modalTitle": "Order time",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
+    }
+  },
+  "payment": {
+    "cash": {
+      "label": "Cash on delivery",
+      "description": "Pay the courier in cash when your order arrives"
+    },
+    "card": {
+      "label": "Credit / Debit card",
+      "description": "Pay securely with your card",
+      "badge": "Popular"
+    },
+    "online": {
+      "label": "Online wallet",
+      "description": "Apple Pay, Google Pay or wallet balance"
+    }
+  },
+  "promo": {
+    "placeholder": "Enter promo code",
+    "apply": "Apply",
+    "applied": "Applied",
+    "remove": "Remove",
+    "discount": "Discount"
+  },
+  "notes": {
+    "placeholder": "Leave at the door, ring twice, no onions…"
+  },
+  "summary": {
+    "subtotal": "Subtotal",
+    "deliveryFee": "Delivery fee",
+    "discount": "Discount",
+    "total": "Total"
+  },
+  "secure": {
+    "note": "Secure checkout protected by JAHEZ"
+  },
+  "cta": {
+    "placeOrder": "Place order",
+    "placing": "Placing your order…"
+  },
+  "errors": {
+    "addressRequired": "Please enter a delivery address",
+    "addressLocationRequired": "Pin your location: tap \"Use current location\" or pick a saved address with a marker."
+  },
+  "alerts": {
+    "conflictTitle": "Already processing",
+    "conflictMessage": "Your order is still being processed. Please wait a moment.",
+    "unauthorizedTitle": "Session expired",
+    "unauthorizedMessage": "Please sign in again to complete checkout.",
+    "businessTitle": "Cannot place order",
+    "businessMessage": "Some items in your cart are unavailable right now.",
+    "networkTitle": "Connection issue",
+    "networkMessage": "We couldn't reach the server. Check your connection and try again.",
+    "genericTitle": "Checkout failed",
+    "genericMessage": "Something went wrong placing your order. Please try again.",
+    "scheduleRequiredTitle": "Pick a time",
+    "scheduleRequiredMessage": "Please choose a delivery time before confirming the order."
+  },
+  "success": {
+    "title": "Order placed successfully!",
+    "subtitle": "Your order is on its way. We'll keep you posted at every step.",
+    "orderId": "Order ID",
+    "payment": "Payment",
+    "total": "Total paid",
+    "eta": "Arrives in 25-35 min",
+    "trackOrder": "Track your order",
+    "backHome": "Back to home",
+    "pickDriver": "Pick your driver"
+  }
+}

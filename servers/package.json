@@ -48,6 +48,7 @@
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.1",
     "nats": "^2.29.3",
+    "node-thermal-printer": "^4.6.0",
     "pg": "^8.13.3",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",

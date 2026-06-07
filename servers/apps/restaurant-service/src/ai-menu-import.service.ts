@@ -130,6 +130,11 @@ export class AiMenuImportService {
     if (!file.mimetype?.startsWith("image/")) {
       throw new BadRequestException("يجب أن يكون الملف صورة.");
     }
+    if (!SUPPORTED_VISION_MIMETYPES.has(file.mimetype.toLowerCase())) {
+      throw new BadRequestException(
+        "صيغة الصورة غير مدعومة. يرجى رفع صورة بصيغة PNG أو JPEG أو GIF أو WEBP.",
+      );
+    }
 
     // Best-effort temporary storage. Failure to upload doesn't block analysis;
     // the buffer is still sent inline to the model.
@@ -417,7 +422,7 @@ export class AiMenuImportService {
       const errText = await resp.text();
       this.logger.error(`OpenAI vision failed (${resp.status}): ${errText}`);
       throw new ServiceUnavailableException(
-        "تعذّر تحليل الصورة عبر مزود الذكاء الاصطناعي.",
+        `تعذّر تحليل الصورة عبر مزود الذكاء الاصطناعي. (OpenAI HTTP ${resp.status}: ${extractUpstreamReason(errText)})`,
       );
     }
 
@@ -475,7 +480,7 @@ export class AiMenuImportService {
       const errText = await resp.text();
       this.logger.error(`Anthropic vision failed (${resp.status}): ${errText}`);
       throw new ServiceUnavailableException(
-        "تعذّر تحليل الصورة عبر مزود الذكاء الاصطناعي.",
+        `تعذّر تحليل الصورة عبر مزود الذكاء الاصطناعي. (Anthropic HTTP ${resp.status}: ${extractUpstreamReason(errText)})`,
       );
     }
 
@@ -489,6 +494,35 @@ export class AiMenuImportService {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+
+/** Mime types accepted by both OpenAI vision and Anthropic vision. */
+const SUPPORTED_VISION_MIMETYPES = new Set<string>([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+]);
+
+/**
+ * Pull a short, client-safe reason out of a vendor error body. OpenAI returns
+ * `{ error: { message, code, type } }`; Anthropic returns `{ error: { message, type } }`.
+ * Falls back to the raw text. Trimmed to 160 chars.
+ */
+function extractUpstreamReason(body: string): string {
+  const trimmed = (body ?? "").trim();
+  if (!trimmed) return "no body";
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      error?: { message?: string; code?: string; type?: string };
+    };
+    const msg = parsed.error?.message;
+    if (typeof msg === "string" && msg.trim()) return msg.trim().slice(0, 160);
+  } catch {
+    /* not JSON — fall through to raw */
+  }
+  return trimmed.slice(0, 160);
+}
 
 function pickBasePrice(item: ExtractedItem): number | null {
   const direct = Number(item.price);

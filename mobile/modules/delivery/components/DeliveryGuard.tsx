@@ -10,7 +10,7 @@ import { DeliveryAgentStatus } from '../types';
 const ROUTE_MAP: Record<DeliveryAgentStatus, string> = {
     SUSPENDED: '/delivery/application',
     PENDING_APPROVAL: '/delivery/pending',
-    ACTIVE: '/delivery/dashboard',
+    ACTIVE: '/delivery/tabs/home',
     REJECTED: '/delivery/rejected',
 };
 
@@ -96,20 +96,38 @@ export function DeliveryGuard() {
         if (isError) {
             const httpStatus = (error as any)?.response?.status;
             if (httpStatus === 401 || httpStatus === 403) {
-                // The stored token is not valid for delivery (e.g. a customer token
-                // was saved as the delivery token). Wipe it so the next app open
+                // Token is not valid for delivery. Wipe it so the next app open
                 // skips the refresh attempt entirely and goes straight to login.
-                console.warn('[DeliveryGuard] Auth error on profile fetch — clearing delivery session');
+                console.log('[DeliveryGuard] Auth error on profile fetch — clearing delivery session');
                 clearTokens();
                 SecureStore.deleteItemAsync('deliveryRefreshToken');
                 SecureStore.deleteItemAsync('deliveryAgentStatus');
                 navigate('/delivery/register');
                 return;
             }
-            // Non-auth error: fall back on cached status; if none, open the form.
-            const route = resolveRoute(lastKnownStatus) ?? '/delivery/application';
-            console.warn('[DeliveryGuard] Profile error, using fallback route:', route);
-            navigate(route);
+            if (httpStatus === 404) {
+                // Agent registered via OTP but hasn't submitted their application
+                // form yet — the profile record doesn't exist on the backend.
+                console.log('[DeliveryGuard] Profile 404 — agent has no profile yet, going to application');
+                navigate('/delivery/application');
+                return;
+            }
+            // If we have a cached status, use it — the profile can be corrected
+            // once the network recovers and the destination screen's own
+            // useDeliveryProfile re-fetches.
+            if (lastKnownStatus) {
+                const route = resolveRoute(lastKnownStatus);
+                if (route) {
+                    console.log('[DeliveryGuard] Profile error — routing via cached status:', lastKnownStatus);
+                    navigate(route);
+                    return;
+                }
+            }
+            // Genuine network / server error with no cached status → show the
+            // connection-problem UI so the agent can retry, rather than being
+            // silently dropped into the application form.
+            console.log('[DeliveryGuard] Profile error with no cached status — showing connection error UI');
+            setTimedOut(true);
             return;
         }
 

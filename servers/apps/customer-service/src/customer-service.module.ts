@@ -7,6 +7,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { redisStore } from 'cache-manager-redis-yet';
 import { CustomerServiceController } from './customer-service.controller';
 import { CustomerServiceService } from './customer-service.service';
+import { AddressService } from './address.service';
 import { S3Service } from './s3.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Customer } from './entities/customer.entity';
@@ -61,6 +62,6 @@ import { CustomerAddress } from './entities/customer-address.entity';
     }),
   ],
   controllers: [CustomerServiceController],
-  providers: [CustomerServiceService, JwtAuthGuard, S3Service],
+  providers: [CustomerServiceService, AddressService, JwtAuthGuard, S3Service],
 })
 export class CustomerServiceModule {}

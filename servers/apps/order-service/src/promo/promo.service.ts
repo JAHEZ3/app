@@ -3,9 +3,10 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, IsNull, Or } from 'typeorm';
+import { Repository, MoreThan, IsNull, Or, DataSource } from 'typeorm';
 import { PromoCode } from '../entities/promo-code.entity';
 import { PromoCodeUsage } from '../entities/promo-code-usage.entity';
 import { DiscountType } from '../entities/order-enums';
@@ -22,7 +23,35 @@ export class PromoService {
   constructor(
     @InjectRepository(PromoCode) private readonly promoRepo: Repository<PromoCode>,
     @InjectRepository(PromoCodeUsage) private readonly usageRepo: Repository<PromoCodeUsage>,
+    private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * Look up the restaurant owned by the given user. Restaurants are owned by
+   * one user (the registered restaurant_owner). Returns null when the user
+   * doesn't own one — callers map that to 403.
+   */
+  private async resolveOwnedRestaurantId(userId: string): Promise<string | null> {
+    const rows = await this.dataSource.query<{ id: string }[]>(
+      'SELECT id FROM restaurants WHERE owner_user_id = $1 LIMIT 1',
+      [userId],
+    );
+    return rows[0]?.id ?? null;
+  }
+
+  /** Throws 403 unless the promo belongs to the given owner's restaurant. */
+  private async assertOwnedByUser(promoId: string, userId: string) {
+    const restaurantId = await this.resolveOwnedRestaurantId(userId);
+    if (!restaurantId) {
+      throw new ForbiddenException('لم يتم العثور على مطعم مرتبط بهذا الحساب');
+    }
+    const promo = await this.promoRepo.findOne({ where: { id: promoId } });
+    if (!promo) throw new NotFoundException('كود الخصم غير موجود');
+    if (promo.restaurantId !== restaurantId) {
+      throw new ForbiddenException('هذا الكوبون لا ينتمي إلى مطعمك');
+    }
+    return { promo, restaurantId };
+  }
 
   async validate(
     code: string,
@@ -44,7 +73,7 @@ export class PromoService {
       throw new BadRequestException('كود الخصم غير متاح لهذا المطعم');
     if (Number(promo.minOrderAmount) > 0 && orderAmount < Number(promo.minOrderAmount))
       throw new BadRequestException(
-        `الحد الأدنى للطلب هو ${promo.minOrderAmount} ريال لاستخدام هذا الكود`,
+        `الحد الأدنى للطلب هو ${promo.minOrderAmount} شيكل لاستخدام هذا الكود`,
       );
 
     const userUsageCount = await this.usageRepo.count({
@@ -113,5 +142,41 @@ export class PromoService {
     const promo = await this.promoRepo.findOne({ where: { id } });
     if (!promo) throw new NotFoundException('كود الخصم غير موجود');
     await this.promoRepo.remove(promo);
+  }
+
+  // ─── Restaurant-owner scoped variants ────────────────────────────────────
+  // These wrap the manager methods with ownership checks against the
+  // `restaurants.owner_user_id` column. The owner cannot create a promo for a
+  // restaurant they don't own, and can only see / mutate their own promos.
+
+  async listForOwner(userId: string) {
+    const restaurantId = await this.resolveOwnedRestaurantId(userId);
+    if (!restaurantId) {
+      throw new ForbiddenException('لم يتم العثور على مطعم مرتبط بهذا الحساب');
+    }
+    return this.promoRepo.find({
+      where: { restaurantId },
+      order: { validUntil: 'ASC' },
+    });
+  }
+
+  async createForOwner(userId: string, dto: CreatePromoCodeDto) {
+    const restaurantId = await this.resolveOwnedRestaurantId(userId);
+    if (!restaurantId) {
+      throw new ForbiddenException('لم يتم العثور على مطعم مرتبط بهذا الحساب');
+    }
+    // Force the restaurantId to the owner's restaurant — ignore any value
+    // the client sends so a malicious payload can't create a global promo.
+    return this.create({ ...dto, restaurantId });
+  }
+
+  async updateForOwner(userId: string, id: string, dto: UpdatePromoCodeDto) {
+    await this.assertOwnedByUser(id, userId);
+    return this.update(id, dto);
+  }
+
+  async removeForOwner(userId: string, id: string): Promise<void> {
+    await this.assertOwnedByUser(id, userId);
+    await this.remove(id);
   }
 }

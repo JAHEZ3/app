@@ -1,7 +1,9 @@
 import React, { memo, useCallback } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import AnimatedPressable from "@/components/ui/AnimatedPressable";
 import { colors, radii, shadows, typography } from "@/components/ui/theme";
 import { Meal } from "../entities/Meal";
@@ -14,98 +16,168 @@ interface MealCardProps {
   onPress: (meal: Meal) => void;
   currency?: string;
   isAdding?: boolean;
+  isRTL?: boolean;
+  /** Position in the list — drives the staggered entrance animation. */
+  index?: number;
 }
 
 const formatPrice = (value: number, currency: string) =>
   `${value.toFixed(value % 1 === 0 ? 0 : 2)} ${currency}`;
 
-const MealCard = ({ meal, onPress, currency = "ILS", isAdding = false }: MealCardProps) => {
+const MealCard = ({
+  meal,
+  onPress,
+  currency = "ILS",
+  isAdding = false,
+  isRTL = false,
+  index = 0,
+}: MealCardProps) => {
   const handlePress = useCallback(() => onPress(meal), [meal, onPress]);
   const calories = meal.calories ? `${Math.round(meal.calories)} Kcal` : null;
+  const textAlign = isRTL ? "right" : "left";
+
+  const hasDiscount =
+    meal.discountPrice != null && meal.discountPrice < meal.price;
+  const displayPrice = hasDiscount ? meal.discountPrice! : meal.price;
 
   return (
-    <AnimatedPressable
-      onPress={handlePress}
-      haptic="impact"
-      disabled={!meal.isAvailable || isAdding}
-      disabledStyle={styles.cardUnavailable}
-      style={styles.card}
+    <Animated.View
+      entering={FadeInDown.delay(Math.min(index, 8) * 55)
+        .springify()
+        .damping(18)
+        .stiffness(140)}
     >
-      <View style={styles.imageWrap}>
-        <Image
-          source={getMealImageSource(meal.imageUrl, meal.tags)}
-          placeholder={MEAL_BLURHASH}
-          contentFit="cover"
-          transition={180}
-          style={styles.image}
-        />
-        {meal.isFeatured ? (
-          <View style={styles.featuredBadge}>
-            <Ionicons name="sparkles" size={11} color={colors.onPrimary} />
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.info}>
-        <View style={styles.titleRow}>
-          <Text style={styles.name} numberOfLines={2}>
-            {meal.name}
-          </Text>
-          <View style={styles.addBtn}>
-            {isAdding ? (
-              <ActivityIndicator size="small" color={colors.onPrimary} />
-            ) : (
-              <Ionicons name="add" size={16} color={colors.onPrimary} />
-            )}
-          </View>
-        </View>
-
-        {meal.description ? (
-          <Text style={styles.description} numberOfLines={2}>
-            {meal.description}
-          </Text>
-        ) : null}
-
-        <View style={styles.footer}>
-          <View style={styles.pricePill}>
-            <Text style={styles.price}>{formatPrice(meal.price, currency)}</Text>
-          </View>
-          {calories ? (
-            <View style={styles.metaItem}>
-              <Ionicons name="flame-outline" size={13} color={colors.outline} />
-              <Text style={styles.metaText}>{calories}</Text>
+      <AnimatedPressable
+        onPress={handlePress}
+        haptic="impact"
+        scaleTo={0.98}
+        disabled={!meal.isAvailable || isAdding}
+        disabledStyle={styles.cardUnavailable}
+        style={[styles.card, isRTL && styles.cardRTL]}
+      >
+        <View style={styles.imageWrap}>
+          <Image
+            source={getMealImageSource(meal.imageUrl, meal.tags)}
+            placeholder={MEAL_BLURHASH}
+            contentFit="cover"
+            transition={180}
+            style={styles.image}
+          />
+          {meal.isFeatured ? (
+            <View style={styles.featuredBadge}>
+              <Ionicons name="sparkles" size={10} color={colors.onPrimary} />
+              <Text style={styles.featuredText}>Top</Text>
             </View>
           ) : null}
-          {meal.optionGroups.length > 0 ? (
-            <View style={styles.metaItem}>
-              <Ionicons name="options-outline" size={13} color={colors.outline} />
-              <Text style={styles.metaText}>{meal.optionGroups.length}</Text>
+          {!meal.isAvailable ? (
+            <View style={styles.unavailableOverlay}>
+              <Text style={styles.unavailableText}>
+                {isRTL ? "غير متوفر" : "Sold out"}
+              </Text>
             </View>
           ) : null}
         </View>
-      </View>
-    </AnimatedPressable>
+
+        <View style={styles.info}>
+          <View>
+            <Text style={[styles.name, { textAlign }]} numberOfLines={2}>
+              {meal.name}
+            </Text>
+            {meal.description ? (
+              <Text
+                style={[styles.description, { textAlign }]}
+                numberOfLines={2}
+              >
+                {meal.description}
+              </Text>
+            ) : null}
+          </View>
+
+          {(calories || meal.optionGroups.length > 0) && (
+            <View style={[styles.metaRow, isRTL && styles.rowReverse]}>
+              {calories ? (
+                <View style={styles.metaItem}>
+                  <Ionicons
+                    name="flame-outline"
+                    size={12}
+                    color={colors.outline}
+                  />
+                  <Text style={styles.metaText}>{calories}</Text>
+                </View>
+              ) : null}
+              {meal.optionGroups.length > 0 ? (
+                <View style={styles.metaItem}>
+                  <Ionicons
+                    name="options-outline"
+                    size={12}
+                    color={colors.outline}
+                  />
+                  <Text style={styles.metaText}>
+                    {meal.optionGroups.length}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          <View style={[styles.footer, isRTL && styles.rowReverse]}>
+            <View style={[styles.priceCol, isRTL && styles.priceColRTL]}>
+              <Text style={styles.price}>
+                {formatPrice(displayPrice, currency)}
+              </Text>
+              {hasDiscount ? (
+                <Text style={styles.strikePrice}>
+                  {formatPrice(meal.price, currency)}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.addBtnWrap}>
+              {isAdding ? (
+                <View style={styles.addBtnLoading}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : (
+                <LinearGradient
+                  colors={["#FF7A2F", colors.primary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.addBtn}
+                >
+                  <Ionicons name="add" size={20} color={colors.onPrimary} />
+                </LinearGradient>
+              )}
+            </View>
+          </View>
+        </View>
+      </AnimatedPressable>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 13,
     backgroundColor: colors.card,
     borderRadius: radii.xl,
-    padding: 11,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.surfaceContainerHighest,
     ...shadows.soft,
   },
+  cardRTL: {
+    flexDirection: "row-reverse",
+  },
+  rowReverse: {
+    flexDirection: "row-reverse",
+  },
   cardUnavailable: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   imageWrap: {
-    width: 96,
-    height: 96,
+    width: 104,
+    height: 104,
     borderRadius: radii.lg,
     overflow: "hidden",
     position: "relative",
@@ -117,63 +189,55 @@ const styles = StyleSheet.create({
   },
   featuredBadge: {
     position: "absolute",
-    top: 8,
-    left: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    top: 7,
+    left: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
+  },
+  featuredText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onPrimary,
+    fontSize: 9,
+  },
+  unavailableOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(20,20,20,0.45)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  unavailableText: {
+    fontFamily: typography.bodyBold,
+    color: colors.onPrimary,
+    fontSize: 11,
   },
   info: {
     flex: 1,
-    minHeight: 96,
+    minHeight: 104,
     justifyContent: "space-between",
-    gap: 7,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    gap: 6,
   },
   name: {
-    flex: 1,
     fontFamily: typography.headlineSemi,
     color: colors.onSurface,
-    fontSize: 15,
+    fontSize: 15.5,
     lineHeight: 20,
-  },
-  addBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
   },
   description: {
     fontFamily: typography.body,
     color: colors.outline,
     fontSize: 12,
     lineHeight: 17,
+    marginTop: 3,
   },
-  footer: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  pricePill: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: radii.pill,
-    backgroundColor: colors.faintPrimary,
-  },
-  price: {
-    fontFamily: typography.bodyBold,
-    color: colors.primary,
-    fontSize: 12,
+    gap: 12,
   },
   metaItem: {
     flexDirection: "row",
@@ -184,6 +248,50 @@ const styles = StyleSheet.create({
     fontFamily: typography.bodyMedium,
     color: colors.outline,
     fontSize: 11,
+  },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  priceCol: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 7,
+  },
+  priceColRTL: {
+    flexDirection: "row-reverse",
+  },
+  price: {
+    fontFamily: typography.headline,
+    color: colors.onSurface,
+    fontSize: 16,
+  },
+  strikePrice: {
+    fontFamily: typography.bodyMedium,
+    color: colors.outline,
+    fontSize: 12,
+    textDecorationLine: "line-through",
+  },
+  addBtnWrap: {
+    width: 36,
+    height: 36,
+  },
+  addBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.primary,
+  },
+  addBtnLoading: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.faintPrimary,
   },
 });
 
