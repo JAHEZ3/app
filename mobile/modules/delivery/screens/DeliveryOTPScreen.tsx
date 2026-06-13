@@ -6,7 +6,6 @@ import {
     StatusBar,
     KeyboardAvoidingView,
     Platform,
-    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -19,10 +18,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import OTPInput from '@/modules/Auth/components/OTPInput';
 import AppButton from '@/components/ui/AppButton';
 import { useDeliveryT } from '@/hooks/useAppTranslation';
 import { useRTL } from '@/hooks/useRTL';
 import { useDeliveryVerifyOtp } from '../hooks/useDeliveryVerifyOtp';
+import { useDeliveryVerifyLoginOtp } from '../hooks/useDeliveryVerifyLoginOtp';
+import { useDeliveryResendOtp } from '../hooks/useDeliveryResendOtp';
 import { useDeliveryPhoneStore } from '@/store/useDeliveryPhoneStore';
 import { Toast, useToast } from '../components/Toast';
 
@@ -40,60 +42,13 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
     return <Animated.View style={style}>{children}</Animated.View>;
 }
 
-function OTPBoxes({
-    value,
-    onChange,
-}: {
-    value: string;
-    onChange: (val: string) => void;
-}) {
-    const inputRef = React.useRef<TextInput>(null);
-    const boxes = Array(6).fill('');
-
-    return (
-        <TouchableOpacity activeOpacity={1} onPress={() => inputRef.current?.focus()}>
-            <TextInput
-                ref={inputRef}
-                value={value}
-                onChangeText={(t) => onChange(t.replace(/\D/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                maxLength={6}
-                style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}
-                autoFocus
-            />
-            <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center' }}>
-                {boxes.map((_, i) => {
-                    const char = value[i] ?? '';
-                    const isFocused = value.length === i;
-                    return (
-                        <View key={i} style={{
-                            width: 48, height: 56, borderRadius: 14,
-                            borderWidth: isFocused ? 2 : 1.5,
-                            borderColor: isFocused ? '#F55905' : char ? '#1E1E1E' : '#e5e5e5',
-                            backgroundColor: char ? '#FFF5F0' : '#fafafa',
-                            alignItems: 'center', justifyContent: 'center',
-                        }}>
-                            <Text style={{
-                                fontFamily: 'Cairo_700Bold', fontSize: 22,
-                                color: '#1E1E1E',
-                            }}>
-                                {char}
-                            </Text>
-                        </View>
-                    );
-                })}
-            </View>
-        </TouchableOpacity>
-    );
-}
-
 function Countdown({ seconds, onExpire }: { seconds: number; onExpire: () => void }) {
     const { t } = useDeliveryT();
     const [left, setLeft] = useState(seconds);
     useEffect(() => {
         if (left <= 0) { onExpire(); return; }
-        const t = setTimeout(() => setLeft((p) => p - 1), 1000);
-        return () => clearTimeout(t);
+        const timer = setTimeout(() => setLeft((p) => p - 1), 1000);
+        return () => clearTimeout(timer);
     }, [left, onExpire]);
 
     const m = useMemo(() => Math.floor(left / 60), [left]);
@@ -119,36 +74,52 @@ export default function DeliveryOTPScreen() {
     const [otp, setOtp] = useState('');
     const [canResend, setCanResend] = useState(false);
     const [resendKey, setResendKey] = useState(0);
-    const { phoneNumber } = useDeliveryPhoneStore();
+    const { phoneNumber, otpMode } = useDeliveryPhoneStore();
     const { toast, show: showToast, hide: hideToast } = useToast();
 
-    const { mutateAsync: verifyOtp, isPending } = useDeliveryVerifyOtp();
+    const registerVerify = useDeliveryVerifyOtp();
+    const loginVerify = useDeliveryVerifyLoginOtp();
+    const { mutateAsync: verify, isPending } =
+        otpMode === 'login' ? loginVerify : registerVerify;
+
+    const { mutateAsync: resend, isPending: isResending } = useDeliveryResendOtp();
 
     const handleVerify = useCallback(async (code?: string) => {
+        const value = code ?? otp;
+        if (value.length < 6) return;
         try {
-            await verifyOtp({ phone: phoneNumber, otp: code ?? otp });
+            await verify({ phone: phoneNumber, otp: value });
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : t('otp.invalidOtp');
+            const msg =
+                (err as any)?.response?.data?.message ??
+                (err instanceof Error ? err.message : null) ??
+                t('otp.invalidOtp');
             showToast(msg, 'error');
         }
-    }, [otp, phoneNumber, verifyOtp, showToast, t]);
+    }, [otp, phoneNumber, verify, showToast, t]);
 
-    const handleResend = useCallback(() => {
-        setOtp('');
-        setCanResend(false);
-        setResendKey((k) => k + 1);
-        showToast(t('otp.newOtpSent', { phone: phoneNumber }), 'success');
-    }, [phoneNumber, showToast, t]);
+    const handleResend = useCallback(async () => {
+        try {
+            await resend(phoneNumber);
+            setOtp('');
+            setCanResend(false);
+            setResendKey((k) => k + 1);
+            showToast(t('otp.newOtpSent', { phone: phoneNumber }), 'success');
+        } catch (err: unknown) {
+            const msg =
+                (err as any)?.response?.data?.message ??
+                (err instanceof Error ? err.message : null) ??
+                t('register.errors.generic');
+            showToast(msg, 'error');
+        }
+    }, [phoneNumber, resend, showToast, t]);
 
-    useEffect(() => {
-        if (otp.length === 6) handleVerify(otp);
-    }, [otp]);
-
+    // Glow pulse behind the icon.
     const glowOpacity = useSharedValue(0.2);
     useEffect(() => {
         glowOpacity.value = withRepeat(
             withTiming(0.4, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
-            -1, true
+            -1, true,
         );
     }, [glowOpacity]);
     const glowStyle = useAnimatedStyle(() => ({ opacity: glowOpacity.value }));
@@ -215,7 +186,7 @@ export default function DeliveryOTPScreen() {
                     </Row>
 
                     <Row delay={280}>
-                        <OTPBoxes value={otp} onChange={setOtp} />
+                        <OTPInput key={resendKey} onComplete={handleVerify} onChangeValue={setOtp} />
                     </Row>
 
                     {/* Resend */}
@@ -224,15 +195,17 @@ export default function DeliveryOTPScreen() {
                             {canResend ? (
                                 <TouchableOpacity
                                     onPress={handleResend}
+                                    disabled={isResending}
                                     style={{
                                         flexDirection: 'row', alignItems: 'center', gap: 6,
                                         paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
-                                        borderWidth: 1.5, borderColor: '#F55905',
+                                        borderWidth: 1.5, borderColor: isResending ? '#ccc' : '#F55905',
+                                        opacity: isResending ? 0.6 : 1,
                                     }}
                                 >
-                                    <Ionicons name="refresh" size={14} color="#F55905" />
-                                    <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: '#F55905' }}>
-                                        {t('otp.resendOtp')}
+                                    <Ionicons name="refresh" size={14} color={isResending ? '#ccc' : '#F55905'} />
+                                    <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 14, color: isResending ? '#ccc' : '#F55905' }}>
+                                        {isResending ? t('otp.sending') : t('otp.resendOtp')}
                                     </Text>
                                 </TouchableOpacity>
                             ) : (
@@ -251,6 +224,15 @@ export default function DeliveryOTPScreen() {
                                 icon={<Ionicons name="checkmark-circle-outline" size={22} color="#fff" />}
                                 iconPosition="right"
                             />
+                        </View>
+                    </Row>
+
+                    <Row delay={480}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 14 }}>
+                            <Ionicons name="shield-checkmark-outline" size={13} color="#c0c0c0" />
+                            <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 12, color: '#c0c0c0' }}>
+                                {t('otp.securityNote')}
+                            </Text>
                         </View>
                     </Row>
                 </View>

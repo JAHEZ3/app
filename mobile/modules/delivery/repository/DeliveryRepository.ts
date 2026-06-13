@@ -11,10 +11,25 @@ import { DeliveryTokensDTO } from '../dto/DeliveryAgent';
 /** Backend OrderStatus values the driver is allowed to set. */
 export type DriverOrderStatusUpdate = 'out_for_delivery' | 'delivered';
 
+/**
+ * Result of a password login attempt. Either real tokens, or a signal that this
+ * account has no password yet and must use the OTP-login fallback.
+ */
+export type DeliveryLoginResult =
+    | { kind: 'tokens'; tokens: DeliveryTokensDTO }
+    | { kind: 'needsOtp'; phone: string };
+
 export interface DeliveryRepository {
     register: (phone: string) => Promise<void>;
     verifyOtp: (params: { phone: string; otp: string }) => Promise<DeliveryTokensDTO>;
-    login: (params: { phone: string; password: string }) => Promise<DeliveryTokensDTO>;
+    /** Phone + password login. Resolves to tokens, or a needsOtp signal. */
+    login: (params: { phone: string; password: string }) => Promise<DeliveryLoginResult>;
+    /** OTP-login fallback — step 1: send a login code to an existing account. */
+    sendLoginOtp: (phone: string) => Promise<void>;
+    /** OTP-login fallback — step 2: verify the login code and get tokens. */
+    verifyLoginOtp: (params: { phone: string; otp: string }) => Promise<DeliveryTokensDTO>;
+    /** Resend the registration (phone-verify) OTP. */
+    resendOtp: (phone: string) => Promise<void>;
     getProfile: () => Promise<DeliveryAgent>;
     getQuestions: () => Promise<ApplicationQuestion[]>;
     submitProfile: (form: DeliveryApplicationFormData) => Promise<void>;

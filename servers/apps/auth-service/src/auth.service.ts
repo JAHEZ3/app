@@ -26,6 +26,7 @@ import {
   RegisterRestaurantDto,
 } from "./dto/register.dto";
 import {
+  DeliveryLoginOtpDto,
   LoginCustomerDto,
   LoginDeliveryDto,
   LoginManagerDto,
@@ -35,6 +36,7 @@ import { ResendOtpDto, VerifyOtpDto } from "./dto/verify-otp.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { normalizePhone, PhoneNormalizationError } from "./utils/phone.util";
 
 @Injectable()
 export class AuthService {
@@ -52,6 +54,22 @@ export class AuthService {
   ) {}
 
   // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Funnel every user-supplied phone through one canonical form (E.164) so the
+   * same human always resolves to the same row, no matter how they typed it.
+   * Throws a friendly 400 when the number can't be a valid PS/IL mobile.
+   */
+  private normalize(phone: string): string {
+    try {
+      return normalizePhone(phone);
+    } catch (err) {
+      if (err instanceof PhoneNormalizationError) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
+  }
 
   private loginAttemptKey(identifier: string): string {
     return `login_fail:${identifier}`;
@@ -123,6 +141,7 @@ export class AuthService {
   //
 
   async registerCustomer(dto: RegisterCustomerDto) {
+    dto.phone = this.normalize(dto.phone);
     const existing = await this.userRepo.findOne({
       where: { phone: dto.phone },
     });
@@ -176,6 +195,7 @@ export class AuthService {
   }
 
   async registerDelivery(dto: RegisterDeliveryDto) {
+    dto.phone = this.normalize(dto.phone);
     const existing = await this.userRepo.findOne({
       where: { phone: dto.phone },
     });
@@ -221,6 +241,7 @@ export class AuthService {
   }
 
   async registerRestaurant(dto: RegisterRestaurantDto) {
+    dto.phone = this.normalize(dto.phone);
     const existing = await this.userRepo.findOne({
       where: { phone: dto.phone },
     });
@@ -283,6 +304,7 @@ export class AuthService {
   // client can call the downstream service profile-completion endpoint.
 
   async verifyRegistrationOtp(dto: VerifyOtpDto, context?: SessionContext) {
+    dto.phone = this.normalize(dto.phone);
     const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.MANAGER) {
@@ -319,6 +341,7 @@ export class AuthService {
   // ─── Resend OTP (registration phase only) ────────────────────────────────────
 
   async resendOtp(dto: ResendOtpDto) {
+    dto.phone = this.normalize(dto.phone);
     const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role === UserRole.MANAGER)
@@ -347,6 +370,7 @@ export class AuthService {
   // ─── Customer Login (OTP-based, two-step) ────────────────────────────────────
 
   async loginCustomer(dto: LoginCustomerDto) {
+    dto.phone = this.normalize(dto.phone);
     const user = await this.userRepo.findOne({
       where: { phone: dto.phone, role: UserRole.CUSTOMER },
     });
@@ -380,6 +404,7 @@ export class AuthService {
   }
 
   async verifyLoginOtp(dto: VerifyOtpDto, context?: SessionContext) {
+    dto.phone = this.normalize(dto.phone);
     const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (!user) throw new NotFoundException("المستخدم غير موجود.");
     if (user.role !== UserRole.CUSTOMER)
@@ -409,6 +434,7 @@ export class AuthService {
   // ─── Delivery Login (phone + password) ───────────────────────────────────────
 
   async loginDelivery(dto: LoginDeliveryDto, context?: SessionContext) {
+    dto.phone = this.normalize(dto.phone);
     await this.checkLoginRateLimit(dto.phone);
 
     const user = await this.userRepo.findOne({
@@ -424,12 +450,15 @@ export class AuthService {
     if (user.status === UserStatus.PENDING)
       throw new BadRequestException("يرجى التحقق من رقم هاتفك أولاً.");
 
-    // No password means profile was never completed (password is set during completeProfile).
-    // Guide them to re-register to get a fresh access token.
+    // No password means the agent verified their phone but never finished the
+    // application form (password is set on first profile submission). Rather than
+    // dead-ending them, tell the client to switch to the OTP-login fallback so
+    // they can sign back in and resume the form. (Not an error — a 200 signal.)
     if (!user.passwordHash) {
-      throw new BadRequestException(
-        "لم يتم تعيين كلمة مرور. سجّل من جديد لاستلام رمز الوصول وإكمال ملفك.",
-      );
+      return {
+        data: { needsOtp: true, phone: user.phone },
+        message: "هذا الحساب يسجّل الدخول برمز التحقق. سيصلك رمز جديد.",
+      };
     }
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
@@ -466,9 +495,68 @@ export class AuthService {
     return { data: tokens, message: "تم تسجيل الدخول بنجاح." };
   }
 
+  // ─── Delivery OTP Login (fallback for agents with no password) ────────────────
+  //
+  // A driver who verified their phone but never finished the application form has
+  // no password, so phone+password login can't work for them. This two-step flow
+  // lets them sign back in with a one-time code and resume onboarding — without
+  // creating a duplicate account or hitting a dead end.
+
+  /** Step 1 — send a LOGIN OTP to an existing delivery account. */
+  async sendDeliveryLoginOtp(dto: DeliveryLoginOtpDto) {
+    const phone = this.normalize(dto.phone);
+
+    const user = await this.userRepo.findOne({
+      where: { phone, role: UserRole.DELIVERY },
+    });
+    // Unlike the password endpoint, this one is explicitly the "returning user"
+    // entry point, so a clear 404 lets the client route a brand-new number to
+    // registration instead of looping.
+    if (!user) throw new NotFoundException("لا يوجد حساب سائق لهذا الرقم.");
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("لم يتم التحقق من رقم هاتفك بعد. أكمل التسجيل أولاً.");
+
+    await this.otpService.saveOtp(user.id, OtpPurpose.LOGIN, phone);
+    return {
+      data: { phone },
+      message: "تم إرسال رمز تسجيل الدخول إلى هاتفك.",
+    };
+  }
+
+  /** Step 2 — verify the LOGIN OTP and issue tokens for the delivery agent. */
+  async verifyDeliveryLoginOtp(dto: VerifyOtpDto, context?: SessionContext) {
+    const phone = this.normalize(dto.phone);
+
+    const user = await this.userRepo.findOne({
+      where: { phone, role: UserRole.DELIVERY },
+    });
+    if (!user) throw new NotFoundException("لا يوجد حساب سائق لهذا الرقم.");
+    if (user.status === UserStatus.BANNED)
+      throw new UnauthorizedException("الحساب محظور. تواصل مع الدعم.");
+    if (user.status === UserStatus.PENDING)
+      throw new BadRequestException("لم يتم التحقق من رقم هاتفك بعد.");
+    // A manually-suspended, fully-onboarded agent is a real suspension, not the
+    // "awaiting approval" SUSPENDED state — block them.
+    if (user.status === UserStatus.SUSPENDED && user.profileCompleted)
+      throw new UnauthorizedException("الحساب موقوف. تواصل مع الدعم.");
+
+    await this.otpService.verifyOtp(user.id, OtpPurpose.LOGIN, dto.otp);
+    await this.userRepo.update(user.id, { lastLoginAt: new Date() });
+    user.lastLoginAt = new Date();
+
+    const tokens = await this.issuePair(user, context);
+    const message = !user.profileCompleted
+      ? "تم تسجيل الدخول. أكمل ملفك الشخصي."
+      : "تم تسجيل الدخول بنجاح.";
+    return { data: tokens, message };
+  }
+
   // ─── Restaurant Login (phone + password) ─────────────────────────────────────
 
   async loginRestaurant(dto: LoginRestaurantDto, context?: SessionContext) {
+    dto.phone = this.normalize(dto.phone);
     await this.checkLoginRateLimit(dto.phone);
 
     const user = await this.userRepo.findOne({
@@ -556,6 +644,7 @@ export class AuthService {
   async forgotPassword(dto: ForgotPasswordDto) {
     if (!dto.phone && !dto.email)
       throw new BadRequestException("يرجى إدخال رقم الهاتف أو البريد الإلكتروني.");
+    if (dto.phone) dto.phone = this.normalize(dto.phone);
 
     const user = dto.phone
       ? await this.userRepo.findOne({ where: { phone: dto.phone } })
@@ -584,6 +673,7 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordDto) {
     if (!dto.phone && !dto.email)
       throw new BadRequestException("يرجى إدخال رقم الهاتف أو البريد الإلكتروني.");
+    if (dto.phone) dto.phone = this.normalize(dto.phone);
 
     const user = dto.phone
       ? await this.userRepo.findOne({ where: { phone: dto.phone } })

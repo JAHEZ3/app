@@ -176,8 +176,13 @@ export class DeliveryServiceService {
       }),
     );
 
-    // Auth-service hashes the password — only set it on the first submission
-    if (isFirstSubmission && profileData.password) {
+    // Auth-service hashes + stores the password. We emit whenever the form
+    // carries one (not just first submission): if the original event was ever
+    // dropped, this lets a returning agent — who got back in via the OTP-login
+    // fallback — re-establish a working password by resubmitting. Re-setting the
+    // same password is idempotent on the auth side.
+    void isFirstSubmission;
+    if (profileData.password) {
       try {
         this.natsClient.emit("user.password.set", { userId, password: profileData.password });
       } catch (err) {
