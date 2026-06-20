@@ -1,9 +1,18 @@
-import { Inject, Injectable, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { InjectRepository } from '@nestjs/typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
+import { RefreshToken } from '../entities/refresh-token.entity';
 
 export interface JwtPayload {
   sub: string;
@@ -21,11 +30,11 @@ export interface SessionContext {
   deviceInfo?: Record<string, any>;
 }
 
-interface RefreshTokenRecord {
-  token: string;
+interface RefreshTokenCache {
   userId: string;
   createdAt: number;
   lastUsedAt: number;
+  expiresAt: number;
   ip?: string;
   userAgent?: string;
   deviceInfo?: Record<string, any>;
@@ -42,12 +51,23 @@ export interface SessionSummary {
 
 const RT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+/**
+ * Issues / verifies / revokes JWT access + refresh tokens.
+ *
+ * Refresh tokens are persisted in Postgres ({@link RefreshToken}) as the source
+ * of truth so sessions survive a Redis flush/restart (true persistent login).
+ * Redis is kept as a best-effort hot cache in front of the DB to keep the very
+ * common `verifyRefreshToken` path fast and to avoid a DB hit on every request
+ * that triggers a token refresh.
+ */
 @Injectable()
 export class AppJwtService implements OnModuleInit {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    @InjectRepository(RefreshToken)
+    private readonly refreshRepo: Repository<RefreshToken>,
   ) {}
 
   onModuleInit() {
@@ -70,10 +90,6 @@ export class AppJwtService implements OnModuleInit {
 
   private rtKey(jti: string): string {
     return `rt:${jti}`;
-  }
-
-  private userTokensKey(userId: string): string {
-    return `user_tokens:${userId}`;
   }
 
   // ─── Access Token ─────────────────────────────────────────────────────────────
@@ -101,26 +117,36 @@ export class AppJwtService implements OnModuleInit {
   ): Promise<string> {
     const jti = randomUUID();
     const now = Date.now();
+    const expiresAt = now + RT_TTL_MS;
 
     const token = this.jwtService.sign(
       { ...payload, jti },
       { secret: this.refreshSecret, expiresIn: '30d' },
     );
 
-    const record: RefreshTokenRecord = {
-      token,
+    // Source of truth: persist the session row.
+    await this.refreshRepo.save(
+      this.refreshRepo.create({
+        jti,
+        userId: payload.sub,
+        ip: context?.ip ?? null,
+        userAgent: context?.userAgent ?? null,
+        deviceInfo: context?.deviceInfo ?? null,
+        lastUsedAt: new Date(now),
+        expiresAt: new Date(expiresAt),
+      }),
+    );
+
+    // Hot cache (best-effort).
+    await this.cacheSet(jti, {
       userId: payload.sub,
       createdAt: now,
       lastUsedAt: now,
+      expiresAt,
       ...(context?.ip && { ip: context.ip }),
       ...(context?.userAgent && { userAgent: context.userAgent }),
       ...(context?.deviceInfo && { deviceInfo: context.deviceInfo }),
-    };
-    await this.cache.set(this.rtKey(jti), record, RT_TTL_MS);
-
-    // Track this jti under the user so we can revoke all at once or list sessions
-    const existing = (await this.cache.get<string[]>(this.userTokensKey(payload.sub))) ?? [];
-    await this.cache.set(this.userTokensKey(payload.sub), [...existing, jti], RT_TTL_MS);
+    });
 
     return token;
   }
@@ -133,21 +159,33 @@ export class AppJwtService implements OnModuleInit {
       throw new UnauthorizedException('رمز التحديث غير صالح أو منتهي الصلاحية.');
     }
 
-    const record = await this.cache.get<RefreshTokenRecord>(this.rtKey(decoded.jti));
-    if (!record) {
+    // Fast path: trust the Redis cache when present.
+    const cached = await this.cacheGet(decoded.jti);
+    if (cached) {
+      this.touch(decoded.jti, cached).catch(() => undefined);
+      return decoded;
+    }
+
+    // Cache miss → fall back to the durable record. This is what makes the
+    // session survive a Redis flush: the row is still here.
+    const row = await this.refreshRepo.findOne({ where: { jti: decoded.jti } });
+    if (!row || row.expiresAt.getTime() <= Date.now()) {
       throw new UnauthorizedException('رمز التحديث ملغى أو غير موجود.');
     }
 
-    // Best-effort lastUsedAt refresh
-    try {
-      await this.cache.set(
-        this.rtKey(decoded.jti),
-        { ...record, lastUsedAt: Date.now() },
-        RT_TTL_MS,
-      );
-    } catch {
-      // ignore — not critical for auth correctness
-    }
+    // Re-warm the cache and stamp last-used.
+    const now = Date.now();
+    row.lastUsedAt = new Date(now);
+    await this.refreshRepo.save(row).catch(() => undefined);
+    await this.cacheSet(decoded.jti, {
+      userId: row.userId,
+      createdAt: row.createdAt.getTime(),
+      lastUsedAt: now,
+      expiresAt: row.expiresAt.getTime(),
+      ...(row.ip && { ip: row.ip }),
+      ...(row.userAgent && { userAgent: row.userAgent }),
+      ...(row.deviceInfo && { deviceInfo: row.deviceInfo }),
+    });
 
     return decoded;
   }
@@ -159,51 +197,35 @@ export class AppJwtService implements OnModuleInit {
     } catch {
       return;
     }
-
-    await this.cache.del(this.rtKey(decoded.jti));
-    await this.removeJtiFromUserList(decoded.sub, decoded.jti);
+    await this.cache.del(this.rtKey(decoded.jti)).catch(() => undefined);
+    await this.refreshRepo.delete({ jti: decoded.jti });
   }
 
   async revokeAllUserTokens(userId: string): Promise<void> {
-    const tokens = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
-    await Promise.all(tokens.map((jti) => this.cache.del(this.rtKey(jti))));
-    await this.cache.del(this.userTokensKey(userId));
+    const rows = await this.refreshRepo.find({ where: { userId } });
+    await Promise.all(
+      rows.map((r) => this.cache.del(this.rtKey(r.jti)).catch(() => undefined)),
+    );
+    await this.refreshRepo.delete({ userId });
   }
 
   // ─── Sessions ─────────────────────────────────────────────────────────────────
 
   async listSessions(userId: string): Promise<SessionSummary[]> {
-    const jtis = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
-    const records = await Promise.all(
-      jtis.map((jti) => this.cache.get<RefreshTokenRecord>(this.rtKey(jti))),
-    );
+    // Best-effort purge of expired rows for this user.
+    await this.refreshRepo
+      .delete({ userId, expiresAt: LessThan(new Date()) })
+      .catch(() => undefined);
 
-    const alive: { jti: string; rec: RefreshTokenRecord }[] = [];
-    const expired: string[] = [];
-    jtis.forEach((jti, i) => {
-      const rec = records[i];
-      if (rec) alive.push({ jti, rec });
-      else expired.push(jti);
-    });
-
-    // Best-effort cleanup of expired jtis from user list
-    if (expired.length > 0) {
-      const remaining = alive.map((a) => a.jti);
-      if (remaining.length > 0) {
-        await this.cache.set(this.userTokensKey(userId), remaining, RT_TTL_MS);
-      } else {
-        await this.cache.del(this.userTokensKey(userId));
-      }
-    }
-
-    return alive
-      .map(({ jti, rec }) => ({
-        id: jti,
-        createdAt: rec.createdAt,
-        lastUsedAt: rec.lastUsedAt,
-        ...(rec.ip && { ip: rec.ip }),
-        ...(rec.userAgent && { userAgent: rec.userAgent }),
-        ...(rec.deviceInfo && { deviceInfo: rec.deviceInfo }),
+    const rows = await this.refreshRepo.find({ where: { userId } });
+    return rows
+      .map((r) => ({
+        id: r.jti,
+        createdAt: r.createdAt.getTime(),
+        lastUsedAt: r.lastUsedAt.getTime(),
+        ...(r.ip && { ip: r.ip }),
+        ...(r.userAgent && { userAgent: r.userAgent }),
+        ...(r.deviceInfo && { deviceInfo: r.deviceInfo }),
       }))
       .sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   }
@@ -219,35 +241,50 @@ export class AppJwtService implements OnModuleInit {
   }
 
   async revokeSessionByJti(userId: string, jti: string): Promise<void> {
-    const record = await this.cache.get<RefreshTokenRecord>(this.rtKey(jti));
-    if (!record || record.userId !== userId) {
+    const row = await this.refreshRepo.findOne({ where: { jti } });
+    if (!row || row.userId !== userId) {
       throw new NotFoundException('الجلسة غير موجودة.');
     }
-    await this.cache.del(this.rtKey(jti));
-    await this.removeJtiFromUserList(userId, jti);
+    await this.cache.del(this.rtKey(jti)).catch(() => undefined);
+    await this.refreshRepo.delete({ jti });
   }
 
   async revokeAllUserSessionsExcept(userId: string, keepJti: string): Promise<number> {
-    const jtis = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
-    const toRevoke = jtis.filter((jti) => jti !== keepJti);
-    await Promise.all(toRevoke.map((jti) => this.cache.del(this.rtKey(jti))));
-
-    const remaining = jtis.includes(keepJti) ? [keepJti] : [];
-    if (remaining.length > 0) {
-      await this.cache.set(this.userTokensKey(userId), remaining, RT_TTL_MS);
-    } else {
-      await this.cache.del(this.userTokensKey(userId));
+    const rows = await this.refreshRepo.find({ where: { userId } });
+    const toRevoke = rows.filter((r) => r.jti !== keepJti);
+    await Promise.all(
+      toRevoke.map((r) => this.cache.del(this.rtKey(r.jti)).catch(() => undefined)),
+    );
+    if (toRevoke.length > 0) {
+      await this.refreshRepo.delete(toRevoke.map((r) => r.jti));
     }
     return toRevoke.length;
   }
 
-  private async removeJtiFromUserList(userId: string, jti: string): Promise<void> {
-    const tokens = (await this.cache.get<string[]>(this.userTokensKey(userId))) ?? [];
-    const updated = tokens.filter((t) => t !== jti);
-    if (updated.length > 0) {
-      await this.cache.set(this.userTokensKey(userId), updated, RT_TTL_MS);
-    } else {
-      await this.cache.del(this.userTokensKey(userId));
+  // ─── Cache helpers (best-effort — failures never break auth correctness) ───────
+
+  private async cacheGet(jti: string): Promise<RefreshTokenCache | null> {
+    try {
+      const rec = await this.cache.get<RefreshTokenCache>(this.rtKey(jti));
+      if (rec && rec.expiresAt > Date.now()) return rec;
+      return null;
+    } catch {
+      return null;
     }
+  }
+
+  private async cacheSet(jti: string, rec: RefreshTokenCache): Promise<void> {
+    try {
+      const ttl = Math.max(1, rec.expiresAt - Date.now());
+      await this.cache.set(this.rtKey(jti), rec, ttl);
+    } catch {
+      // ignore — DB remains the source of truth
+    }
+  }
+
+  private async touch(jti: string, cached: RefreshTokenCache): Promise<void> {
+    const now = Date.now();
+    await this.cacheSet(jti, { ...cached, lastUsedAt: now });
+    await this.refreshRepo.update({ jti }, { lastUsedAt: new Date(now) });
   }
 }

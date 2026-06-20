@@ -21,6 +21,7 @@ import {
 } from "./dto/register.dto";
 import { ResendOtpDto, VerifyOtpDto } from "./dto/verify-otp.dto";
 import {
+  DeliveryLoginOtpDto,
   LoginCustomerDto,
   LoginDeliveryDto,
   LoginManagerDto,
@@ -104,6 +105,21 @@ export class AuthController {
   @Post("delivery/login")
   loginDelivery(@Body() dto: LoginDeliveryDto, @Req() req: Request) {
     return this.authService.loginDelivery(dto, this.sessionContext(req));
+  }
+
+  /**
+   * OTP-login fallback for drivers with no password yet (phone verified but
+   * application form not submitted). Step 1: send a login OTP.
+   */
+  @Post("delivery/login-otp")
+  sendDeliveryLoginOtp(@Body() dto: DeliveryLoginOtpDto) {
+    return this.authService.sendDeliveryLoginOtp(dto);
+  }
+
+  /** Step 2 of the driver OTP-login fallback — verify OTP and return tokens. */
+  @Post("delivery/verify-login")
+  verifyDeliveryLoginOtp(@Body() dto: VerifyOtpDto, @Req() req: Request) {
+    return this.authService.verifyDeliveryLoginOtp(dto, this.sessionContext(req));
   }
 
   @Post("restaurant/login")
