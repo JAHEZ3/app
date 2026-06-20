@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,6 @@ import {
     StatusBar,
     TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -23,39 +22,29 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AppButton from '@/components/ui/AppButton';
 import { useDeliveryT } from '@/hooks/useAppTranslation';
 import { useRTL } from '@/hooks/useRTL';
+import { CountryCode, DEFAULT_COUNTRY_CODE, toE164 } from '@/lib/phone';
 import { useDeliveryRegister } from '../hooks/useDeliveryRegister';
 import { useDeliveryLogin } from '../hooks/useDeliveryLogin';
+import { useDeliverySendLoginOtp } from '../hooks/useDeliverySendLoginOtp';
+import DeliveryPhoneInput from '../components/DeliveryPhoneInput';
 import { Toast, useToast } from '../components/Toast';
 
 const ease = Easing.out(Easing.cubic);
 
 type Tab = 'register' | 'login';
 
-// Normalise an API error into a readable message string.
-function extractMessage(err: unknown, fallback: string): string {
-    const axErr = err as any;
-    return (
-        axErr?.response?.data?.message ??
-        axErr?.response?.data?.error ??
-        (err instanceof Error ? err.message : null) ??
-        fallback
-    );
-}
-
 function httpStatus(err: unknown): number {
     return (err as any)?.response?.status ?? 0;
 }
 
-// Phone truly doesn't exist in the delivery system → guide user to register.
-// Restricted to HTTP 404 only. Message-string matching was too broad and
-// falsely triggered on "Invalid credentials" responses from the login endpoint.
-function isNotFoundError(err: unknown): boolean {
-    return httpStatus(err) === 404;
-}
-
-// Phone is already registered → guide user to sign in.
-function isAlreadyExistsError(err: unknown): boolean {
-    return httpStatus(err) === 409;
+function extractMessage(err: unknown, fallback: string): string {
+    const ax = err as any;
+    return (
+        ax?.response?.data?.message ??
+        ax?.response?.data?.error ??
+        (err instanceof Error && err.message ? err.message : null) ??
+        fallback
+    );
 }
 
 function Row({ children, delay }: { children: React.ReactNode; delay: number }) {
@@ -75,96 +64,106 @@ function Row({ children, delay }: { children: React.ReactNode; delay: number }) 
 export default function DeliveryRegisterScreen() {
     const { t } = useDeliveryT();
     const isRTL = useRTL();
-    // Always start on the login tab — returning users are the common case.
-    // First-time users land here too; if login says "not found" we switch them
-    // to the register tab automatically (see handleSubmit below).
+    const textAlign = isRTL ? 'right' : 'left';
+
+    // Returning agents are the common case, so default to the sign-in tab.
     const [tab, setTab] = useState<Tab>('login');
-    const [phone, setPhone] = useState('');
+    const [countryCode, setCountryCode] = useState<CountryCode>(DEFAULT_COUNTRY_CODE);
+    const [national, setNational] = useState('');
+    const [e164, setE164] = useState<string | null>(null);
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    // Set to true when the register endpoint returns 409 (account already exists).
-    // Used to break the register-409 ↔ login-404 loop: if we know the account
-    // exists we must NOT switch back to register on a 404 login failure.
-    const [accountExists, setAccountExists] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
+
     const { toast, show: showToast, hide: hideToast } = useToast();
 
     const { mutateAsync: register, isPending: isRegistering } = useDeliveryRegister();
     const { mutateAsync: login, isPending: isLoggingIn } = useDeliveryLogin();
+    const { mutateAsync: sendLoginOtp, isPending: isSendingOtp } = useDeliverySendLoginOtp();
 
-    const isPending = tab === 'register' ? isRegistering : isLoggingIn;
-    const isPhoneValid = phone.length >= 9;
-    const canSubmit = isPhoneValid && (tab === 'register' || password.length >= 6);
-    const textAlign = isRTL ? 'right' : 'left';
+    const isPending = isRegistering || isLoggingIn || isSendingOtp;
+    const phoneValid = !!e164;
+    const canSubmit = phoneValid && (tab === 'register' || password.length >= 6);
 
-    // If the user types a new phone number, evidence from a previous API round-trip
-    // no longer applies — reset the conflict flag so routing logic is fresh.
-    const handlePhoneChange = useCallback((value: string) => {
-        setPhone(value);
-        if (accountExists) setAccountExists(false);
-    }, [accountExists]);
+    // Keep e164 in sync even when the user never blurs the field.
+    useEffect(() => {
+        setE164(toE164(countryCode, national));
+    }, [countryCode, national]);
 
     const heroOpacity = useSharedValue(0);
     const cardY = useSharedValue(30);
     const cardOpacity = useSharedValue(0);
-
     useEffect(() => {
         heroOpacity.value = withTiming(1, { duration: 500, easing: ease });
         cardOpacity.value = withDelay(160, withTiming(1, { duration: 380, easing: ease }));
         cardY.value = withDelay(160, withTiming(0, { duration: 380, easing: ease }));
     }, [heroOpacity, cardOpacity, cardY]);
-
     const heroStyle = useAnimatedStyle(() => ({ opacity: heroOpacity.value }));
     const cardStyle = useAnimatedStyle(() => ({
         opacity: cardOpacity.value,
         transform: [{ translateY: cardY.value }],
     }));
 
+    const switchTab = useCallback((next: Tab) => {
+        setTab(next);
+        setSubmitted(false);
+        setPassword('');
+    }, []);
+
     const handleSubmit = useCallback(async () => {
+        setSubmitted(true);
+        if (!e164) return;
         try {
             if (tab === 'register') {
-                await register(phone);
+                await register(e164);
             } else {
-                await login({ phone, password });
+                // The login hook transparently switches to the OTP fallback when
+                // the account has no password yet — no client-side guessing.
+                await login({ phone: e164, password });
             }
         } catch (err: unknown) {
-            if (tab === 'login') {
-                const code = httpStatus(err);
+            const code = httpStatus(err);
 
-                if (isNotFoundError(err)) {
-                    if (accountExists) {
-                        // register returned 409 earlier → account IS in the system.
-                        // A 404 from login here means wrong credentials, not a
-                        // missing account. Never switch back to register in this state
-                        // or we create an infinite register-404 ↔ login-409 loop.
-                        showToast(t('register.errors.incorrectCredentials'), 'error');
-                    } else {
-                        // Genuinely new user — no prior 409 seen.
-                        setTab('register');
-                        setPassword('');
-                        showToast(t('register.errors.noAccount'), 'info');
-                    }
+            if (tab === 'register') {
+                if (code === 409) {
+                    // Number already registered → guide to sign in.
+                    switchTab('login');
+                    showToast(t('register.errors.accountExists'), 'info');
                     return;
                 }
-
+            } else {
                 if (code === 401 || code === 403) {
                     showToast(t('register.errors.incorrectCredentials'), 'error');
                     return;
                 }
             }
-
-            if (tab === 'register' && isAlreadyExistsError(err)) {
-                // HTTP 409 — phone is already registered.
-                // Remember this so a subsequent login-404 is treated as wrong
-                // credentials, not a missing account.
-                setAccountExists(true);
-                setTab('login');
-                showToast(t('register.errors.accountExists'), 'info');
+            if (code === 0) {
+                showToast(t('register.errors.network'), 'error');
                 return;
             }
-
             showToast(extractMessage(err, t('register.errors.generic')), 'error');
         }
-    }, [tab, phone, password, register, login, showToast, accountExists, t]);
+    }, [tab, e164, password, register, login, switchTab, showToast, t]);
+
+    const handleLoginWithOtp = useCallback(async () => {
+        setSubmitted(true);
+        if (!e164) return;
+        try {
+            await sendLoginOtp(e164);
+        } catch (err: unknown) {
+            const code = httpStatus(err);
+            if (code === 404) {
+                switchTab('register');
+                showToast(t('register.errors.noAccount'), 'info');
+                return;
+            }
+            if (code === 0) {
+                showToast(t('register.errors.network'), 'error');
+                return;
+            }
+            showToast(extractMessage(err, t('register.errors.generic')), 'error');
+        }
+    }, [e164, sendLoginOtp, switchTab, showToast, t]);
 
     return (
         <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
@@ -223,7 +222,7 @@ export default function DeliveryRegisterScreen() {
                                     return (
                                         <TouchableOpacity
                                             key={tabOption}
-                                            onPress={() => setTab(tabOption)}
+                                            onPress={() => switchTab(tabOption)}
                                             style={{
                                                 flex: 1, paddingVertical: 10, borderRadius: 13,
                                                 alignItems: 'center',
@@ -253,42 +252,29 @@ export default function DeliveryRegisterScreen() {
                                 {tab === 'register' ? t('register.title.register') : t('register.title.login')}
                             </Text>
                             <Text style={{ fontFamily: 'Tajawal_400Regular', fontSize: 14, color: '#767777', lineHeight: 22, marginBottom: 24, textAlign }}>
-                                {tab === 'register'
-                                    ? t('register.subtitle.register')
-                                    : t('register.subtitle.login')}
+                                {tab === 'register' ? t('register.subtitle.register') : t('register.subtitle.login')}
                             </Text>
                         </Row>
 
                         {/* Phone */}
                         <Row delay={260}>
-                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8 }}>
+                            <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8, textAlign }}>
                                 {t('register.phoneLabel')}
                             </Text>
-                            <View style={{
-                                flexDirection: 'row', alignItems: 'center',
-                                borderWidth: 1.5, borderColor: '#e5e5e5', borderRadius: 14,
-                                backgroundColor: '#fafafa', paddingHorizontal: 14, height: 52,
-                            }}>
-                                <Ionicons name="phone-portrait-outline" size={18} color="#F55905" />
-                                <TextInput
-                                    value={phone}
-                                    onChangeText={handlePhoneChange}
-                                    placeholder={t('register.phonePlaceholder')}
-                                    keyboardType="phone-pad"
-                                    style={{
-                                        flex: 1, marginLeft: 10,
-                                        fontFamily: 'Tajawal_400Regular',
-                                        fontSize: 15, color: '#1E1E1E', textAlign,
-                                    }}
-                                    placeholderTextColor="#c0c0c0"
-                                />
-                            </View>
+                            <DeliveryPhoneInput
+                                national={national}
+                                onChangeNational={setNational}
+                                countryCode={countryCode}
+                                onChangeCountryCode={setCountryCode}
+                                onE164Change={setE164}
+                                showError={submitted}
+                            />
                         </Row>
 
                         {/* Password (login only) */}
                         {tab === 'login' && (
                             <Row delay={300}>
-                                <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8, marginTop: 16 }}>
+                                <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 13, color: '#1E1E1E', marginBottom: 8, marginTop: 16, textAlign }}>
                                     {t('register.passwordLabel')}
                                 </Text>
                                 <View style={{
@@ -303,7 +289,7 @@ export default function DeliveryRegisterScreen() {
                                         placeholder={t('register.passwordPlaceholder')}
                                         secureTextEntry={!showPassword}
                                         style={{
-                                            flex: 1, marginLeft: 10,
+                                            flex: 1, marginHorizontal: 10,
                                             fontFamily: 'Tajawal_400Regular',
                                             fontSize: 15, color: '#1E1E1E', textAlign,
                                         }}
@@ -330,8 +316,23 @@ export default function DeliveryRegisterScreen() {
                             </View>
                         </Row>
 
+                        {/* Login with OTP fallback */}
+                        {tab === 'login' && (
+                            <Row delay={400}>
+                                <TouchableOpacity
+                                    onPress={handleLoginWithOtp}
+                                    disabled={!phoneValid || isPending}
+                                    style={{ alignItems: 'center', marginTop: 16, opacity: !phoneValid || isPending ? 0.5 : 1 }}
+                                >
+                                    <Text style={{ fontFamily: 'Tajawal_500Medium', fontSize: 13, color: '#F55905' }}>
+                                        {t('register.loginWithOtp')}
+                                    </Text>
+                                </TouchableOpacity>
+                            </Row>
+                        )}
+
                         {/* Back */}
-                        <Row delay={420}>
+                        <Row delay={460}>
                             <TouchableOpacity
                                 onPress={() => router.back()}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20 }}

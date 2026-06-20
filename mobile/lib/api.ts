@@ -247,13 +247,17 @@ const drainDeliveryQueue = (error: unknown, token: string | null) => {
 deliveryApi.interceptors.request.use((config) => {
     // Lazy-import to avoid circular deps at module load time
     const { useDeliveryStore } = require('@/store/useDeliveryStore');
-    // A few delivery-service endpoints (e.g. GET /api/delivery/open) are
-    // open to both delivery agents AND customers. We try the delivery
-    // token first (an agent on this device); if there isn't one, fall back
-    // to the customer access token so a logged-in customer's call carries
-    // a valid Bearer instead of going out anonymous and getting 401'd.
     const deliveryToken = useDeliveryStore.getState().accessToken;
-    const token = deliveryToken ?? useAuthStore.getState().accessToken;
+    const customerToken = useAuthStore.getState().accessToken;
+    const requestUrl = config.url ?? '';
+    const isCustomerDriverPicker = requestUrl.includes('/api/delivery/open');
+
+    // The driver picker is a customer endpoint. If this device also has a
+    // delivery-agent session, sending that token makes the backend reject the
+    // request with 403 because the JWT role is "delivery" instead of "customer".
+    const token = isCustomerDriverPicker
+        ? customerToken ?? deliveryToken
+        : deliveryToken ?? customerToken;
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }

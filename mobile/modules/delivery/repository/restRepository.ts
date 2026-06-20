@@ -11,7 +11,7 @@ import {
 } from '../types';
 import { DeliveryTokensDTO } from '../dto/DeliveryAgent';
 import { toDeliveryAdapter } from '../adapter/toDeliveryAdapter';
-import { DeliveryRepository } from './DeliveryRepository';
+import { DeliveryLoginResult, DeliveryRepository } from './DeliveryRepository';
 
 const num = (v: unknown): number | undefined => {
     if (v === null || v === undefined) return undefined;
@@ -188,9 +188,29 @@ export const restRepository = (): DeliveryRepository => ({
         return res.data.data as DeliveryTokensDTO;
     },
 
-    login: async ({ phone, password }) => {
-        const res = await deliveryApi.post('/api/delivery/login', { phone, password });
+    // Login lives in the AUTH service (port 3004), not the delivery service.
+    // The endpoint returns either a token pair OR { needsOtp: true } when the
+    // account has no password yet (phone verified but application not submitted).
+    login: async ({ phone, password }): Promise<DeliveryLoginResult> => {
+        const res = await authApi.post('/api/auth/delivery/login', { phone, password });
+        const data = res.data?.data ?? {};
+        if (data.needsOtp) {
+            return { kind: 'needsOtp', phone: data.phone ?? phone };
+        }
+        return { kind: 'tokens', tokens: data as DeliveryTokensDTO };
+    },
+
+    sendLoginOtp: async (phone) => {
+        await authApi.post('/api/auth/delivery/login-otp', { phone });
+    },
+
+    verifyLoginOtp: async ({ phone, otp }) => {
+        const res = await authApi.post('/api/auth/delivery/verify-login', { phone, otp });
         return res.data.data as DeliveryTokensDTO;
+    },
+
+    resendOtp: async (phone) => {
+        await authApi.post('/api/auth/resend-otp', { phone });
     },
 
     getProfile: async (): Promise<DeliveryAgent> => {

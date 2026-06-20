@@ -17,32 +17,41 @@
       "login": "Welcome Back"
     },
     "subtitle": {
-      "register": "First time here? Enter your phone to receive an OTP and create your account.",
+      "register": "First time here? Enter your phone to receive a verification code and create your account.",
       "login": "Sign in with your phone number and password."
     },
     "phoneLabel": "Phone Number",
-    "phonePlaceholder": "+966 5X XXX XXXX",
+    "phonePlaceholder": "5X XXX XXXX",
     "passwordLabel": "Password",
     "passwordPlaceholder": "Enter your password",
-    "sendOtp": "Send OTP",
+    "phoneInvalid": "Enter a valid 9-digit number.",
+    "sendOtp": "Send Code",
     "signIn": "Sign In",
+    "loginWithOtp": "Sign in with a code instead",
     "backToHome": "Back to Home",
     "errors": {
-      "generic": "Something went wrong",
+      "generic": "Something went wrong. Please try again.",
       "incorrectCredentials": "Incorrect phone number or password.",
-      "noAccount": "No account found. Please create a new one.",
-      "accountExists": "Account already exists. Please sign in."
+      "noAccount": "No account found for this number. Create one to get started.",
+      "accountExists": "This number is already registered. Please sign in.",
+      "network": "Network error. Check your connection and try again."
+    },
+    "info": {
+      "otpFallback": "This account uses a code to sign in. We just sent you one.",
+      "codeSent": "Verification code sent."
     }
   },
   "otp": {
-    "title": "Verify OTP",
+    "title": "Verify Code",
     "heading": "Enter Verification Code",
     "subtitle": "We sent a 6-digit code to",
     "resendIn": "Resend in",
-    "resendOtp": "Resend OTP",
+    "resendOtp": "Resend Code",
+    "sending": "Sending…",
     "verifyContinue": "Verify & Continue",
-    "newOtpSent": "New OTP sent to {{phone}}",
-    "invalidOtp": "Invalid OTP. Please try again."
+    "newOtpSent": "New code sent to {{phone}}",
+    "invalidOtp": "Invalid code. Please try again.",
+    "securityNote": "Never share this code with anyone."
   },
   "application": {
     "steps": {

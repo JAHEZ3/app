@@ -14,23 +14,28 @@ const ROUTE_MAP: Record<DeliveryAgentStatus, string> = {
     REJECTED: '/delivery/rejected',
 };
 
-// If auth+profile haven't resolved after this long something is truly stuck.
+// If auth+profile haven't resolved after this long, something is truly stuck.
 const GUARD_TIMEOUT_MS = 12_000;
 
 // Normalize any status string to the uppercase form expected by ROUTE_MAP.
-// Guards against old SecureStore cache entries written before the adapter fix.
 function resolveRoute(status: string | null | undefined): string | null {
     if (!status) return null;
     return ROUTE_MAP[status.toUpperCase() as DeliveryAgentStatus] ?? null;
 }
 
+/**
+ * Single source of navigation truth for the delivery section.
+ *
+ * It waits for `useDeliveryInit` (in the root layout) to settle the auth state
+ * — it does NOT read SecureStore itself, which previously raced with init and
+ * could bounce a valid returning agent to the register screen. Once auth is
+ * ready it routes by the live profile status, falling back to a cached status
+ * only when the profile fetch is genuinely failing.
+ */
 export function DeliveryGuard() {
     const { t } = useDeliveryT();
     const { accessToken, authStatus, lastKnownStatus, clearTokens } = useDeliveryStore();
 
-    // isLoading = isPending && isFetching — false when query is disabled (no token)
-    // or when a result has arrived. Using this (not isPending) avoids waiting on a
-    // query that is intentionally disabled and will never fire.
     const { data: profile, isLoading, isError, error, refetch } = useDeliveryProfile();
 
     const [timedOut, setTimedOut] = useState(false);
@@ -38,22 +43,7 @@ export function DeliveryGuard() {
 
     const isAuthReady = authStatus !== 'idle' && authStatus !== 'loading';
 
-    // ── Fast-path: instant redirect when SecureStore clearly has no token ─────
-    // This runs in parallel with useDeliveryInit (which lives in _layout.tsx).
-    // When the refresh token is absent we skip the 8 s init timeout entirely and
-    // send the user to the login screen right away.
-    useEffect(() => {
-        SecureStore.getItemAsync('deliveryRefreshToken').then((stored) => {
-            if (!stored) {
-                console.log('[DeliveryGuard] Fast-path: no refresh token — going to login');
-                navigate('/delivery/register');
-            }
-        });
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Safety timeout ────────────────────────────────────────────────────────
-    // Resets whenever authStatus changes so a legitimately slow network gets the
-    // full window from the moment auth state settles.
+    // ── Safety timeout — resets whenever authStatus changes ────────────────────
     useEffect(() => {
         if (timedOut) return;
         const id = setTimeout(() => {
@@ -65,40 +55,31 @@ export function DeliveryGuard() {
         return () => clearTimeout(id);
     }, [authStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Navigation logic ──────────────────────────────────────────────────────
+    // ── Navigation logic ───────────────────────────────────────────────────────
     useEffect(() => {
-        console.log('[DeliveryGuard]', {
-            authStatus,
-            isAuthReady,
-            hasToken: !!accessToken,
-            profileStatus: profile?.status ?? null,
-            isLoading,
-            isError,
-            lastKnownStatus,
-        });
-
+        // Wait until init has decided whether we have a session. This is the key
+        // ordering guarantee that prevents the register-screen bounce.
         if (!isAuthReady) return;
 
-        // ── No valid session → go to login ──
-        if (!accessToken) {
+        // No valid session → sign-in / register screen.
+        if (!accessToken || authStatus === 'unauthenticated') {
             navigate('/delivery/register');
             return;
         }
 
-        // ── Live profile loaded → most accurate routing ──
+        // Live profile loaded → most accurate routing.
         if (profile?.status) {
             const route = resolveRoute(profile.status);
             if (route) navigate(route);
             return;
         }
 
-        // ── Profile fetch failed ──
+        // Profile fetch failed.
         if (isError) {
             const httpStatus = (error as any)?.response?.status;
             if (httpStatus === 401 || httpStatus === 403) {
-                // Token is not valid for delivery. Wipe it so the next app open
-                // skips the refresh attempt entirely and goes straight to login.
-                console.log('[DeliveryGuard] Auth error on profile fetch — clearing delivery session');
+                // Token isn't valid for delivery — wipe it so the next open goes
+                // straight to login without a doomed refresh attempt.
                 clearTokens();
                 SecureStore.deleteItemAsync('deliveryRefreshToken');
                 SecureStore.deleteItemAsync('deliveryAgentStatus');
@@ -106,55 +87,35 @@ export function DeliveryGuard() {
                 return;
             }
             if (httpStatus === 404) {
-                // Agent registered via OTP but hasn't submitted their application
-                // form yet — the profile record doesn't exist on the backend.
-                console.log('[DeliveryGuard] Profile 404 — agent has no profile yet, going to application');
+                // Phone verified but application not submitted yet → no profile row.
                 navigate('/delivery/application');
                 return;
             }
-            // If we have a cached status, use it — the profile can be corrected
-            // once the network recovers and the destination screen's own
-            // useDeliveryProfile re-fetches.
+            // Network/server error — fall back to a cached status if we have one
+            // so the agent isn't stranded; the destination re-fetches.
             if (lastKnownStatus) {
                 const route = resolveRoute(lastKnownStatus);
                 if (route) {
-                    console.log('[DeliveryGuard] Profile error — routing via cached status:', lastKnownStatus);
                     navigate(route);
                     return;
                 }
             }
-            // Genuine network / server error with no cached status → show the
-            // connection-problem UI so the agent can retry, rather than being
-            // silently dropped into the application form.
-            console.log('[DeliveryGuard] Profile error with no cached status — showing connection error UI');
             setTimedOut(true);
             return;
         }
 
-        // ── Cached status → route immediately ──
-        // The destination screen runs its own useDeliveryProfile and will correct
-        // the route if the live status has changed.
+        // Cached status → route immediately; the destination corrects itself.
         if (lastKnownStatus) {
             const route = resolveRoute(lastKnownStatus);
-            if (route) {
-                console.log('[DeliveryGuard] Routing via cached status:', lastKnownStatus);
-                navigate(route);
-            } else {
-                // Unrecognised status value — go to application form as safe default.
-                console.warn('[DeliveryGuard] Unknown cached status:', lastKnownStatus);
-                navigate('/delivery/application');
-            }
+            navigate(route ?? '/delivery/application');
             return;
         }
 
-        // ── No cache, no data, and not actively fetching → go to form ──
-        // (isLoading is false when the query is disabled OR when it has already
-        //  settled; using isPending here would block forever on a disabled query.)
+        // No cache, no data, not actively fetching → application form.
         if (!isLoading) {
-            console.log('[DeliveryGuard] No data and not loading — defaulting to application form');
             navigate('/delivery/application');
         }
-    }, [isAuthReady, accessToken, profile?.status, isError, isLoading, lastKnownStatus, error]);
+    }, [isAuthReady, accessToken, authStatus, profile?.status, isError, isLoading, lastKnownStatus, error]); // eslint-disable-line react-hooks/exhaustive-deps
 
     function navigate(route: string) {
         if (hasNavigated.current) return;
@@ -162,7 +123,6 @@ export function DeliveryGuard() {
         router.replace(route as never);
     }
 
-    // ── Timeout fallback UI ───────────────────────────────────────────────────
     if (timedOut) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 32 }}>
@@ -184,10 +144,7 @@ export function DeliveryGuard() {
                         {t('guard.tryAgain')}
                     </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                    onPress={() => navigate('/delivery/register')}
-                    style={{ padding: 8 }}
-                >
+                <TouchableOpacity onPress={() => navigate('/delivery/register')} style={{ padding: 8 }}>
                     <Text style={{ color: '#767777', fontSize: 13, fontFamily: 'Tajawal_400Regular', textDecorationLine: 'underline' }}>
                         {t('guard.goToLogin')}
                     </Text>
@@ -196,7 +153,6 @@ export function DeliveryGuard() {
         );
     }
 
-    // ── Default: spinner while resolving ─────────────────────────────────────
     return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
             <ActivityIndicator size="large" color="#F55905" />
