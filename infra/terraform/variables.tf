@@ -110,6 +110,17 @@ variable "redis_engine_version" {
   default     = "7.1"
 }
 
+# ─── Web apps (Next.js, run as containers on EKS) ────────────────────────────
+variable "web_apps" {
+  description = "Map of Next.js web app name -> container port."
+  type        = map(number)
+  default = {
+    "client"         = 3010
+    "dashboard"      = 4000
+    "paneldashboard" = 4001
+  }
+}
+
 # ─── Microservices ───────────────────────────────────────────────────────────
 # Each gets its own ECR repository. Port used by k8s manifests / ALB target.
 variable "microservices" {

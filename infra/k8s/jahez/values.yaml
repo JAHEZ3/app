@@ -74,3 +74,31 @@ ingress:
   # Optional: ACM cert ARN for HTTPS. Empty = HTTP only.
   certificateArn: ""
   host: "" # e.g. api.jahez.example.com; empty = match any host
+
+# ─── Web apps (Next.js standalone containers) ────────────────────────────────
+# Each runs as its own Deployment + Service and gets its own ALB (own Ingress),
+# so each app is a clean origin at its own URL — required because the apps
+# self-proxy /api/* to the backend via Next rewrites (same-origin).
+webApps:
+  enabled: true
+  apps:
+    client:
+      port: 3010
+      # Next rewrites() targets -> internal service DNS.
+      env:
+        ORDER_PROXY_URL: "http://order-service:3001"
+        RESTAURANT_PROXY_URL: "http://restaurant-service:3003"
+        MANAGER_PROXY_URL: "http://manager-service:3006"
+        CUSTOMER_PROXY_URL: "http://customer-service:3005"
+    dashboard:
+      port: 4000
+      env: {}
+    paneldashboard:
+      port: 4001
+      env:
+        API_AUTH_TARGET: "http://auth-service:3004"
+        API_RESTAURANT_TARGET: "http://restaurant-service:3003"
+        API_DELIVERY_TARGET: "http://delivery-service:3002"
+        API_MANAGER_TARGET: "http://manager-service:3006"
+        API_NOTIFICATION_TARGET: "http://notification-service:3007"
+        API_ORDER_TARGET: "http://order-service:3001"

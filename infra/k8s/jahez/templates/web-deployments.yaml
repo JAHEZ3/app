@@ -1,0 +1,82 @@
+{{- if .Values.webApps.enabled }}
+{{- $root := . -}}
+{{- range $name, $app := .Values.webApps.apps }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-{{ $name }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app: web-{{ $name }}
+spec:
+  replicas: {{ $root.Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: web-{{ $name }}
+  template:
+    metadata:
+      labels:
+        app: web-{{ $name }}
+    spec:
+      containers:
+        - name: web-{{ $name }}
+          image: "{{ $root.Values.image.registry }}/{{ $root.Values.image.repoPrefix }}/web-{{ $name }}:{{ $root.Values.image.tag }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ $app.port }}
+          env:
+            - name: PORT
+              value: "{{ $app.port }}"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            {{- range $k, $v := $app.env }}
+            - name: {{ $k }}
+              value: "{{ $v }}"
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ $app.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml $root.Values.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-{{ $name }}
+  namespace: {{ $root.Values.namespace }}
+spec:
+  selector:
+    app: web-{{ $name }}
+  ports:
+    - port: {{ $app.port }}
+      targetPort: {{ $app.port }}
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-{{ $name }}
+  namespace: {{ $root.Values.namespace }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-{{ $name }}
+                port:
+                  number: {{ $app.port }}
+{{- end }}
+{{- end }}

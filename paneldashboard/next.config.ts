@@ -8,6 +8,8 @@ const NOTIFICATION_TARGET = process.env.API_NOTIFICATION_TARGET || "http://local
 const ORDER_TARGET = process.env.API_ORDER_TARGET || "http://localhost:3001";
 
 const nextConfig: NextConfig = {
+  // Minimal self-contained server bundle for Docker/EKS (.next/standalone/server.js).
+  output: "standalone",
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**" },
