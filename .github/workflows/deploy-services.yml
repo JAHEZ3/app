@@ -85,11 +85,11 @@ jobs:
           kubectl create secret generic jahez-app-secrets -n jahez \
             $ARGS --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Read app IRSA role ARN from Terraform
+      - name: Resolve app IRSA role ARN
         id: tf
         run: |
-          terraform -chdir=infra/terraform init -input=false >/dev/null
-          echo "role_arn=$(terraform -chdir=infra/terraform output -raw app_role_arn)" >> $GITHUB_OUTPUT
+          ROLE_ARN=$(aws iam get-role --role-name jahez-dev-app --query 'Role.Arn' --output text)
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
 
       - name: Helm deploy
         run: |
