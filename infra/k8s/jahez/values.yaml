@@ -1,0 +1,76 @@
+# ─── Global ──────────────────────────────────────────────────────────────────
+namespace: jahez
+
+# ECR registry host: <account>.dkr.ecr.<region>.amazonaws.com
+# Filled by CI via `--set image.registry=...`
+image:
+  registry: "220719767281.dkr.ecr.eu-north-1.amazonaws.com"
+  repoPrefix: "jahez" # ECR repo = <repoPrefix>/<service>
+  tag: "latest"
+  pullPolicy: Always
+
+# IRSA role ARN from `terraform output app_role_arn`.
+# Lets pods read Secrets Manager / use the uploads S3 bucket.
+serviceAccount:
+  name: jahez-app
+  roleArn: "" # set via --set serviceAccount.roleArn=arn:aws:iam::...:role/jahez-dev-app
+
+# Name of the Kubernetes Secret holding runtime env vars.
+# CI syncs this from AWS Secrets Manager (jahez-dev/app).
+envSecretName: jahez-app-secrets
+
+# Default resource requests/limits for each service.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+replicaCount: 1
+
+# ─── NATS (message broker, runs in-cluster) ──────────────────────────────────
+nats:
+  enabled: true
+  image: nats:2.10-alpine
+  port: 4222
+
+# ─── Microservices ───────────────────────────────────────────────────────────
+# `public: true` => exposed through the ALB Ingress (only the gateway).
+services:
+  api-gateway:
+    port: 3000
+    public: true
+    path: /
+  auth-service:
+    port: 3004
+    public: false
+  order-service:
+    port: 3001
+    public: false
+  delivery-service:
+    port: 3002
+    public: false
+  restaurant-service:
+    port: 3003
+    public: false
+  customer-service:
+    port: 3005
+    public: false
+  manager-service:
+    port: 3006
+    public: false
+  notification-service:
+    port: 3007
+    public: false
+  payment-service:
+    port: 3008
+    public: false
+
+# ─── Ingress (AWS ALB) ───────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  # Optional: ACM cert ARN for HTTPS. Empty = HTTP only.
+  certificateArn: ""
+  host: "" # e.g. api.jahez.example.com; empty = match any host

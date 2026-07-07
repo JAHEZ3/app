@@ -1,0 +1,53 @@
+name: Terraform Infra
+
+# Provisions/updates the AWS core stack (VPC, EKS, RDS, Redis, ECR, Secrets).
+on:
+  push:
+    branches: [main]
+    paths: ["infra/terraform/**", ".github/workflows/terraform-infra.yml"]
+  pull_request:
+    paths: ["infra/terraform/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: eu-north-1
+  TF_DIR: infra/terraform
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Terraform Init
+        run: terraform -chdir=$TF_DIR init -input=false
+
+      - name: Terraform Format Check
+        run: terraform -chdir=$TF_DIR fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform -chdir=$TF_DIR validate
+
+      - name: Terraform Plan
+        run: terraform -chdir=$TF_DIR plan -input=false -no-color
+
+      # Only apply when merging to main (never on PRs).
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: terraform -chdir=$TF_DIR apply -input=false -auto-approve
