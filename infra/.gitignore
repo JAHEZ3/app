@@ -23,3 +23,6 @@ tfplan
 *.pem
 *.key
 .env
+
+# Terraform apply logs
+apply*.log
