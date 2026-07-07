@@ -47,6 +47,15 @@ module "rds" {
   password = random_password.db.result
   port     = 5432
 
+  # Allow non-SSL connections (PG16 defaults rds.force_ssl=1, which the
+  # services don't set). Dynamic parameter — applies without a reboot.
+  parameters = [
+    {
+      name  = "rds.force_ssl"
+      value = "0"
+    }
+  ]
+
   # We manage the password ourselves via Secrets Manager, not RDS-managed.
   manage_master_user_password = false
 

@@ -19,7 +19,8 @@ spec:
       containers:
         - name: nats
           image: {{ .Values.nats.image }}
-          args: ["-js"]
+          # -js: JetStream, -m 8222: HTTP monitoring (used by the readiness probe)
+          args: ["-js", "-m", "8222"]
           ports:
             - containerPort: {{ .Values.nats.port }}
               name: client

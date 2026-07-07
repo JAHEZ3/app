@@ -31,6 +31,19 @@ resource "aws_elasticache_subnet_group" "redis" {
   tags       = local.tags
 }
 
+# BullMQ requires maxmemory-policy=noeviction so queued jobs are never evicted.
+resource "aws_elasticache_parameter_group" "redis" {
+  name   = "${local.name}-redis7"
+  family = "redis7"
+
+  parameter {
+    name  = "maxmemory-policy"
+    value = "noeviction"
+  }
+
+  tags = local.tags
+}
+
 resource "aws_elasticache_replication_group" "redis" {
   replication_group_id = "${local.name}-redis"
   description          = "Redis for Jahez (cache + BullMQ queues)"
@@ -44,6 +57,7 @@ resource "aws_elasticache_replication_group" "redis" {
   automatic_failover_enabled = false
 
   subnet_group_name  = aws_elasticache_subnet_group.redis.name
+  parameter_group_name = aws_elasticache_parameter_group.redis.name
   security_group_ids = [aws_security_group.redis.id]
 
   at_rest_encryption_enabled = true

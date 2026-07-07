@@ -34,6 +34,10 @@ spec:
               value: "{{ $svc.port }}"
             - name: SERVICE_NAME
               value: {{ $name }}
+            # Disable TypeORM auto-synchronize in the cluster (services share
+            # one DB; concurrent synchronize races to create the same indexes).
+            - name: NODE_ENV
+              value: production
           resources:
             {{- toYaml $root.Values.resources | nindent 12 }}
 ---
