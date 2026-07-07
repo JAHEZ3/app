@@ -1,0 +1,84 @@
+name: Deploy Frontend
+
+# Builds the Next.js web apps (static export) and publishes them to
+# S3 + CloudFront.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "client/**"
+      - "dashboard/**"
+      - "paneldashboard/**"
+      - "infra/frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-north-1
+
+jobs:
+  # Provision/update the S3 + CloudFront stack first.
+  infra:
+    runs-on: ubuntu-latest
+    outputs:
+      buckets: ${{ steps.out.outputs.buckets }}
+      distributions: ${{ steps.out.outputs.distributions }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Apply frontend stack
+        run: |
+          terraform -chdir=infra/frontend init -input=false
+          terraform -chdir=infra/frontend apply -input=false -auto-approve
+      - id: out
+        run: |
+          echo "buckets=$(terraform -chdir=infra/frontend output -json site_buckets)" >> $GITHUB_OUTPUT
+          echo "distributions=$(terraform -chdir=infra/frontend output -json distribution_ids)" >> $GITHUB_OUTPUT
+
+  build-deploy:
+    needs: infra
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [client, dashboard, paneldashboard]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - name: Install & build (static export)
+        working-directory: ${{ matrix.app }}
+        run: |
+          npm ci
+          npm run build
+          # Next.js with output:"export" writes to ./out
+          test -d out || (echo "No ./out dir. Set output:'export' in next.config." && exit 1)
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload to S3 + invalidate CloudFront
+        env:
+          BUCKETS: ${{ needs.infra.outputs.buckets }}
+          DISTS: ${{ needs.infra.outputs.distributions }}
+        run: |
+          BUCKET=$(echo "$BUCKETS" | jq -r '."${{ matrix.app }}"')
+          DIST=$(echo "$DISTS" | jq -r '."${{ matrix.app }}"')
+          aws s3 sync ${{ matrix.app }}/out s3://$BUCKET --delete
+          aws cloudfront create-invalidation --distribution-id $DIST --paths "/*"

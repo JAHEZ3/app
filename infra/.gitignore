@@ -1,0 +1,25 @@
+# Terraform local state (should live in S3, never in git)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Provider plugins & lock cache
+**/.terraform/*
+
+# Variable files that may hold secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# Plan output files
+*.tfplan
+tfplan
+
+# Sensitive
+*.pem
+*.key
+.env

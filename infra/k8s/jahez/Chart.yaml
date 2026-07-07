@@ -1,0 +1,6 @@
+apiVersion: v2
+name: jahez
+description: Jahez food-delivery microservices platform
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
