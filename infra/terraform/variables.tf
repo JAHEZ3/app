@@ -94,7 +94,7 @@ variable "db_allocated_storage" {
 variable "db_engine_version" {
   description = "PostgreSQL engine version."
   type        = string
-  default     = "16.4"
+  default     = "16.9"
 }
 
 # ─── ElastiCache Redis ───────────────────────────────────────────────────────
