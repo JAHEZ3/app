@@ -10,6 +10,12 @@ metadata:
     app: {{ $name }}
 spec:
   replicas: {{ $root.Values.replicaCount }}
+  # In-place rollout: replace pods without needing extra capacity (small cluster).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: {{ $name }}

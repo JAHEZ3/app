@@ -11,6 +11,11 @@ metadata:
     app: web-{{ $name }}
 spec:
   replicas: {{ $root.Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: web-{{ $name }}
