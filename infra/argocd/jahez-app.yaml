@@ -1,0 +1,34 @@
+# ArgoCD Application — GitOps management of the Jahez platform.
+# ArgoCD watches the Helm chart in this repo and keeps the cluster in sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jahez
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/JAHEZ3/app
+    targetRevision: main
+    path: infra/k8s/jahez
+    helm:
+      valuesObject:
+        image:
+          registry: "220719767281.dkr.ecr.eu-north-1.amazonaws.com"
+          repoPrefix: "jahez"
+          tag: "latest"
+        serviceAccount:
+          roleArn: "arn:aws:iam::220719767281:role/jahez-dev-app"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jahez
+
+  # Manual sync for now (so it doesn't fight the GitHub Actions helm deploy).
+  # Add `automated: { prune: true, selfHeal: true }` to switch to full GitOps.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
